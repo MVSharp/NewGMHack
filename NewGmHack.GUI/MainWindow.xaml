@@ -9,6 +9,6 @@
                                      IsDesignTimeCreatable=True}"
         Title="MainWindow" Height="450" Width="800">
     <Grid>
-        <Button Command="{Binding InjectCommand}"></Button>
+        <Button Content="{Binding A}" Command="{Binding InjectCommand}"></Button>
     </Grid>
 </Window>

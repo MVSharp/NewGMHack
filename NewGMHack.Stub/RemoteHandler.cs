@@ -27,7 +27,7 @@ namespace NewGMHack.Stub
                     break;
                 case "SelfInfo":
                     response.Success = true;
-                    response.Result  = self.info;
+                    response.Result  = self.PersonInfo;
                     break;
             }
             await using var          stream       = recyclableMemoryStreamManager.GetStream("sdhook");

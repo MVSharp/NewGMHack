@@ -156,7 +156,7 @@ public class PacketProcessorService : BackgroundService
     private void ReadReborns(ByteReader reader, ConcurrentBag<Reborn> reborns)
     {
         var reborn = reader.ReadReborn();
-        if (reborn.PersionId == _selfInformation.info.PersonId)
+        if (reborn.PersionId == _selfInformation.PersonInfo.PersonId)
         {
             reborns.Add(reborn);
         }
@@ -176,10 +176,10 @@ public class PacketProcessorService : BackgroundService
         if (w is { w1: 0, w2: 0, w3: 0 }) return;
         lock (_lock)
         {
-            _selfInformation.info.GundamId = machineId;
-            if (w.w1 != 0) _selfInformation.info.Weapon1 = (uint)w.w1;
-            if (w.w2 != 0) _selfInformation.info.Weapon2 = (uint)w.w2;
-            if (w.w3 != 0) _selfInformation.info.Weapon3 = (uint)w.w3;
+            _selfInformation.PersonInfo.GundamId = machineId;
+            if (w.w1 != 0) _selfInformation.PersonInfo.Weapon1 = (uint)w.w1;
+            if (w.w2 != 0) _selfInformation.PersonInfo.Weapon2 = (uint)w.w2;
+            if (w.w3 != 0) _selfInformation.PersonInfo.Weapon3 = (uint)w.w3;
         }
 
         _logger
@@ -193,7 +193,7 @@ public class PacketProcessorService : BackgroundService
         _logger.ZLogInformation($"personid :{s.PersionId}");
         lock (_lock)
         {
-            _selfInformation.info.PersonId = s.PersionId;
+            _selfInformation.PersonInfo.PersonId = s.PersionId;
         }
     }
 

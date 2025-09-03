@@ -15,9 +15,16 @@ namespace NewGMHack.Stub
         public uint Weapon3  { get; set; }
     }
 
+    public class ClientConfig
+    {
+        public bool IsMissionBomb { get; set; } = true;
+
+    }
+
     public class SelfInformation
     {
-        public Info info { get; set; } = new();
+        public Info         PersonInfo   { get; set; } = new();
+        public ClientConfig ClientConfig { get; set; } = new();
 
         public SelfInformation()
         {

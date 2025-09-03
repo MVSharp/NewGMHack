@@ -4,12 +4,15 @@ using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using InjectDotnet.NativeHelper;
 using Microsoft.Extensions.Logging;
+using NewGMHack.Stub.PacketStructs;
+using NewGMHack.Stub.PacketStructs.Send;
 using NewGMHack.Stub.Services;
+using Reloaded.Memory.Extensions;
 using ZLogger;
 
 namespace NewGMHack.Stub;
 
-public sealed class WinsockHookManager(ILogger<WinsockHookManager> logger, Channel<PacketContext> channel)
+public sealed class WinsockHookManager(ILogger<WinsockHookManager> logger, Channel<PacketContext> channel,SelfInformation self,IBuffSplitter splitter)
 {
     private SendDelegate?     _originalSend;
     private RecvDelegate?     _originalRecv;
@@ -79,8 +82,75 @@ public sealed class WinsockHookManager(ILogger<WinsockHookManager> logger, Chann
         //     //logger.ZLogInformation($"Send : {hex}");
         // }
         // }
-        // //logger.ZLogInformation($"send hook info: span length {data.Length} | hook len {length}");
+        // //logger.ZLogInformation($"send hook PersonInfo: span length {data.Length} | hook len {length}");
         // if 02F5 , F502 (1522) then block if misison
+        if (self.ClientConfig.IsMissionBomb )
+        {
+            Span<byte> data = new Span<byte>((void*)buffer, length);
+            if (data.Length > 4)
+            {
+                var result = splitter.Split(data).FirstOrDefault();
+                if (result != null)
+                {
+                    //TODO refractor later
+                    var method = result.Method;
+                    switch (method)
+                    {
+                        case 1335: // normal damage 
+                            var raw = new byte[]{0x00,0x00,0x00,0x00}.AsSpan().CombineWith( result.MethodBody.AsSpan());
+                            var attack = raw.ReadStruct<Attack1335>();
+                            var targets = raw.SliceAfter<Attack1335>().CastTo<TargetData>();
+                            if (attack.PlayerId == self.PersonInfo.PersonId)
+                            {
+                                logger.ZLogInformation($"Attacked By me , now motify {result.Method}");
+                                for (var index = 0; index < targets.Length; index++)
+                                {
+                                    targets[index].Damage = ushort.MaxValue;
+                                }
+                            }
+                            else
+                            {
+                                logger.ZLogInformation($"1335 not attacked by me {attack.PlayerId} | {attack.PlayerId2}");
+                            }
+                                var attackBytes = attack.ToByteArray().AsSpan();
+                            var targetsBytes = targets.AsByteSpan();
+                            var combined = attackBytes.CombineWith(targetsBytes);
+                            fixed (byte* ptr = combined)
+                            {
+                                IntPtr ptrBuffer = (IntPtr)ptr;
+                                return _originalSend!(socket, ptrBuffer, attackBytes.Length + targetsBytes.Length, flags);
+                            }
+                            break;
+                        case 1486: // item , bucket damage
+
+                            var raw1 = new byte[]{0x00,0x00,0x00,0x00}.AsSpan().CombineWith( result.MethodBody.AsSpan());
+                            var attack1 = raw1.ReadStruct<Attack1486>();
+                            var targets1 = raw1.SliceAfter<Attack1486>().CastTo<TargetData>();
+                            if (attack1.PlayerId == self.PersonInfo.PersonId)
+                            {
+                                logger.ZLogInformation($"Attacked By me , now motify {result.Method}");
+                                for (var index = 0; index < targets1.Length; index++)
+                                {
+                                    targets1[index].Damage = ushort.MaxValue;
+                                }
+                            }
+                            else
+                            {
+                                logger.ZLogInformation($"1486 not attacked by me {attack1.PlayerId} | {attack1.PlayerId2}");
+                            }
+                                var attackBytes1 = attack1.ToByteArray().AsSpan();
+                            var targetsBytes1 = targets1.AsByteSpan();
+                            var combined1 = attackBytes1.CombineWith(targetsBytes1);
+                            fixed (byte* ptr = combined1)
+                            {
+                                IntPtr ptrBuffer = (IntPtr)ptr;
+                                return _originalSend!(socket, ptrBuffer, attackBytes1.Length + targetsBytes1.Length, flags);
+                            }
+                            break;
+                    }
+                }
+            }
+        }
         return _originalSend!(socket, buffer, length, flags);
     }
 
@@ -96,7 +166,7 @@ public sealed class WinsockHookManager(ILogger<WinsockHookManager> logger, Chann
         if (receivedLength > 4)
         {
             Span<byte> data = new Span<byte>((void*)buffer, receivedLength);
-            //logger.ZLogInformation($"new recv hook info: span length {data.Length} | hook len {receivedLength}");
+            //logger.ZLogInformation($"new recv hook PersonInfo: span length {data.Length} | hook len {receivedLength}");
             channel.Writer.TryWrite(new PacketContext(socket, data.ToArray()));
         }
 
@@ -107,7 +177,7 @@ public sealed class WinsockHookManager(ILogger<WinsockHookManager> logger, Chann
     {
         //Span<byte> data = new Span<byte>((void*)buffer, length);
 
-        //logger.ZLogInformation($"send to hook info: span length {data.Length} | hook len {length}");
+        //logger.ZLogInformation($"send to hook PersonInfo: span length {data.Length} | hook len {length}");
         // Modify data if needed
         return _originalSendTo!(socket, buffer, length, flags, to, tolen);
     }

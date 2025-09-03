@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using ByteStream.Mananged;
@@ -10,8 +11,65 @@ using NewGMHack.Stub.PacketStructs.Send;
 
 namespace NewGMHack.Stub.PacketStructs
 {
+
+
+public static class SpanExtensions
+{
+    /// <summary>
+    /// Casts a Span<byte> to a Span<T> for blittable types.
+    /// </summary>
+    public static Span<T> CastTo<T>(this Span<byte> span) where T : unmanaged =>
+        MemoryMarshal.Cast<byte, T>(span);
+
+    /// <summary>
+    /// Reads the first struct of type T from a Span<byte>.
+    /// </summary>
+    public static T ReadStruct<T>(this Span<byte> span) where T : unmanaged =>
+        span.CastTo<T>()[0];
+
+    /// <summary>
+    /// Slices a Span<byte> after a struct of type T.
+    /// </summary>
+    public static Span<byte> SliceAfter<T>(this Span<byte> span) where T : unmanaged =>
+        span.Slice(Marshal.SizeOf<T>());
+
+    /// <summary>
+    /// Converts a blittable struct to a byte array.
+    /// </summary>
+    public static byte[] ToByteArray<T>(this T value) where T : unmanaged
+    {
+        int size = Marshal.SizeOf<T>();
+        Span<byte> buffer = new byte[size];
+        MemoryMarshal.Write(buffer, ref value);
+        return buffer.ToArray();
+    }
+
+    /// <summary>
+    /// Converts a Span<T> to a Span<byte>.
+    /// </summary>
+    public static Span<byte> AsByteSpan<T>(this Span<T> span) where T : unmanaged =>
+        MemoryMarshal.AsBytes(span);
+
+    /// <summary>
+    /// Combines two byte arrays into a single Span<byte>.
+    /// </summary>
+    public static Span<byte> CombineWith(this Span<byte> first, Span<byte> second)
+    {
+        Span<byte> combined = new byte[first.Length + second.Length];
+        first.CopyTo(combined);
+        second.CopyTo(combined.Slice(first.Length));
+        return combined;
+    }
+
+    /// <summary>
+    /// Converts a Span<byte> to a hex string.
+    /// </summary>
+    public static string ToHex(this Span<byte> span) =>
+        Convert.ToHexString(span);
+}
     public static class DefinitionsExtensions
     {
+
         public static List<Reborn> ReadDamaged(ref this ByteReader reader)
         {
             var reborns = new List<Reborn>();
@@ -78,47 +136,47 @@ namespace NewGMHack.Stub.PacketStructs
             return map;
         }
 
-        public static byte[] WriteAttack(Attack att)
-        {
-            try
-            {
-
-            using var ms     = new MemoryStream();
-            var       writer = new BinaryWriter(ms);
-            writer.Write(att.Version);
-            writer.Write(att.Split);
-            writer.Write(att.Method);
-            writer.Write(att.Unknown1);
-            writer.Write(att.PlayerId);
-            writer.Write(att.WeaponId);
-            // writer.Write(att.WeaponSplit);
-            writer.Write(att.WeaponSlot);
-            writer.Write(att.PlayerId2);
-            writer.Write(att.Unknown2);
-            writer.Write(att.TargetCount);
-            foreach (var target in att.TargetData)
-            {
-                if (target.TargetId == 0)
-                {
-                    target.Damage = 0;
-                }
-
-                writer.Write(target.TargetId);
-                writer.Write(target.Damage);
-                writer.Write(target.Unknown1);
-                writer.Write(target.Unknown2);
-                writer.Write(target.Unknown3);
-            }
-
-            return ms.ToArray();
-
-            }
-            catch
-            {
-
-            }
-
-            return default;
-        }
+        // public static byte[] WriteAttack(Attack1335 att)
+        // {
+        //     try
+        //     {
+        //
+        //     using var ms     = new MemoryStream();
+        //     var       writer = new BinaryWriter(ms);
+        //     writer.Write(att.Version);
+        //     writer.Write(att.Split);
+        //     writer.Write(att.Method);
+        //     writer.Write(att.Unknown1);
+        //     writer.Write(att.PlayerId);
+        //     writer.Write(att.WeaponId);
+        //     // writer.Write(att.WeaponSplit);
+        //     writer.Write(att.WeaponSlot);
+        //     writer.Write(att.PlayerId2);
+        //     writer.Write(att.Unknown2);
+        //     writer.Write(att.TargetCount);
+        //     foreach (var target in att.TargetData)
+        //     {
+        //         if (target.TargetId == 0)
+        //         {
+        //             target.Damage = 0;
+        //         }
+        //
+        //         writer.Write(target.TargetId);
+        //         writer.Write(target.Damage);
+        //         writer.Write(target.Unknown1);
+        //         writer.Write(target.Unknown2);
+        //         writer.Write(target.Unknown3);
+        //     }
+        //
+        //     return ms.ToArray();
+        //
+        //     }
+        //     catch
+        //     {
+        //
+        //     }
+        //
+        //     return default;
+        // }
     }
 }

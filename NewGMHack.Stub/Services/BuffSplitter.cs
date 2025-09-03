@@ -35,7 +35,6 @@ public class BuffSplitter(ILogger<BuffSplitter> logger) : IBuffSplitter
                 var version        = input.Slice(currentIndex,     2);
                 var method         = input.Slice(currentIndex + 2, 2);
                 int bodyStartIndex = currentIndex + 4;
-
                 // Find the next delimiter to calculate the body length
                 delimiterIndex = input.Slice(bodyStartIndex).IndexOf(Separator);
                 ReadOnlySpan<byte> body;
@@ -53,9 +52,10 @@ public class BuffSplitter(ILogger<BuffSplitter> logger) : IBuffSplitter
                     currentIndex = bodyStartIndex + (delimiterIndex - 2); // Move past the current delimiter
                 }
 
+                //var raw = input.Slice(tempIndex,   currentIndex -  currentIndex).ToArray();
                 // Create the method segment and add it to the list
                 var segment = new PacketSegment(BitConverter.ToInt16(version), BitConverter.ToInt16(method),
-                                                body.ToArray());
+                                                body.ToArray() );
                 segments.Add(segment);
             }
 
