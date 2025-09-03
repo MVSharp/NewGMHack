@@ -1,0 +1,46 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	<Title>InjectDotnet.NativeHelper</Title>
+	<Version>0.4.0</Version>
+	<Authors>MrGneissGuy</Authors>
+	<Description>Hook native x86 and x64 processes with managed code</Description>
+	<ProjectUrl>https://github.com/Mbucari/InjectDotnet</ProjectUrl>
+	<PackageProjectUrl>https://github.com/Mbucari/InjectDotnet</PackageProjectUrl>
+	<RepositoryUrl>https://github.com/Mbucari/InjectDotnet</RepositoryUrl>
+	<PackageProjectUrl>https://github.com/Mbucari/InjectDotnet</PackageProjectUrl>
+	<RepositoryUrl>https://github.com/Mbucari/InjectDotnet</RepositoryUrl>
+	<TargetFrameworks>net9.0-windows7.0;net8.0-windows7.0;net6.0-windows7.0;netstandard2.1;netstandard2.0</TargetFrameworks>	
+	<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+	<Platforms>x64;x86</Platforms>
+	<PublishRepositoryUrl>true</PublishRepositoryUrl>
+	<EmbedUntrackedSources>true</EmbedUntrackedSources>
+	<DebugType>embedded</DebugType>
+	<RepositoryType>Git</RepositoryType>
+	<NeutralLanguage>en</NeutralLanguage>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Platform)'=='x64'">
+    <DefineConstants>$(DefineConstants);X64</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Platform)'=='x86'">
+    <DefineConstants>$(DefineConstants);X86</DefineConstants>
+  </PropertyGroup>
+	
+	<PropertyGroup Condition="'$(TargetFramework)' != 'netstandard2.0'">
+		<Nullable>enable</Nullable>
+		<DefineConstants>$(DefineConstants);NULLABLE</DefineConstants>
+	</PropertyGroup>
+	
+	<ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+		<PackageReference Include="System.Memory" Version="4.5.5" />
+	</ItemGroup>
+	
+	<ItemGroup>
+	  <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0">
+	    <PrivateAssets>all</PrivateAssets>
+	    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+	  </PackageReference>
+	</ItemGroup>
+</Project>

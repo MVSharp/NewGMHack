@@ -1,0 +1,123 @@
+﻿using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading.Channels;
+using System.Xml;
+using InjectDotnet.NativeHelper.Native;
+using Memory;
+using MessagePack;
+// using MessagePipe;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using NewGMHack.Stub.MemoryScanner;
+using NewGMHack.Stub.PacketStructs.Recv;
+using NewGMHack.Stub.Services;
+using SharedMemory;
+using ZLogger;
+
+namespace NewGMHack.Stub
+{
+    internal static unsafe partial class Entry
+    {
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        public static extern int MessageBox(IntPtr hWnd, string lpText, string lpCaption, uint uType);
+
+// [DllImport("kernel32.dll", SetLastError = true)]
+// [return: MarshalAs(UnmanagedType.Bool)]
+// static extern bool AllocConsole();
+        [STAThread]
+        public static int Bootstrap(IntPtr argument, int size)
+        {
+            //AllocConsole();
+            //Console.WriteLine("hi");
+
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+            var hostBuilder = Host.CreateDefaultBuilder()
+                                  .ConfigureLogging(c =>
+                                   {
+                                       c.AddZLoggerFile("sdlog.txt", options =>
+                                       {
+                                           options.UsePlainTextFormatter(formatter =>
+                                           {
+                                               formatter.SetPrefixFormatter($"{0}|{1}|",
+                                                                            (in MessageTemplate template,
+                                                                             in LogInfo         info) =>
+                                                                                template.Format(info.Timestamp,
+                                                                                    info.LogLevel));
+                                               formatter.SetSuffixFormatter($" ({0})",
+                                                                            (in MessageTemplate template,
+                                                                             in LogInfo         info) =>
+                                                                                template.Format(info.Category));
+                                               formatter.SetExceptionFormatter((writer, ex) =>
+                                                                                   Utf8StringInterpolation.Utf8String
+                                                                                      .Format(writer, $"{ex.Message}"));
+                                           });
+                                       });
+                                   })
+                                  .ConfigureServices(services =>
+                                   {
+                                       services.Configure<HostOptions>(hostOptions =>
+                                       {
+                                           hostOptions
+                                                  .BackgroundServiceExceptionBehavior =
+                                               BackgroundServiceExceptionBehavior.Ignore;
+                                       });
+                                       // services.AddMessagePipe()
+                                       //                         .AddNamedPipeInterprocess("SdHook",
+                                       //                                   options =>
+                                       //                                   {
+                                       //                                       options.HostAsServer = false;
+                                       //                                       options.InstanceLifetime =
+                                       //                                           InstanceLifetime.Singleton;
+                                       //                                       options.MessagePackSerializerOptions =
+                                       //                                           MessagePackSerializerOptions.Standard;
+                                       //                                   });
+                                       services.AddSingleton<SelfInformation>();
+                                       services.AddTransient<Mem>();
+                                       services.AddTransient<GmMemory>();
+                                       services.AddTransient<IBuffSplitter, BuffSplitter>();
+                                       services.AddSingleton<IHostedService, WinsockHookService>();
+                                       //services.AddHostedService<WinsockHookService>();
+                                       services.AddSingleton(Channel.CreateUnbounded<PacketContext>(
+                                                              new UnboundedChannelOptions
+                                                                  { SingleReader = false, SingleWriter = true }));
+                                       services.AddSingleton<WinsockHookManager>();
+                                       // for (int i = 0; i < 3; i++)
+                                       // {
+                                           services.AddSingleton<IHostedService, PacketProcessorService>();
+                                       // }
+
+                                       services.AddSingleton(Channel.CreateUnbounded<(IntPtr, List<Reborn>)>(
+                                                              new UnboundedChannelOptions
+                                                                  { SingleReader = true, SingleWriter = false }));
+                                       services.AddSingleton<IHostedService, BombServices>();
+                                       services.AddSingleton<RemoteHandler>();
+                                       services.AddSingleton(sp =>
+                                       {
+                                           var handler = sp.GetRequiredService<RemoteHandler>();
+                                           return new RpcBuffer("Sdhook",
+                                                                (msgId, payload) =>
+                                                                    handler.HandleAsync(msgId, payload.AsMemory()));
+                                       });
+                                       //services.AddHostedService<PacketProcessorService>();
+                                   })
+                                  .Build();
+            var t = new Thread(() =>
+            {
+                try
+                {
+                    hostBuilder.Run();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox(0, $"{ex.Message} {ex.StackTrace}", "Error", 0);
+                    hostBuilder.StopAsync();
+                }
+            });
+            //Run the form on STA thread so it can use COM
+            t.SetApartmentState(ApartmentState.STA);
+            t.Start();
+
+            return 0x128;
+        }
+    }
+}
