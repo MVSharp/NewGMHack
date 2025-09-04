@@ -106,6 +106,11 @@ namespace NewGMHack.Stub
                 try
                 {
                     hostBuilder.Run();
+                    // AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+                    // {
+                    //     var ex = (Exception)e.ExceptionObject;
+                    //     MessageBox(0, $"unknown global:{ex.Message} | {ex.StackTrace}", "Critical Error", 0);
+                    // };
                 }
                 catch (Exception ex)
                 {

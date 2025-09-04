@@ -84,7 +84,13 @@ namespace NewGMHack.Stub.Services
                         targets[i].Damage   = ushort.MaxValue;
                         i++;
                     }
-
+                    while (i < 12)
+                    {
+                        var randomReborn = chunkedReborn[Random.Shared.Next(chunkedReborn.Length)];
+                        targets[i].TargetId = randomReborn.TargetId;
+                        targets[i].Damage   = ushort.MaxValue;
+                        i++;
+                    }
                     //attack.TargetData  = targets;
                     attack.TargetCount = BitConverter.GetBytes(i)[0];
                     //var buf    = DefinitionsExtensions.WriteAttack(attack);
@@ -94,8 +100,8 @@ namespace NewGMHack.Stub.Services
                     var attackBytes  = attack.ToByteArray().AsSpan();
                     var targetBytes  = targets.AsSpan().AsByteSpan();
                     var attackPacket = attackBytes.CombineWith(targetBytes).ToArray();
-                    var hex          = Convert.ToHexString(attackPacket);
-                     _logger.ZLogInformation($"bomb bomb {attackPacket.Length} |the hex: {hex}");
+                    // var hex =  BitConverter.ToString( attackPacket);
+                    // _logger.ZLogInformation($"bomb bomb {attackPacket.Length} |the hex: {hex}");
                     await Task.Run(() =>
                     {
                         for (int j = 0; j < 5; j++)

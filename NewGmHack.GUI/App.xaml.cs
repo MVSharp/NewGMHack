@@ -7,7 +7,10 @@ using MessagePack;
 // using MessagePipe;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using NewGmHack.GUI.Abstracts;
+using NewGmHack.GUI.Services;
 using NewGmHack.GUI.ViewModels;
+using NewGmHack.GUI.Views;
 using SharedMemory;
 
 namespace NewGmHack.GUI
@@ -24,6 +27,19 @@ namespace NewGmHack.GUI
                                                        services.AddSingleton<MainViewModel>();
                                                        services.AddSingleton(new RpcBuffer("Sdhook"));
                                                        services.AddSingleton<RemoteHandler>();
+                                                       services.AddSingleton<PersonInfoView>();
+                                                       services.AddSingleton<PersonInfoUserControlsViewModel>();
+                                                       services.AddSingleton<IHealthCheckHandler>(sp =>
+                                                       {
+                                                           return sp
+                                                              .GetRequiredService<MainViewModel>();
+                                                       });
+                                                       services.AddSingleton<IPersonInfoHandler>(sp =>
+                                                       {
+                                                           return sp.GetRequiredService<PersonInfoUserControlsViewModel>();
+                                                       });
+                                                       //i do this for non blocking
+                                                       services.AddSingleton< IHostedService,HealthCheckServices>();
                                                        // services.AddMessagePipe()
                                                        //         .AddNamedPipeInterprocess("SdHook",
                                                        //              options =>
