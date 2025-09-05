@@ -11,7 +11,7 @@ public class WinsockHookService : IHostedService
 {
     private readonly WinsockHookManager          _hookManager;
     private readonly ILogger<WinsockHookService> _logger;
-    private readonly RpcBuffer                   _slave;
+    private readonly RpcBuffer                       _slave;
 
     public WinsockHookService(WinsockHookManager hookManager, ILogger<WinsockHookService> logger, RpcBuffer slave)
     {
@@ -19,7 +19,7 @@ public class WinsockHookService : IHostedService
         _logger      = logger;
         _slave       = slave;
     }
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public Task StartAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -29,6 +29,8 @@ public class WinsockHookService : IHostedService
         catch(Exception ex) {
             _logger.ZLogInformation($"{ex.Message}|{ex.StackTrace}");
         }
+
+        return Task.CompletedTask;
         // _logger.ZLogInformation($"send health check");
         // // var r=    await _handler.InvokeAsync(new DynamicOperationRequest() { Operation = "HealthCheck" });
         // while (r.Success == false)

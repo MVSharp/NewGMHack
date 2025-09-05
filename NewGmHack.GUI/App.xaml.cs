@@ -27,15 +27,9 @@ namespace NewGmHack.GUI
                                                        services.AddSingleton<RemoteHandler>();
                                                        services.AddSingleton<PersonInfoView>();
                                                        services.AddSingleton<PersonInfoUserControlsViewModel>();
-                                                       services.AddSingleton<IHealthCheckHandler>(sp =>
-                                                       {
-                                                           return sp
-                                                              .GetRequiredService<MainViewModel>();
-                                                       });
-                                                       services.AddSingleton<IPersonInfoHandler>(sp =>
-                                                       {
-                                                           return sp.GetRequiredService<PersonInfoUserControlsViewModel>();
-                                                       });
+                                                       services.AddSingleton<IHealthCheckHandler>(sp => sp
+                                                                                                     .GetRequiredService<MainViewModel>());
+                                                       services.AddSingleton<IPersonInfoHandler>(sp => sp.GetRequiredService<PersonInfoUserControlsViewModel>());
                                                        //i do this for non blocking
                                                        services.AddSingleton< IHostedService,HealthCheckServices>();
                                                        // services.AddMessagePipe()
@@ -72,9 +66,16 @@ namespace NewGmHack.GUI
         /// </summary>
         private async void OnStartup(object sender, StartupEventArgs e)
         {
-            await _host.StartAsync();
-            var main = _host.Services.GetRequiredService<MainWindow>();
-            main.Show();
+            try
+            {
+                await _host.StartAsync();
+                var main = _host.Services.GetRequiredService<MainWindow>();
+                main.Show();
+            }
+            catch (Exception ex)
+            {
+                throw; // TODO handle exception
+            }
         }
 
         /// <summary>
@@ -82,9 +83,16 @@ namespace NewGmHack.GUI
         /// </summary>
         private async void OnExit(object sender, ExitEventArgs e)
         {
-            await _host.StopAsync();
+            try
+            {
+                await _host.StopAsync();
 
-            _host.Dispose();
+                _host.Dispose();
+            }
+            catch (Exception ex)
+            {
+                throw; // TODO handle exception
+            }
         }
 
         /// <summary>

@@ -69,11 +69,11 @@ namespace NewGMHack.Stub.MemoryScanner
             return retVal;
         }
 
-        public async Task GetAddress(uint id)
+        public Task GetAddress(uint id)
         {
             var b    = 1;
             var proc = Process.GetProcessesByName("GOnline");
-            if (!proc.Any()) return;
+            if (!proc.Any()) return Task.CompletedTask;
             var gid = proc[0];
 
             var scanner       = new Scanner(gid);
@@ -85,6 +85,8 @@ namespace NewGMHack.Stub.MemoryScanner
                 //var result  = scanner.FindPattern(ScanDefinitions.WeaponAob);
                 var a = 1;
             }
+
+            return Task.CompletedTask;
         }
 
         private List<MemoryRegionResult> DumpMemoryRegions(Process gid)

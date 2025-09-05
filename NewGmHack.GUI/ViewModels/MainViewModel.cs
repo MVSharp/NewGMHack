@@ -30,9 +30,9 @@ namespace NewGmHack.GUI.ViewModels
         public MainViewModel( RemoteHandler master,
                              IDialogCoordinator              dialogCoordinator)
         {
-            featuresList = new();
+            featuresList = [];
             _features = featuresList.ToNotifyCollectionChanged(SynchronizationContextCollectionEventDispatcher.Current);
-            tabslist = new();
+            tabslist = [];
             Tabs = tabslist.ToNotifyCollectionChanged(SynchronizationContextCollectionEventDispatcher.Current);
             AddTab<PersonInfoView, PersonInfoUserControlsViewModel>("Person Info");
             _handler           = master;
@@ -141,8 +141,9 @@ namespace NewGmHack.GUI.ViewModels
 
 //#pragma warning disable
         [RelayCommand]
-        public async Task OnLoaded()
+        public Task OnLoaded()
         {
+            return Task.CompletedTask;
         }
     }
 }

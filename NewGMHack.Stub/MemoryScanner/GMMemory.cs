@@ -17,9 +17,7 @@ namespace NewGMHack.Stub.MemoryScanner
         private static Encoding chs = Encoding.GetEncoding(936) ?? Encoding.Default;
 
         private static byte[] IgnoreBytes =
-        [
-            (byte)'s', (byte)'p', (byte)'r', (byte)'s', (byte)'/'
-        ];
+        "sprs/"u8.ToArray();
 
         private readonly ConcurrentDictionary<uint, (int w1, int w2, int w3)> _cache = new();
 
@@ -67,7 +65,7 @@ namespace NewGMHack.Stub.MemoryScanner
                 foreach (var address in addresses.AsValueEnumerable())
                 {
                     var buffer = mem.ReadBytes(address.ToString("X"), 600L);
-                    if (buffer is not byte[] || buffer[5] == 0x00)
+                    if (buffer is not not null || buffer[5] == 0x00)
                         continue;
 
                     var name = GetName(buffer);
@@ -90,14 +88,15 @@ namespace NewGMHack.Stub.MemoryScanner
             }
             catch
             {
+                // ignored
             }
 
             return (0, 0, 0);
         }
 
 
-        private static readonly HashSet<char> Chars = new HashSet<char>()
-        {
+        private static readonly HashSet<char> Chars =
+        [
             '[', ']', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
             'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R',
             'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', '(',
@@ -105,7 +104,7 @@ namespace NewGMHack.Stub.MemoryScanner
             '8', '9', '-', '_', '+', '/', '(', ')', '"', '\u0019',
             'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u',
             'v', 'w', 'x', 'y', 'z', '`', '\'', '。', '（', '）', '「', '」', '《', '》', '　', '！', ''
-        };
+        ];
 
         public bool IsValid(ReadOnlySpan<char> buffer)
         {

@@ -31,16 +31,16 @@ namespace NewGMHack.Stub.Services
             try
             {
 
-            fixed (byte* ptr = data)
-            {
-                nint buffer = (nint)ptr;
-                send(socket, buffer, data.Length, flags);
-                //this.OriginalSend(socket, buffer, data.Length, flags);
-            }
+                fixed (byte* ptr = data)
+                {
+                    nint buffer = (nint)ptr;
+                    send(socket, buffer, data.Length, flags);
+                    //this.OriginalSend(socket, buffer, data.Length, flags);
+                }
             }
             catch
             {
-                
+                // ignored
             }
         }
 
@@ -48,12 +48,12 @@ namespace NewGMHack.Stub.Services
         {
             while (_selfInformation.PersonInfo.PersonId == 0)
             {
-                await Task.Delay(100);
+                await Task.Delay(100, stoppingToken);
             }
 
             while (_selfInformation.PersonInfo.Weapon2 <=0)
             {
-                await Task.Delay(100);
+                await Task.Delay(100, stoppingToken);
             }
             
             await foreach (var distinctTargets in bombChannel.Reader.ReadAllAsync(stoppingToken))
@@ -99,17 +99,17 @@ namespace NewGMHack.Stub.Services
                     // var hex = BitConverter.ToString(buf).Replace("-", " ");
                     var attackBytes  = attack.ToByteArray().AsSpan();
                     var targetBytes  = targets.AsSpan().AsByteSpan();
-                    var attackPacket = attackBytes.CombineWith(targetBytes).ToArray();
+                    var attackPacket = attackBytes.CombineWith(targetBytes);
                     // var hex =  BitConverter.ToString( attackPacket);
                     // _logger.ZLogInformation($"bomb bomb {attackPacket.Length} |the hex: {hex}");
-                    await Task.Run(() =>
-                    {
+                    // await Task.Run(() =>
+                    // {
                         for (int j = 0; j < 5; j++)
                         {
                             SendPacket(distinctTargets.Item1, attackPacket);
                             //_hookManager.SendPacket(distinctTargets.Item1, buf);
                         }
-                    });
+                    // }, stoppingToken);
                 }
             }
         }

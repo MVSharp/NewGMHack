@@ -22,7 +22,7 @@ namespace NewGMHack.CommunicationModel.IPC
     {
         [Key(0)] public Operation Operation { get; set; } = Operation.None;
 
-        [Key(1)] public object Parameters { get; set; } = default!;
+        [Key(1)] public object? Parameters { get; set; } = default!;
 
         [Key(2)] public Type ParameterType { get; set; } = default!;
     }

@@ -9,7 +9,7 @@ namespace NewGmHack.GUI.Converters
         /// <inheritdoc />
         public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
         {
-            if (value != null && value is bool oriValue)
+            if (value is bool oriValue)
             {
                 return !oriValue;
             }

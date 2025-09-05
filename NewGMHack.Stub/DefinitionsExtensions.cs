@@ -73,7 +73,7 @@ public static class SpanExtensions
     {
         int size = Marshal.SizeOf<T>();
         Span<byte> buffer = new byte[size];
-        MemoryMarshal.Write(buffer, ref value);
+        MemoryMarshal.Write(buffer, in value);
         return buffer.ToArray();
     }
 
@@ -119,8 +119,9 @@ public static class SpanExtensions
                     reader.SkipBytes(14);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
+                // ignored
             }
 
             return reborns;

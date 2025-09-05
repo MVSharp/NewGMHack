@@ -9,9 +9,9 @@ namespace NewGMHack.Stub
 {
     public class SelfInformation
     {
-        public Info         PersonInfo   { get; set; } = new();
-        public ClientConfig ClientConfig { get; set; } = new();
-        public List<Roommate> Roommates { get; set; }
+        public Info           PersonInfo   { get; set; } = new();
+        public ClientConfig   ClientConfig { get; set; } = new();
+        public List<Roommate> Roommates    { get; set; } = [];
         public SelfInformation()
         {
         }

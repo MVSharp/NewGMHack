@@ -6,7 +6,7 @@ namespace NewGMHack.Stub.Services;
 
 public class BuffSplitter(ILogger<BuffSplitter> logger) : IBuffSplitter
 {
-    private static readonly byte[] Separator = { 0xF0, 0x03 };
+    private static readonly byte[] Separator = [0xF0, 0x03];
 
     public List<PacketSegment> Split(ReadOnlySpan<byte> input)
     {

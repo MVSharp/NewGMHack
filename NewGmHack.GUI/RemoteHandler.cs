@@ -14,7 +14,7 @@ namespace NewGmHack.GUI
         public async Task<bool> AskForHealth()
         {
             var r = await this.SendRequestAsync<HealthIPCResponse>(Operation.Health);
-            return r.IsHealth;
+            return r is { IsHealth: true };
         }
 
         public async Task<Info> AskForInfo()
@@ -37,7 +37,7 @@ namespace NewGmHack.GUI
         public async Task<bool> DeattachRequest()
         {
             //TODO :redesign here later , it never have response
-            var a= SendRequestAsync<DeattachResponse>(Operation.DeattachRequest);
+            var a= await SendRequestAsync<DeattachResponse>(Operation.DeattachRequest);
             return true;
         }
     }
@@ -49,7 +49,7 @@ namespace NewGmHack.GUI
 
         private static readonly RecyclableMemoryStreamManager recyclableMemoryStreamManager = new();
         //TODO add paramters based 
-        public async Task<T?> SendRequestAsync<T>(Operation operation ,List<object> parameters = null, int timeout = 10) where T : class, new()
+        public async Task<T?> SendRequestAsync<T>(Operation operation ,List<object>? parameters = null, int timeout = 10) where T : class, new()
         {
             await using var stream  = recyclableMemoryStreamManager.GetStream("sdhook");
             var             request = new DynamicOperationRequest

@@ -44,7 +44,7 @@ public class PacketProcessorService : BackgroundService
     }
 
     /// <inheritdoc />
-    private object _lock = new object();
+    private readonly Lock _lock = new Lock();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -147,10 +147,11 @@ public class PacketProcessorService : BackgroundService
     private static Encoding chs = Encoding.GetEncoding(936) ?? Encoding.Default;
     private List<Roommate> ReadRoommates(ReadOnlyMemory<byte> data)
     {
-        ReadOnlySpan<byte> start         = new byte[] { 0xE8, 0x03, 0x00, 0x00, 0xE9, 0x03, 0x00, 0x00 };
-        ReadOnlySpan<byte> end           = new byte[] { 0xB5, 0x1E, 0x04, 0x00, 0x33, 0xC1, 0x1D, 0x00 };
+        ReadOnlySpan<byte> start         = [0xE8, 0x03, 0x00, 0x00, 0xE9, 0x03, 0x00, 0x00];
+        ReadOnlySpan<byte> end           = [0xB5, 0x1E, 0x04, 0x00, 0x33, 0xC1, 0x1D, 0x00];
         var                roommateBytes = data.Span.SliceBetweenMarkers(start, end);
         List<Roommate>     roomates      = new(12);
+        //normally , the first mother fucker is the room leader once join room (of cuz reassign when room leader fucked off)
         foreach (var roommateByte in roommateBytes)
         {
             var roommate = roommateByte.AsSpanFast().ReadStruct<RoommateHeader>();
@@ -158,7 +159,7 @@ public class PacketProcessorService : BackgroundService
             {
                 PlayerId = roommate.PlayerId,
                 ItemId   = roommate.ItemId,
-                Name     = chs.GetString( roommate.GetNameSpan()),
+                Name     = chs.GetString( roommate.GetNameSpan()).Trim(),
             });
         }
 
@@ -189,9 +190,12 @@ public class PacketProcessorService : BackgroundService
     private void ReadReborns(ByteReader reader, ConcurrentBag<Reborn> reborns)
     {
         var reborn = reader.ReadReborn();
-        if (reborn.PersionId == _selfInformation.PersonInfo.PersonId)
+        lock (_lock)
         {
-            reborns.Add(reborn);
+            if (reborn.PersionId == _selfInformation.PersonInfo.PersonId)
+            {
+                reborns.Add(reborn);
+            }
         }
     }
 
@@ -232,12 +236,12 @@ public class PacketProcessorService : BackgroundService
 
     private void SendSkipScreen(PacketContext packet)
     {
-        byte[] escBuffer = new byte[]
-        {
+        byte[] escBuffer =
+        [
             0x0E, 0x00, 0xF0, 0x03, 0x23, 0x08,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-        };
+        ];
         _winsockHookManager.SendPacket(packet.Socket, escBuffer);
     }
 }
