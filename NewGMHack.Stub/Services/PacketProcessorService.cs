@@ -1,11 +1,15 @@
 ﻿using System.Collections.Concurrent;
+using System.Text;
 using System.Threading.Channels;
 using ByteStream.Mananged;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using NewGMHack.CommunicationModel.IPC.Responses;
+using NewGMHack.CommunicationModel.Models;
 using NewGMHack.Stub.MemoryScanner;
 using NewGMHack.Stub.PacketStructs;
 using NewGMHack.Stub.PacketStructs.Recv;
+using Reloaded.Memory.Extensions;
 using ZLinq;
 using ZLogger;
 
@@ -123,6 +127,15 @@ public class PacketProcessorService : BackgroundService
             case 1550: // 1691 or 2337 or 1550:
                 SendSkipScreen(packet);
                 break;
+            case 1858:
+                var mates = ReadRoommates(packet.Data);
+                _logger.LogInformation($"Roomate:{string.Join("|" ,mates)}");
+                lock(_lock)
+                {
+                    _selfInformation.Roommates.Clear();
+                    _selfInformation.Roommates.AddRange(mates);
+                }
+                break;
             case 2080:
                 // No-op
                 break;
@@ -131,6 +144,26 @@ public class PacketProcessorService : BackgroundService
         }
     }
 
+    private static Encoding chs = Encoding.GetEncoding(936) ?? Encoding.Default;
+    private List<Roommate> ReadRoommates(ReadOnlyMemory<byte> data)
+    {
+        ReadOnlySpan<byte> start         = new byte[] { 0xE8, 0x03, 0x00, 0x00, 0xE9, 0x03, 0x00, 0x00 };
+        ReadOnlySpan<byte> end           = new byte[] { 0xB5, 0x1E, 0x04, 0x00, 0x33, 0xC1, 0x1D, 0x00 };
+        var                roommateBytes = data.Span.SliceBetweenMarkers(start, end);
+        List<Roommate>     roomates      = new(12);
+        foreach (var roommateByte in roommateBytes)
+        {
+            var roommate = roommateByte.AsSpanFast().ReadStruct<RoommateHeader>();
+            roomates.Add(new Roommate
+            {
+                PlayerId = roommate.PlayerId,
+                ItemId   = roommate.ItemId,
+                Name     = chs.GetString( roommate.GetNameSpan()),
+            });
+        }
+
+        return roomates;
+    }
     private async Task SendToBombServices(PacketContext packet, ConcurrentBag<Reborn> reborns)
     {
         try

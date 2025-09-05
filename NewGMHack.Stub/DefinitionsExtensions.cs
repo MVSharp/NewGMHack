@@ -15,6 +15,39 @@ namespace NewGMHack.Stub.PacketStructs
 
 public static class SpanExtensions
 {
+    public static List<byte[]> SliceBetweenMarkers(this ReadOnlySpan<byte> data, ReadOnlySpan<byte> startMarker, ReadOnlySpan<byte> endMarker)
+    {
+        var result = new List<byte[]>();
+        int index = 0;
+
+        while (index < data.Length)
+        {
+            int startIndex = data.Slice(index).IndexOfPattern(startMarker);
+            if (startIndex == -1) break;
+            startIndex += index + startMarker.Length;
+
+            int endIndex = data.Slice(startIndex).IndexOfPattern(endMarker);
+            if (endIndex == -1) break;
+            endIndex += startIndex;
+
+            var slice = data.Slice(startIndex, endIndex - startIndex).ToArray();
+            result.Add(slice);
+
+            index = endIndex + endMarker.Length;
+        }
+
+        return result;
+    }
+
+    public static int IndexOfPattern(this ReadOnlySpan<byte> span, ReadOnlySpan<byte> pattern)
+    {
+        for (int i = 0; i <= span.Length - pattern.Length; i++)
+        {
+            if (span.Slice(i, pattern.Length).SequenceEqual(pattern))
+                return i;
+        }
+        return -1;
+    }
     /// <summary>
     /// Casts a Span<byte> to a Span<T> for blittable types.
     /// </summary>

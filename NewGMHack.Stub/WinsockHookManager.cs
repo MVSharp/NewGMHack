@@ -192,7 +192,7 @@ public sealed class WinsockHookManager(
         if (receivedLength > 4)
         {
             Span<byte> data = new Span<byte>((void*)buffer, receivedLength);
-            //logger.ZLogInformation($"new recv hook PersonInfo: span length {data.Length} | {Convert.ToHexString(data)} | hook len {receivedLength}");
+            logger.ZLogInformation($"new recv hook PersonInfo: span length {data.Length} | {BitConverter.ToString(data.ToArray())} | hook len {receivedLength}");
             channel.Writer.TryWrite(new PacketContext(socket, data.ToArray()));
         }
 

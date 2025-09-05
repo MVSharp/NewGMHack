@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using NewGMHack.CommunicationModel.Models;
 
 namespace NewGMHack.Stub
 {
@@ -10,7 +11,7 @@ namespace NewGMHack.Stub
     {
         public Info         PersonInfo   { get; set; } = new();
         public ClientConfig ClientConfig { get; set; } = new();
-
+        public List<Roommate> Roommates { get; set; }
         public SelfInformation()
         {
         }
