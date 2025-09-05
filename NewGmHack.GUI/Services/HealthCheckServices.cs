@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Hosting;
+﻿using Microsoft.Extensions.Hosting;
 using NewGmHack.GUI.Abstracts;
 
 namespace NewGmHack.GUI.Services
@@ -21,7 +16,7 @@ namespace NewGmHack.GUI.Services
                 try
                 {
                     var healths = await handler.AskForHealth();
-                    await healthCheckHandler.SetHealthStatus(healths);
+                    healthCheckHandler.SetHealthStatus(healths);
                     var info = await handler.AskForInfo();
                     personInfoHandler.SetInfo(info);
                 }
@@ -29,7 +24,7 @@ namespace NewGmHack.GUI.Services
                 {
                 }
 
-                await Task.Delay(5500);
+                await Task.Delay(2000);
             }
         }
     }

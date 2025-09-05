@@ -1,40 +1,42 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Diagnostics;
+using System.Windows.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using InjectDotnet;
+using MahApps.Metro.Controls.Dialogs;
+using Microsoft.Extensions.DependencyInjection;
 using NewGMHack.CommunicationModel.IPC.Requests;
 using NewGmHack.GUI.Abstracts;
-using NewGMHack.Stub;
+using NewGmHack.GUI.Views;
 using ObservableCollections;
-using SharedMemory;
+using ZLinq;
 
 // using MessagePipe;
 // using NewGMHack.CommunicationModel.IPC;
 
 namespace NewGmHack.GUI.ViewModels
 {
-    public partial class MainViewModel : ObservableObject , IHealthCheckHandler
+    public partial class MainViewModel : ObservableObject, IHealthCheckHandler
     {
         [ObservableProperty] private bool _isConnected = false;
-        private ObservableList<GMHackFeatures> featuresList;
-        [ObservableProperty] private NotifyCollectionChangedSynchronizedViewList<GMHackFeatures>           _features;
-        [ObservableProperty] private bool                                                            _isRandomLocation  = false;
-        ObservableList<TabUserControlBase>                                                           tabslist;
-        [ObservableProperty] private NotifyCollectionChangedSynchronizedViewList<TabUserControlBase> _tabs;
+        private                      ObservableList<GMHackFeatures> featuresList;
+        [ObservableProperty] private NotifyCollectionChangedSynchronizedViewList<GMHackFeatures> _features;
+        [ObservableProperty] private bool _isRandomLocation = false;
+        ObservableList<TabItem> tabslist;
+        [ObservableProperty] private NotifyCollectionChangedSynchronizedViewList<TabItem> _tabs;
         private readonly             RemoteHandler _handler;
-        public MainViewModel(PersonInfoUserControlsViewModel PersonViewModel, RemoteHandler master)
+        private readonly             IDialogCoordinator _dialogCoordinator;
+
+        public MainViewModel( RemoteHandler master,
+                             IDialogCoordinator              dialogCoordinator)
         {
             featuresList = new();
             _features = featuresList.ToNotifyCollectionChanged(SynchronizationContextCollectionEventDispatcher.Current);
-            tabslist     = new();
-            tabslist.AddRange([PersonViewModel]);
+            tabslist = new();
             Tabs = tabslist.ToNotifyCollectionChanged(SynchronizationContextCollectionEventDispatcher.Current);
-            _handler = master;
+            AddTab<PersonInfoView, PersonInfoUserControlsViewModel>("Person Info");
+            _handler           = master;
+            _dialogCoordinator = dialogCoordinator;
         }
 
         [RelayCommand]
@@ -42,6 +44,7 @@ namespace NewGmHack.GUI.ViewModels
         {
             await _handler.DeattachRequest();
         }
+
         [RelayCommand]
         private async Task Inject()
         {
@@ -70,48 +73,76 @@ namespace NewGmHack.GUI.ViewModels
 
             if (t == 0x128)
             {
-                    Console.WriteLine("injected sucessfully");
+                Console.WriteLine("injected sucessfully");
+                while (!IsConnected)
+                {
+                    await Task.Delay(1000);
+                }
+
+                featuresList.Clear();
+
+                var features = await _handler.GetFeatures();
+                featuresList.AddRange(features.AsValueEnumerable().Select(c => new GMHackFeatures(c.Name, c.IsEnabled,
+                                                                              async (gmHackFeatures) =>
+                                                                              {
+                                                                                  if (featuresList
+                                                                                  .Contains(gmHackFeatures))
+                                                                                  {
+                                                                                      await _handler
+                                                                                         .SetFeatureEnable(new
+                                                                                              FeatureChangeRequests
+                                                                                              {
+                                                                                                  FeatureName =
+                                                                                                      gmHackFeatures
+                                                                                                         .Name,
+                                                                                                  IsEnabled =
+                                                                                                      gmHackFeatures
+                                                                                                         .IsEnabled
+                                                                                              });
+                                                                                  }
+                                                                              })).ToArray());
+                await _dialogCoordinator.ShowMessageAsync(this, "Injected", "Injected");
             }
 
             else
             {
                 Console.WriteLine("fucked , it failed,we r fucked up");
+                await _dialogCoordinator.ShowMessageAsync(this, "failed to inject", "failed to inject");
             }
-
         }
 
         /// <inheritdoc />
-        public async Task SetHealthStatus(bool isConnected)
+        public void SetHealthStatus(bool isConnected)
         {
             if (!isConnected)
             {
                 featuresList.Clear();
             }
-            else
-            {
 
-                featuresList.Clear();
-             var features =await _handler.GetFeatures();
-             featuresList.AddRange(features.Select(c=>new GMHackFeatures(c.Name,c.IsEnabled, async (gmHackFeatures) =>
-             {
-                 if (featuresList.Contains(gmHackFeatures))
-                 {
-                     await _handler.SetFeatureEnable(new FeatureChangeRequests
-                     {
-                         FeatureName =  gmHackFeatures.Name,
-                         IsEnabled   = gmHackFeatures.IsEnabled
-                     });
-                 }
-             })));
-            }
             IsConnected = isConnected;
+        }
+
+        public void AddTab<TView, TViewModel>(string header)
+            where TView : UserControl
+            where TViewModel : class
+        {
+            var view      = App.Services.GetRequiredService<TView>();
+            var viewModel = App.Services.GetRequiredService<TViewModel>();
+            view.DataContext = viewModel;
+
+            var tab = new TabItem
+            {
+                Header  = header,
+                Content = view
+            };
+
+            tabslist.Add(tab);
         }
 
 //#pragma warning disable
         [RelayCommand]
         public async Task OnLoaded()
         {
-
         }
     }
 }

@@ -23,11 +23,11 @@ public sealed class WinsockHookManager(
     private SendToDelegate?   _originalSendTo;
     private RecvFromDelegate? _originalRecvFrom;
 
-    private INativeHook? _sendHook;
-    private INativeHook? _recvHook;
-    private INativeHook? _sendToHook;
-    private INativeHook? _recvFromHook;
-
+    private INativeHook?      _sendHook;
+    private INativeHook?      _recvHook;
+    private INativeHook?      _sendToHook;
+    private INativeHook?      _recvFromHook;
+    private List<INativeHook> Hooks = new(4);
     public void HookAll()
     {
         logger.ZLogInformation($"start hook");
@@ -39,8 +39,16 @@ public sealed class WinsockHookManager(
         HookFunction(ws2_32, "sendto", new SendToDelegate(SendToHook), out _sendToHook, out _originalSendTo);
         HookFunction(ws2_32, "recvfrom", new RecvFromDelegate(RecvFromHook), out _recvFromHook,
                      out _originalRecvFrom);
+        Hooks.AddRange([_sendHook,_recvFromHook,_recvHook ,_sendToHook]);
     }
 
+    public void UnHookAll()
+    {
+        foreach (var hook in Hooks)
+        {
+            hook.Dispose(); 
+        }
+    }
     private void HookFunction<T>(ProcessModule    module,       string functionName, T hookDelegate,
                                  out INativeHook? hookInstance, out T? originalDelegate) where T : Delegate
     {
@@ -106,7 +114,7 @@ public sealed class WinsockHookManager(
                             var targets = raw.SliceAfter<Attack1335>().CastTo<TargetData>();
                             if (attack.PlayerId == self.PersonInfo.PersonId)
                             {
-                                logger.ZLogInformation($"Attacked By me , now motify {result.Method}");
+                                //logger.ZLogInformation($"Attacked By me , now motify {result.Method}");
                                 for (var index = 0; index < targets.Length; index++)
                                 {
                                     targets[index].Damage = ushort.MaxValue;
@@ -114,8 +122,8 @@ public sealed class WinsockHookManager(
                             }
                             else
                             {
-                                logger
-                                   .ZLogInformation($"1335 not attacked by me {attack.PlayerId} | {attack.PlayerId2}");
+                                //logger
+                                //   .ZLogInformation($"1335 not attacked by me {attack.PlayerId} | {attack.PlayerId2}");
                             }
 
                             var attackBytes  = attack.ToByteArray().AsSpan();
@@ -138,7 +146,7 @@ public sealed class WinsockHookManager(
                             var targets1 = raw1.SliceAfter<Attack1486>().CastTo<TargetData>();
                             if (attack1.PlayerId == self.PersonInfo.PersonId)
                             {
-                                logger.ZLogInformation($"Attacked By me , now motify {result.Method}");
+                                //logger.ZLogInformation($"Attacked By me , now motify {result.Method}");
                                 for (var index = 0; index < targets1.Length; index++)
                                 {
                                     targets1[index].Damage = ushort.MaxValue;
@@ -146,8 +154,8 @@ public sealed class WinsockHookManager(
                             }
                             else
                             {
-                                logger
-                                   .ZLogInformation($"1486 not attacked by me {attack1.PlayerId} | {attack1.PlayerId2}");
+                                // logger
+                                //    .ZLogInformation($"1486 not attacked by me {attack1.PlayerId} | {attack1.PlayerId2}");
                             }
 
                             var attackBytes1  = attack1.ToByteArray().AsSpan();

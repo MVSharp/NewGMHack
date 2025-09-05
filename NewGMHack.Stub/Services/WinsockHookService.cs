@@ -21,8 +21,14 @@ public class WinsockHookService : IHostedService
     }
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        _logger.ZLogInformation($"Starting hook service...");
-        _hookManager.HookAll();
+        try
+        {
+            _logger.ZLogInformation($"Starting hook service...");
+            _hookManager.HookAll();
+        }
+        catch(Exception ex) {
+            _logger.ZLogInformation($"{ex.Message}|{ex.StackTrace}");
+        }
         // _logger.ZLogInformation($"send health check");
         // // var r=    await _handler.InvokeAsync(new DynamicOperationRequest() { Operation = "HealthCheck" });
         // while (r.Success == false)
@@ -35,6 +41,7 @@ public class WinsockHookService : IHostedService
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
+        _hookManager.UnHookAll();
         _logger.ZLogInformation($"Stopping hook service...");
         return Task.CompletedTask;
     }

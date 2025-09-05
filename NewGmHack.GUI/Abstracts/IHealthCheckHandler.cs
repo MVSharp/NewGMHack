@@ -1,13 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace NewGmHack.GUI.Abstracts
+﻿namespace NewGmHack.GUI.Abstracts
 {
     public interface IHealthCheckHandler
     { 
-        Task SetHealthStatus(bool isConnected);
+        void SetHealthStatus(bool isConnected);
     }
 }

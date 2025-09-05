@@ -52,6 +52,13 @@ namespace NewGMHack.Stub
                                                                                       .Format(writer, $"{ex.Message}"));
                                            });
                                        });
+
+                                       // c.AddZLoggerLogProcessor((options, provider) =>
+                                       // {
+                                       //     var batchProvider =
+                                       //         provider.GetRequiredService<AsyncIPCLogProcessor>();
+                                       //     return batchProvider;
+                                       // });
                                    })
                                   .ConfigureServices(services =>
                                    {
@@ -71,6 +78,7 @@ namespace NewGMHack.Stub
                                        //                                       options.MessagePackSerializerOptions =
                                        //                                           MessagePackSerializerOptions.Standard;
                                        //                                   });
+                                       //services.AddSingleton<AsyncIPCLogProcessor>();
                                        services.AddSingleton<SelfInformation>();
                                        services.AddTransient<Mem>();
                                        services.AddTransient<GmMemory>();

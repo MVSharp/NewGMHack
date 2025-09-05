@@ -1,9 +1,6 @@
-﻿using System.Configuration;
-using System.Data;
-using System.Runtime.CompilerServices;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Threading;
-using MessagePack;
+using MahApps.Metro.Controls.Dialogs;
 // using MessagePipe;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -24,6 +21,7 @@ namespace NewGmHack.GUI
                                                   .ConfigureServices(services =>
                                                    {
                                                        services.AddSingleton<MainWindow>();
+                                                       services.AddSingleton<IDialogCoordinator>(sp=> DialogCoordinator.Instance);
                                                        services.AddSingleton<MainViewModel>();
                                                        services.AddSingleton(new RpcBuffer("Sdhook"));
                                                        services.AddSingleton<RemoteHandler>();
