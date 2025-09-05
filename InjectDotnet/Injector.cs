@@ -2,6 +2,7 @@
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using InjectDotnet.Debug.DebugEventArgs;
 
 namespace InjectDotnet;
 
