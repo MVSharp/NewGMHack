@@ -35,6 +35,7 @@ namespace NewGmHack.GUI.ViewModels
             tabslist = [];
             Tabs = tabslist.ToNotifyCollectionChanged(SynchronizationContextCollectionEventDispatcher.Current);
             AddTab<PersonInfoView, PersonInfoUserControlsViewModel>("Person Info");
+            AddTab<RoommatesView, RoommatesViewModel>("RoommatesView");
             _handler           = master;
             _dialogCoordinator = dialogCoordinator;
         }

@@ -4,6 +4,7 @@ using Microsoft.IO;
 using NewGMHack.CommunicationModel.IPC;
 using NewGMHack.CommunicationModel.IPC.Requests;
 using NewGMHack.CommunicationModel.IPC.Responses;
+using NewGMHack.CommunicationModel.Models;
 using NewGMHack.Stub;
 using SharedMemory;
 
@@ -39,6 +40,11 @@ namespace NewGmHack.GUI
             //TODO :redesign here later , it never have response
             var a= await SendRequestAsync<DeattachResponse>(Operation.DeattachRequest);
             return true;
+        }
+
+        public  Task<List<Roommate>> GetRoommates()
+        {
+            return SendRequestAsync<List<Roommate>>(Operation.GetRoomInfo);
         }
     }
 

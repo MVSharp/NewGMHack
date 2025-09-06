@@ -6,7 +6,9 @@ namespace NewGmHack.GUI.Services
     public class HealthCheckServices(
         RemoteHandler       handler,
         IHealthCheckHandler healthCheckHandler,
-        IPersonInfoHandler  personInfoHandler) : BackgroundService
+        IPersonInfoHandler  personInfoHandler,
+        IRoomManager roomManager
+        ) : BackgroundService
     {
         /// <inheritdoc />
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -19,6 +21,8 @@ namespace NewGmHack.GUI.Services
                     healthCheckHandler.SetHealthStatus(healths);
                     var info = await handler.AskForInfo();
                     personInfoHandler.SetInfo(info);
+                    var roommates = await handler.GetRoommates();
+                    roomManager.UpdateRoomList(roommates);
                 }
                 catch
                 {

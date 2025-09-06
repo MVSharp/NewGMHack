@@ -2,6 +2,21 @@
 
 namespace NewGMHack.Stub;
 
+public static class FeatureExtensions
+
+{
+    public static HackFeatures? GetFeature(this IEnumerable<HackFeatures?> features,FeatureName name)
+    {
+        return features.FirstOrDefault(x => x.Name == name);
+    }
+
+    public static bool IsFeatureEnable(this IEnumerable<HackFeatures> features, FeatureName name)
+    {
+        var f = features.GetFeature(name);
+        if (f == null) return false;
+        return f.IsEnabled;
+    }
+}
 public class ClientConfig
 {
     public List<HackFeatures> Features = new()

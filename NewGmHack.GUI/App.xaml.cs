@@ -32,6 +32,9 @@ namespace NewGmHack.GUI
                                                        services.AddSingleton<IPersonInfoHandler>(sp => sp.GetRequiredService<PersonInfoUserControlsViewModel>());
                                                        //i do this for non blocking
                                                        services.AddSingleton< IHostedService,HealthCheckServices>();
+                                                       services.AddSingleton<RoommatesView>();
+                                                       services.AddSingleton<RoommatesViewModel>();
+                                                       services.AddSingleton<IRoomManager>(sp=> sp.GetRequiredService<RoommatesViewModel>());
                                                        // services.AddMessagePipe()
                                                        //         .AddNamedPipeInterprocess("SdHook",
                                                        //              options =>

@@ -63,7 +63,7 @@ namespace NewGMHack.Stub.Services
                 {
                     //   InitTargetData();
                     var targets = ValueEnumerable.Repeat(1, 12)
-                                                 .Select(y => new TargetData() { Damage = ushort.MaxValue - 1 })
+                                                 .Select(_ => new TargetData() { Damage = ushort.MaxValue - 1 })
                                                  .ToArray(); // new TargetData1335[12>
                     var attack = new Attack1335
                     {

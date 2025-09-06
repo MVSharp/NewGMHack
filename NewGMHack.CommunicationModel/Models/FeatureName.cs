@@ -7,5 +7,6 @@ public enum FeatureName
     IsMissionBomb,
     IsPlayerBomb,
     IsRandomLocation,
-    IsAutoReady
+    IsAutoReady,
+    IsRebound
 }

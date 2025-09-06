@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -11,7 +12,7 @@ namespace NewGMHack.Stub
     {
         public Info           PersonInfo   { get; set; } = new();
         public ClientConfig   ClientConfig { get; set; } = new();
-        public List<Roommate> Roommates    { get; set; } = [];
+        public ConcurrentBag<Roommate> Roommates    { get; set; } = [];
         public SelfInformation()
         {
         }

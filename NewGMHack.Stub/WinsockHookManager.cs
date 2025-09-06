@@ -136,7 +136,6 @@ public sealed class WinsockHookManager(
                     length = attackBytes.Length + targetsBytes.Length;
                     return _originalSend!(socket, buffer, length, flags);
                 }
-
             case 1486: // item , bucket damage
 
                 var raw1     = data[0..6].CombineWith(result.MethodBody.AsSpan());
@@ -167,6 +166,16 @@ public sealed class WinsockHookManager(
                     buffer = ptrBuffer;
                     length = attackBytes1.Length + targetsBytes1.Length;
                     return _originalSend!(socket, buffer, length, flags);
+                }
+            case 1538:
+                var buf = result.MethodBody;
+                buf[46] = 0xFF;
+                buf[47] = 0xFF;
+                fixed (byte* ptr = data[0..6].CombineWith(buf))
+                {
+                    IntPtr ptrBuffer = (IntPtr)ptr;
+                    buffer = ptrBuffer;
+                    return _originalSend!(socket, buffer , length, flags);
                 }
         }
 

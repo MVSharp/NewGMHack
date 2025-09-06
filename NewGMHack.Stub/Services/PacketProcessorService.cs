@@ -4,8 +4,8 @@ using System.Threading.Channels;
 using ByteStream.Mananged;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using NewGMHack.CommunicationModel.IPC.Responses;
 using NewGMHack.CommunicationModel.Models;
+using NewGMHack.CommunicationModel.PacketStructs.Recv;
 using NewGMHack.Stub.MemoryScanner;
 using NewGMHack.Stub.PacketStructs;
 using NewGMHack.Stub.PacketStructs.Recv;
@@ -99,8 +99,8 @@ public class PacketProcessorService : BackgroundService
         switch (method)
         {
             // case 1992 or 1338 or 2312 or 1525 or 1521 or 2103:
-
-            case 1992: //or 1521 or 2312 or 1525 or 1518:
+            //1342 player reborn in battle
+            case 1992 or 1342: //or 1521 or 2312 or 1525 or 1518:
 
                 ReadReborns(reader, reborns);
 
@@ -127,13 +127,46 @@ public class PacketProcessorService : BackgroundService
             case 1550: // 1691 or 2337 or 1550:
                 SendSkipScreen(packet);
                 break;
-            case 1858:
+            case 1858 or 1270:
                 var mates = ReadRoommates(packet.Data);
-                _logger.LogInformation($"Roomate:{string.Join("|" ,mates)}");
-                lock(_lock)
-                {
+
+                    _logger.LogInformation($"local Roomate:{string.Join("|" , mates)}");
                     _selfInformation.Roommates.Clear();
-                    _selfInformation.Roommates.AddRange(mates);
+                    foreach (var c in mates)
+                    {
+                        
+                    _selfInformation.Roommates.Add(c);
+                    }
+                    _logger.LogInformation($" global Roomate:{string.Join("|" ,_selfInformation.Roommates)}");
+                break;
+            case 1847:// someone join 
+                RequestRoomInfo(packet.Socket);
+                break;
+            case 1851://someone leave
+                HandleRoommateLeave(packet);
+                break;
+
+            case 1338: // hitted or got hitted recv
+                var hitResponse = packet.Data.AsSpanFast().ReadStruct<HitResponse>();
+                lock (_lock)
+                {
+                    _selfInformation.PersonInfo.PersonId = hitResponse.PlayerId;
+                }
+                if (hitResponse.FromId != _selfInformation.PersonInfo.PersonId)
+                {
+                    if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
+                        _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+                    {
+                        reborns.Add(new Reborn(hitResponse.PlayerId,hitResponse.ToId,0 ));
+                    }
+                }
+
+                if (hitResponse.ToId == hitResponse.PlayerId)
+                {
+                    if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsRebound))
+                    {
+                        reborns.Add(new Reborn(hitResponse.PlayerId,hitResponse.FromId,0));
+                    }
                 }
                 break;
             case 2080:
@@ -144,6 +177,31 @@ public class PacketProcessorService : BackgroundService
         }
     }
 
+    private void HandleRoommateLeave(PacketContext packet)
+    {
+        var roomActionOnLeave = packet.Data.AsSpanFast().ReadStruct<RoomActionOnLeave>();
+        var leaveId           = roomActionOnLeave.LeaveId;
+            // var existingRoommate  = _selfInformation.Roommates.AsValueEnumerable().FirstOrDefault(x => x.PlayerId == leaveId);
+            // if (existingRoommate != null)
+            // {
+            //     _selfInformation.Roommates.(existingRoommate);
+            // }
+            // else
+            // {
+                RequestRoomInfo(packet.Socket);
+            // }
+    }
+
+    private void RequestRoomInfo(IntPtr socket)
+    {
+        
+        ReadOnlySpan<byte> requestRoomInfoBytes =
+        [
+            0x0A, 0x00, 0xF0, 0x03, 0xF4, 0x04, 0x00, 0x00,
+            0x00, 0x00, 0x4C, 0x00, 0x00, 0x00
+        ];
+       _winsockHookManager.SendPacket(socket,requestRoomInfoBytes); 
+    }
     private static Encoding chs = Encoding.GetEncoding(936) ?? Encoding.Default;
     private List<Roommate> ReadRoommates(ReadOnlyMemory<byte> data)
     {

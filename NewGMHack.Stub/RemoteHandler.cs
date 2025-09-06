@@ -10,6 +10,7 @@ using Microsoft.IO;
 using NewGMHack.CommunicationModel.IPC;
 using NewGMHack.CommunicationModel.IPC.Requests;
 using NewGMHack.CommunicationModel.IPC.Responses;
+using NewGMHack.CommunicationModel.Models;
 using ZLinq;
 using ZLogger;
 
@@ -116,6 +117,13 @@ namespace NewGMHack.Stub
                     await MessagePackSerializer.SerializeAsync(stream, response, _options);
                     // brutal ways , it is not correct
                     Environment.Exit(0);
+                    break;
+                }
+                case Operation.GetRoomInfo:
+                {
+                    var response = new DynamicOperationResponse<IEnumerable<Roommate>>();
+                    response.Result = self.Roommates.ToList();
+                    await MessagePackSerializer.SerializeAsync(stream, response, _options);
                     break;
                 }
                 case Operation.None:
