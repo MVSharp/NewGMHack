@@ -29,18 +29,23 @@ public sealed class WinsockHookManager(
     private INativeHook?      _sendToHook;
     private INativeHook?      _recvFromHook;
     private List<INativeHook> Hooks = new(4);
-
+    #region Dont Remove prevent GC
+    private SendDelegate?     _sendHookDelegate;
+    private RecvDelegate?     _recvHookDelegate;
+    private SendToDelegate?   _sendToHookDelegate;
+    private RecvFromDelegate? _recvFromHookDelegate;
+    #endregion
     public void HookAll()
     {
         logger.ZLogInformation($"start hook");
         var currentProc = Process.GetCurrentProcess();
         var ws2_32      = currentProc.GetModulesByName("ws2_32").First();
 
-        HookFunction(ws2_32, "send",   new SendDelegate(SendHook),     out _sendHook,   out _originalSend);
-        HookFunction(ws2_32, "recv",   new RecvDelegate(RecvHook),     out _recvHook,   out _originalRecv);
-        HookFunction(ws2_32, "sendto", new SendToDelegate(SendToHook), out _sendToHook, out _originalSendTo);
-        HookFunction(ws2_32, "recvfrom", new RecvFromDelegate(RecvFromHook), out _recvFromHook,
-                     out _originalRecvFrom);
+        //prevent GC
+        HookFunction(ws2_32, "send",     _sendHookDelegate,     out _sendHook,     out _originalSend);
+        HookFunction(ws2_32, "recv",     _recvHookDelegate,     out _recvHook,     out _originalRecv);
+        HookFunction(ws2_32, "sendto",   _sendToHookDelegate,   out _sendToHook,   out _originalSendTo);
+        HookFunction(ws2_32, "recvfrom", _recvFromHookDelegate, out _recvFromHook, out _originalRecvFrom);
         Hooks.AddRange([_sendHook, _recvFromHook, _recvHook, _sendToHook]);
     }
 
@@ -209,7 +214,7 @@ public sealed class WinsockHookManager(
             //     logger.ZLogInformation($"recv returned invalid length: {receivedLength}");
             //     return receivedLength;
             // }
-            if (receivedLength > 4)
+            if (receivedLength > 6)
             {
                 Span<byte> data = new Span<byte>((void*)buffer, receivedLength);
                 //logger.ZLogInformation($"new recv hook PersonInfo: span length {data.Length} | {BitConverter.ToString(data.ToArray())} | hook len {receivedLength}");

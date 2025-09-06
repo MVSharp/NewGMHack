@@ -57,62 +57,74 @@ namespace NewGMHack.Stub.Services
                 await Task.Delay(100, stoppingToken);
             }
             
-            await foreach (var distinctTargets in bombChannel.Reader.ReadAllAsync(stoppingToken))
-            {
+            await foreach (var distinctTargets in bombChannel.Reader.ReadAllAsync(stoppingToken)) {
                 foreach (var chunkedReborn in distinctTargets.Item2.AsValueEnumerable().OrderBy(c => c.Location)
                                                              .Chunk(12).ToArray())
                 {
                     //   InitTargetData();
-                    var targets = ValueEnumerable.Repeat(1, 12)
-                                                 .Select(_ => new TargetData() { Damage = ushort.MaxValue - 1 })
-                                                 .ToArray(); // new TargetData1335[12>
-                    var attack = new Attack1335
+                    try
                     {
-                        Version = 166,
-                        Split   = 1008,
-                        Method  = 1335,
-                        //     TargetCount = 12,
-                        PlayerId = _selfInformation.PersonInfo.PersonId,
-                        //PlayerId2 = _selfInformation.PlayerId,
-                        WeaponId   = _selfInformation.PersonInfo.Weapon2,
-                        WeaponSlot = 1
-                    };
-                    var i = 0;
-                    foreach (var reborn in chunkedReborn)
-                    {
-                        //  targets[i]          = new TargetData1335();
-                        targets[i].TargetId = reborn.TargetId;
-                        targets[i].Damage   = ushort.MaxValue;
-                        i++;
+
+                        await Attack(chunkedReborn, distinctTargets);
                     }
-                    while (i < 12)
+                    catch
                     {
-                        var randomReborn = chunkedReborn[Random.Shared.Next(chunkedReborn.Length)];
-                        targets[i].TargetId = randomReborn.TargetId;
-                        targets[i].Damage   = ushort.MaxValue;
-                        i++;
+
                     }
-                    //attack.TargetData  = targets;
-                    attack.TargetCount = BitConverter.GetBytes(i)[0];
-                    //var buf    = DefinitionsExtensions.WriteAttack(attack);
-                    //if(buf.Length ==0)continue;
-                    //var length = BitConverter.GetBytes(buf.Length);
-                    // var hex = BitConverter.ToString(buf).Replace("-", " ");
-                    var attackBytes  = attack.ToByteArray().AsSpan();
-                    var targetBytes  = targets.AsSpan().AsByteSpan();
-                    var attackPacket = attackBytes.CombineWith(targetBytes);
-                    // var hex =  BitConverter.ToString( attackPacket);
-                    // _logger.ZLogInformation($"bomb bomb {attackPacket.Length} |the hex: {hex}");
-                    // await Task.Run(() =>
-                    // {
-                        for (int j = 0; j < 3; j++)
-                        {
-                            SendPacket(distinctTargets.Item1, attackPacket);
-                            //_hookManager.SendPacket(distinctTargets.Item1, buf);
-                        }
-                    // }, stoppingToken);
                 }
             }
+        }
+
+        private async Task Attack(Reborn[] chunkedReborn, (IntPtr, List<Reborn>) distinctTargets)
+        {
+            var targets = ValueEnumerable.Repeat(1, 12)
+                                         .Select(_ => new TargetData() { Damage = ushort.MaxValue - 1 })
+                                         .ToArray(); // new TargetData1335[12>
+            var attack = new Attack1335
+            {
+                Version = 166,
+                Split   = 1008,
+                Method  = 1335,
+                //     TargetCount = 12,
+                PlayerId = _selfInformation.PersonInfo.PersonId,
+                //PlayerId2 = _selfInformation.PlayerId,
+                WeaponId   = _selfInformation.PersonInfo.Weapon2,
+                WeaponSlot = 1
+            };
+            var i = 0;
+            foreach (var reborn in chunkedReborn)
+            {
+                //  targets[i]          = new TargetData1335();
+                targets[i].TargetId = reborn.TargetId;
+                targets[i].Damage   = ushort.MaxValue;
+                i++;
+            }
+            while (i < 12)
+            {
+                var randomReborn = chunkedReborn[Random.Shared.Next(chunkedReborn.Length)];
+                targets[i].TargetId = randomReborn.TargetId;
+                targets[i].Damage   = ushort.MaxValue;
+                i++;
+            }
+            //attack.TargetData  = targets;
+            attack.TargetCount = BitConverter.GetBytes(i)[0];
+            //var buf    = DefinitionsExtensions.WriteAttack(attack);
+            //if(buf.Length ==0)continue;
+            //var length = BitConverter.GetBytes(buf.Length);
+            // var hex = BitConverter.ToString(buf).Replace("-", " ");
+            var attackBytes  = attack.ToByteArray().AsSpan();
+            var targetBytes  = targets.AsSpan().AsByteSpan();
+            var attackPacket = attackBytes.CombineWith(targetBytes).ToArray();
+            // var hex =  BitConverter.ToString( attackPacket);
+            // _logger.ZLogInformation($"bomb bomb {attackPacket.Length} |the hex: {hex}");
+            await Task.Run(() =>
+            {
+                for (int j = 0; j < 3; j++)
+            {
+                SendPacket(distinctTargets.Item1, attackPacket);
+                //_hookManager.SendPacket(distinctTargets.Item1, buf);
+            }
+            });
         }
     }
 }

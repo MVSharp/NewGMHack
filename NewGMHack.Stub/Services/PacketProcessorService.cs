@@ -101,8 +101,11 @@ public class PacketProcessorService : BackgroundService
             // case 1992 or 1338 or 2312 or 1525 or 1521 or 2103:
             //1342 player reborn in battle
             case 1992 or 1342: //or 1521 or 2312 or 1525 or 1518:
-
-                ReadReborns(reader, reborns);
+                if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
+                    _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+                {
+                    ReadReborns(reader, reborns);
+                }
 
                 // _logger.ZLogInformation($"found reborn  : {reborn.TargetId}");
                 break;
@@ -128,30 +131,30 @@ public class PacketProcessorService : BackgroundService
                 SendSkipScreen(socket);
                 break;
             case 1858 or 1270:
-                var mates = ReadRoommates(methodPacket.MethodBody);
+                var mates = ReadRoommates(methodPacket.MethodBody.AsMemory());
 
-                // _logger.LogInformation($"local Roomate:{string.Join("|" , mates)}");
+                _logger.LogInformation($"local Roomate:{string.Join("|", mates)}");
                 _selfInformation.Roommates.Clear();
                 foreach (var c in mates)
                 {
                     _selfInformation.Roommates.Add(c);
                 }
 
-                // _logger.LogInformation($" global Roomate:{string.Join("|" ,_selfInformation.Roommates)}");
+                _logger.LogInformation($" global Roomate:{string.Join("|", _selfInformation.Roommates)}");
                 break;
             case 1847: // someone join 
                 RequestRoomInfo(socket);
                 break;
             case 1851: //someone leave
-                HandleRoommateLeave(socket, methodPacket.MethodBody);
+                HandleRoommateLeave(socket, methodPacket.MethodBody.AsMemory());
                 break;
 
             case 1338: // hitted or got hitted recv
-                ReadHitResponse1338(methodPacket.MethodBody, reborns);
+                ReadHitResponse1338(methodPacket.MethodBody.AsMemory(), reborns);
                 break;
             case 1525: // non direct hit 
 
-                ReadHitResponse1525(methodPacket.MethodBody, reborns);
+                ReadHitResponse1525(methodPacket.MethodBody.AsMemory(), reborns);
                 break;
             case 2080:
                 // No-op
@@ -161,10 +164,10 @@ public class PacketProcessorService : BackgroundService
         }
     }
 
-    private void ReadHitResponse1338(ReadOnlySpan<byte> bytes, ConcurrentBag<Reborn> reborns )
+    private void ReadHitResponse1338(ReadOnlyMemory<byte> bytes, ConcurrentBag<Reborn> reborns )
     {
         // _logger.ZLogInformation($"hit");
-           var  hitResponse = bytes.ReadStruct<HitResponse1338>();
+           var  hitResponse = bytes.Span.ReadStruct<HitResponse1338>();
 
              // hitResponse = bytes.ReadStruct<HitResponse1525>();
         // _logger.ZLogInformation($"hit:{hitResponse.PlayerId} | {hitResponse.FromId} | {hitResponse.ToId}  ");
@@ -190,10 +193,10 @@ public class PacketProcessorService : BackgroundService
         }
     }
 
-    private void ReadHitResponse1525(ReadOnlySpan<byte> bytes, ConcurrentBag<Reborn> reborns )
+    private void ReadHitResponse1525(ReadOnlyMemory<byte> bytes, ConcurrentBag<Reborn> reborns )
     {
         // _logger.ZLogInformation($"hit");
-           var  hitResponse = bytes.ReadStruct<HitResponse1525>();
+           var  hitResponse = bytes.Span.ReadStruct<HitResponse1525>();
 
              // hitResponse = bytes.ReadStruct<HitResponse1525>();
         // _logger.ZLogInformation($"hit:{hitResponse.PlayerId} | {hitResponse.FromId} | {hitResponse.ToId}  ");
@@ -248,6 +251,7 @@ public class PacketProcessorService : BackgroundService
 
     private List<Roommate> ReadRoommates(ReadOnlyMemory<byte> data)
     {
+
         ReadOnlySpan<byte> start         = [0xE8, 0x03, 0x00, 0x00, 0xE9, 0x03, 0x00, 0x00];
         ReadOnlySpan<byte> end           = [0xB5, 0x1E, 0x04, 0x00, 0x33, 0xC1, 0x1D, 0x00];
         var                roommateBytes = data.Span.SliceBetweenMarkers(start, end);

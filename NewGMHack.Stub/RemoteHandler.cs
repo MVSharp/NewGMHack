@@ -16,7 +16,7 @@ using ZLogger;
 
 namespace NewGMHack.Stub
 {
-    internal class RemoteHandler(SelfInformation self, ILogger<RemoteHandler> logger, WinsockHookManager manager)
+    internal class RemoteHandler(SelfInformation self, ILogger<RemoteHandler> logger)
     {
         private readonly RecyclableMemoryStreamManager recyclableMemoryStreamManager = new();
 
@@ -38,9 +38,22 @@ namespace NewGMHack.Stub
 
         public async Task<byte[]> HandleAsync(ulong uid, ReadOnlyMemory<byte> payload)
         {
-            logger.ZLogInformation($"Operations client:{"recviced"}");
+            //logger.ZLogInformation($"Operations client:{"recviced"}");
+            try
+            {
+                return await InternalHandleAsync(payload);
+            }
+            catch (Exception ex)
+            {
+            }
+
+            return [];
+        }
+
+        private async Task<byte[]> InternalHandleAsync(ReadOnlyMemory<byte> payload)
+        {
             var dynamicRequest = MessagePackSerializer.Deserialize<DynamicOperationRequest>(payload, _options);
-            logger.ZLogInformation($"Operations client:{dynamicRequest.Operation}");
+            //logger.ZLogInformation($"Operations client:{dynamicRequest.Operation}");
 
             await using var stream = recyclableMemoryStreamManager.GetStream("sdhook");
 
@@ -119,7 +132,7 @@ namespace NewGMHack.Stub
                         Success = true,
                         Result  = null
                     };
-                    manager.UnHookAll();
+                    //manager.UnHookAll();
                     await MessagePackSerializer.SerializeAsync(stream, response, _options);
                     // brutal ways , it is not correct
                     Environment.Exit(0);

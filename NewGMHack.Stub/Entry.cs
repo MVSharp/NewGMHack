@@ -16,7 +16,7 @@ using ZLogger;
 
 namespace NewGMHack.Stub
 {
-    internal static unsafe partial class Entry
+    internal static partial class Entry
     {
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         public static extern int MessageBox(IntPtr hWnd, string lpText, string lpCaption, uint uType);
@@ -40,12 +40,12 @@ namespace NewGMHack.Stub
                                            {
                                                formatter.SetPrefixFormatter($"{0}|{1}|",
                                                                             (in MessageTemplate template,
-                                                                             in LogInfo         info) =>
+                                                                             in LogInfo info) =>
                                                                                 template.Format(info.Timestamp,
                                                                                     info.LogLevel));
                                                formatter.SetSuffixFormatter($" ({0})",
                                                                             (in MessageTemplate template,
-                                                                             in LogInfo         info) =>
+                                                                             in LogInfo info) =>
                                                                                 template.Format(info.Category));
                                                formatter.SetExceptionFormatter((writer, ex) =>
                                                                                    Utf8StringInterpolation.Utf8String
@@ -62,12 +62,12 @@ namespace NewGMHack.Stub
                                    })
                                   .ConfigureServices(services =>
                                    {
-                                       services.Configure<HostOptions>(hostOptions =>
-                                       {
-                                           hostOptions
-                                                  .BackgroundServiceExceptionBehavior =
-                                               BackgroundServiceExceptionBehavior.Ignore;
-                                       });
+                                       // services.Configure<HostOptions>(hostOptions =>
+                                       // {
+                                       //     hostOptions
+                                       //            .BackgroundServiceExceptionBehavior =
+                                       //         BackgroundServiceExceptionBehavior.Ignore;
+                                       // });
                                        // services.AddMessagePipe()
                                        //                         .AddNamedPipeInterprocess("SdHook",
                                        //                                   options =>
@@ -109,11 +109,11 @@ namespace NewGMHack.Stub
                                        //services.AddHostedService<PacketProcessorService>();
                                    })
                                   .Build();
-            var t = new Thread(() =>
+            var t = new Thread( async void () =>
             {
                 try
                 {
-                    hostBuilder.Run();
+                     await hostBuilder.RunAsync();
                     // AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
                     // {
                     //     var ex = (Exception)e.ExceptionObject;
@@ -123,11 +123,12 @@ namespace NewGMHack.Stub
                 catch (Exception ex)
                 {
                     MessageBox(0, $"{ex.Message} {ex.StackTrace}", "Error", 0);
-                    hostBuilder.StopAsync();
+                    await hostBuilder.StopAsync();
                 }
             });
             //Run the form on STA thread so it can use COM
             t.SetApartmentState(ApartmentState.STA);
+            t.Priority = ThreadPriority.Highest;
             t.Start();
 
             return 0x128;
