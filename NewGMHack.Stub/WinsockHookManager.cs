@@ -40,7 +40,10 @@ public sealed class WinsockHookManager(
         logger.ZLogInformation($"start hook");
         var currentProc = Process.GetCurrentProcess();
         var ws2_32      = currentProc.GetModulesByName("ws2_32").First();
-
+        _sendHookDelegate     = new(SendHook);
+        _recvFromHookDelegate = new(RecvFromHook);
+        _sendToHookDelegate   = new(SendToHook);
+        _recvHookDelegate = new(RecvHook);
         //prevent GC
         HookFunction(ws2_32, "send",     _sendHookDelegate,     out _sendHook,     out _originalSend);
         HookFunction(ws2_32, "recv",     _recvHookDelegate,     out _recvHook,     out _originalRecv);
