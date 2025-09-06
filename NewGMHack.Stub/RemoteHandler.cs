@@ -16,7 +16,7 @@ using ZLogger;
 
 namespace NewGMHack.Stub
 {
-    internal class RemoteHandler(SelfInformation self, ILogger<RemoteHandler> logger,WinsockHookManager manager)
+    internal class RemoteHandler(SelfInformation self, ILogger<RemoteHandler> logger, WinsockHookManager manager)
     {
         private readonly RecyclableMemoryStreamManager recyclableMemoryStreamManager = new();
 
@@ -72,13 +72,15 @@ namespace NewGMHack.Stub
                 {
                     var response = new DynamicOperationResponse<ConfigPropertyIPCResponse>();
 
-                    if (dynamicRequest.Parameters is FeatureChangeRequests data)
+                    if (dynamicRequest.Parameters is List<object> datas && datas.Count > 0)
                     {
-                        var feature = self.ClientConfig.Features.AsValueEnumerable()
-                                          .FirstOrDefault(x => x.Name == data.FeatureName);
-
-                        if (feature != null)
+                        foreach (var data in datas.Cast<FeatureChangeRequests>())
                         {
+                            var feature = self.ClientConfig.Features.GetFeature(data.FeatureName);
+
+                            logger.LogInformation($"find featres : {data.FeatureName} value:{data.IsEnabled}");
+                            if (feature == null) continue;
+                            logger.LogInformation($"set featres : {data.FeatureName} value:{data.IsEnabled}");
                             var original = feature.IsEnabled;
                             feature.IsEnabled = data.IsEnabled;
 
@@ -89,6 +91,10 @@ namespace NewGMHack.Stub
                                 New      = data.IsEnabled
                             };
                         }
+                    }
+                    else
+                    {
+                        logger.ZLogInformation($"set property request but not type of {typeof(FeatureChangeRequests)}");
                     }
 
                     await MessagePackSerializer.SerializeAsync(stream, response, _options);

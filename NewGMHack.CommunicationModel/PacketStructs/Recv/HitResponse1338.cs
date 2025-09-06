@@ -9,11 +9,20 @@ namespace NewGMHack.CommunicationModel.PacketStructs.Recv
 {
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    public unsafe struct HitResponse
+    public unsafe struct HitResponse1338
     {
         public       UInt32 PlayerId;
         public       UInt32 FromId;
         public fixed byte Paddings[13];
+        public       UInt32 ToId;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public unsafe struct HitResponse1525
+    {
+        public       UInt32 PlayerId;
+        public       UInt32 FromId;
+        public fixed byte Paddings[14];
         public       UInt32 ToId;
     }
 }

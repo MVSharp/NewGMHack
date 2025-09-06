@@ -74,14 +74,14 @@ public class PacketProcessorService : BackgroundService
             await Parallel.ForEachAsync(methodPackets, new ParallelOptions() { MaxDegreeOfParallelism = 3 },
                                         async (methodPacket, _) =>
                                         {
-                                            await DoParseWork(packet, methodPacket, reborns);
+                                            await DoParseWork(packet.Socket, methodPacket, reborns);
                                         });
         }
         else
         {
             foreach (var methodPacket in methodPackets)
             {
-                await DoParseWork(packet, methodPacket, reborns);
+                await DoParseWork(packet.Socket, methodPacket, reborns);
             }
         }
 
@@ -91,7 +91,7 @@ public class PacketProcessorService : BackgroundService
         }
     }
 
-    private async Task DoParseWork(PacketContext packet, PacketSegment methodPacket, ConcurrentBag<Reborn> reborns)
+    private async Task DoParseWork(IntPtr socket, PacketSegment methodPacket, ConcurrentBag<Reborn> reborns)
     {
         var method = methodPacket.Method;
         var reader = new ByteReader(methodPacket.MethodBody);
@@ -125,49 +125,33 @@ public class PacketProcessorService : BackgroundService
 
                 break;
             case 1550: // 1691 or 2337 or 1550:
-                SendSkipScreen(packet);
+                SendSkipScreen(socket);
                 break;
             case 1858 or 1270:
-                var mates = ReadRoommates(packet.Data);
+                var mates = ReadRoommates(methodPacket.MethodBody);
 
-                    _logger.LogInformation($"local Roomate:{string.Join("|" , mates)}");
-                    _selfInformation.Roommates.Clear();
-                    foreach (var c in mates)
-                    {
-                        
+                // _logger.LogInformation($"local Roomate:{string.Join("|" , mates)}");
+                _selfInformation.Roommates.Clear();
+                foreach (var c in mates)
+                {
                     _selfInformation.Roommates.Add(c);
-                    }
-                    _logger.LogInformation($" global Roomate:{string.Join("|" ,_selfInformation.Roommates)}");
+                }
+
+                // _logger.LogInformation($" global Roomate:{string.Join("|" ,_selfInformation.Roommates)}");
                 break;
-            case 1847:// someone join 
-                RequestRoomInfo(packet.Socket);
+            case 1847: // someone join 
+                RequestRoomInfo(socket);
                 break;
-            case 1851://someone leave
-                HandleRoommateLeave(packet);
+            case 1851: //someone leave
+                HandleRoommateLeave(socket, methodPacket.MethodBody);
                 break;
 
             case 1338: // hitted or got hitted recv
-                var hitResponse = packet.Data.AsSpanFast().ReadStruct<HitResponse>();
-                lock (_lock)
-                {
-                    _selfInformation.PersonInfo.PersonId = hitResponse.PlayerId;
-                }
-                if (hitResponse.FromId != _selfInformation.PersonInfo.PersonId)
-                {
-                    if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
-                        _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
-                    {
-                        reborns.Add(new Reborn(hitResponse.PlayerId,hitResponse.ToId,0 ));
-                    }
-                }
+                ReadHitResponse1338(methodPacket.MethodBody, reborns);
+                break;
+            case 1525: // non direct hit 
 
-                if (hitResponse.ToId == hitResponse.PlayerId)
-                {
-                    if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsRebound))
-                    {
-                        reborns.Add(new Reborn(hitResponse.PlayerId,hitResponse.FromId,0));
-                    }
-                }
+                ReadHitResponse1525(methodPacket.MethodBody, reborns);
                 break;
             case 2080:
                 // No-op
@@ -177,32 +161,91 @@ public class PacketProcessorService : BackgroundService
         }
     }
 
-    private void HandleRoommateLeave(PacketContext packet)
+    private void ReadHitResponse1338(ReadOnlySpan<byte> bytes, ConcurrentBag<Reborn> reborns )
     {
-        var roomActionOnLeave = packet.Data.AsSpanFast().ReadStruct<RoomActionOnLeave>();
+        // _logger.ZLogInformation($"hit");
+           var  hitResponse = bytes.ReadStruct<HitResponse1338>();
+
+             // hitResponse = bytes.ReadStruct<HitResponse1525>();
+        // _logger.ZLogInformation($"hit:{hitResponse.PlayerId} | {hitResponse.FromId} | {hitResponse.ToId}  ");
+        // lock (_lock)
+        // {
+        //     _selfInformation.PersonInfo.PersonId = hitResponse.PlayerId;
+        // }
+        if (hitResponse.FromId != _selfInformation.PersonInfo.PersonId)
+        {
+            if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
+                _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+            {
+                reborns.Add(new Reborn(hitResponse.PlayerId, hitResponse.ToId, 0));
+            }
+        }
+
+        if (hitResponse.ToId == _selfInformation.PersonInfo.PersonId)
+        {
+            if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsRebound))
+            {
+                reborns.Add(new Reborn(hitResponse.PlayerId, hitResponse.FromId, 0));
+            }
+        }
+    }
+
+    private void ReadHitResponse1525(ReadOnlySpan<byte> bytes, ConcurrentBag<Reborn> reborns )
+    {
+        // _logger.ZLogInformation($"hit");
+           var  hitResponse = bytes.ReadStruct<HitResponse1525>();
+
+             // hitResponse = bytes.ReadStruct<HitResponse1525>();
+        // _logger.ZLogInformation($"hit:{hitResponse.PlayerId} | {hitResponse.FromId} | {hitResponse.ToId}  ");
+        // lock (_lock)
+        // {
+        //     _selfInformation.PersonInfo.PersonId = hitResponse.PlayerId;
+        // }
+        if (hitResponse.FromId != _selfInformation.PersonInfo.PersonId)
+        {
+            if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
+                _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+            {
+                reborns.Add(new Reborn(hitResponse.PlayerId, hitResponse.ToId, 0));
+            }
+        }
+
+        if (hitResponse.ToId == _selfInformation.PersonInfo.PersonId)
+        {
+            if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsRebound))
+            {
+                reborns.Add(new Reborn(hitResponse.PlayerId, hitResponse.FromId, 0));
+            }
+        }
+    }
+
+    private void HandleRoommateLeave(IntPtr socket, ReadOnlyMemory<byte> bytes)
+    {
+        var roomActionOnLeave = bytes.Span.ReadStruct<RoomActionOnLeave>();
         var leaveId           = roomActionOnLeave.LeaveId;
-            // var existingRoommate  = _selfInformation.Roommates.AsValueEnumerable().FirstOrDefault(x => x.PlayerId == leaveId);
-            // if (existingRoommate != null)
-            // {
-            //     _selfInformation.Roommates.(existingRoommate);
-            // }
-            // else
-            // {
-                RequestRoomInfo(packet.Socket);
-            // }
+        // var existingRoommate  = _selfInformation.Roommates.AsValueEnumerable().FirstOrDefault(x => x.PlayerId == leaveId);
+        // if (existingRoommate != null)
+        // {
+        //     _selfInformation.Roommates.(existingRoommate);
+        // }
+        // else
+        // {
+        RequestRoomInfo(socket);
+        // }
     }
 
     private void RequestRoomInfo(IntPtr socket)
     {
-        
         ReadOnlySpan<byte> requestRoomInfoBytes =
         [
             0x0A, 0x00, 0xF0, 0x03, 0xF4, 0x04, 0x00, 0x00,
             0x00, 0x00, 0x4C, 0x00, 0x00, 0x00
         ];
-       _winsockHookManager.SendPacket(socket,requestRoomInfoBytes); 
+        _winsockHookManager.SendPacket(socket, requestRoomInfoBytes);
     }
+
     private static Encoding chs = Encoding.GetEncoding(936) ?? Encoding.Default;
+
     private List<Roommate> ReadRoommates(ReadOnlyMemory<byte> data)
     {
         ReadOnlySpan<byte> start         = [0xE8, 0x03, 0x00, 0x00, 0xE9, 0x03, 0x00, 0x00];
@@ -217,12 +260,13 @@ public class PacketProcessorService : BackgroundService
             {
                 PlayerId = roommate.PlayerId,
                 ItemId   = roommate.ItemId,
-                Name     = chs.GetString( roommate.GetNameSpan()).Trim(),
+                Name     = chs.GetString(roommate.GetNameSpan()).Trim(),
             });
         }
 
         return roomates;
     }
+
     private async Task SendToBombServices(PacketContext packet, ConcurrentBag<Reborn> reborns)
     {
         try
@@ -247,13 +291,20 @@ public class PacketProcessorService : BackgroundService
 
     private void ReadReborns(ByteReader reader, ConcurrentBag<Reborn> reborns)
     {
-        var reborn = reader.ReadReborn();
-        lock (_lock)
+        try
         {
+            var reborn = reader.ReadReborn();
+
+            // lock (_lock)
+            // {
             if (reborn.PersionId == _selfInformation.PersonInfo.PersonId)
             {
                 reborns.Add(reborn);
             }
+            // }
+        }
+        catch
+        {
         }
     }
 
@@ -292,7 +343,7 @@ public class PacketProcessorService : BackgroundService
         }
     }
 
-    private void SendSkipScreen(PacketContext packet)
+    private void SendSkipScreen(IntPtr socket)
     {
         byte[] escBuffer =
         [
@@ -300,6 +351,6 @@ public class PacketProcessorService : BackgroundService
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00
         ];
-        _winsockHookManager.SendPacket(packet.Socket, escBuffer);
+        _winsockHookManager.SendPacket(socket, escBuffer);
     }
 }

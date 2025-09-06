@@ -29,6 +29,7 @@ public sealed class WinsockHookManager(
     private INativeHook?      _sendToHook;
     private INativeHook?      _recvFromHook;
     private List<INativeHook> Hooks = new(4);
+
     public void HookAll()
     {
         logger.ZLogInformation($"start hook");
@@ -40,16 +41,17 @@ public sealed class WinsockHookManager(
         HookFunction(ws2_32, "sendto", new SendToDelegate(SendToHook), out _sendToHook, out _originalSendTo);
         HookFunction(ws2_32, "recvfrom", new RecvFromDelegate(RecvFromHook), out _recvFromHook,
                      out _originalRecvFrom);
-        Hooks.AddRange([_sendHook,_recvFromHook,_recvHook ,_sendToHook]);
+        Hooks.AddRange([_sendHook, _recvFromHook, _recvHook, _sendToHook]);
     }
 
     public void UnHookAll()
     {
         foreach (var hook in Hooks)
         {
-            hook.Dispose(); 
+            hook.Dispose();
         }
     }
+
     private void HookFunction<T>(ProcessModule    module,       string functionName, T hookDelegate,
                                  out INativeHook? hookInstance, out T? originalDelegate) where T : Delegate
     {
@@ -82,6 +84,99 @@ public sealed class WinsockHookManager(
     // Hooked implementations
     private unsafe int SendHook(IntPtr socket, IntPtr buffer, int length, int flags)
     {
+        try
+        {
+
+
+            if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
+                self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+            {
+
+                Span<byte> data = new Span<byte>((void*)buffer, length);
+                if (data.Length <= 6) return _originalSend!(socket, buffer, length, flags);
+                var result = splitter.Split(data).AsValueEnumerable().FirstOrDefault();
+                if (result == null) return _originalSend!(socket, buffer, length, flags);
+                //TODO refractor later
+                var method = result.Method;
+                switch (method)
+                {
+                    case 1335: // normal damage 
+                        var raw     = data[0..6].CombineWith(result.MethodBody.AsSpan());
+                        var attack  = raw.ReadStruct<Attack1335>();
+                        var targets = raw.SliceAfter<Attack1335>().CastTo<TargetData>();
+                        if (attack.PlayerId == self.PersonInfo.PersonId)
+                        {
+                            //logger.ZLogInformation($"Attacked By me , now motify {result.Method}");
+                            for (var index = 0; index < targets.Length; index++)
+                            {
+                                targets[index].Damage = ushort.MaxValue;
+                            }
+                        }
+                        else
+                        {
+                            //logger
+                            //   .ZLogInformation($"1335 not attacked by me {attack.PlayerId} | {attack.PlayerId2}");
+                        }
+
+                        var attackBytes  = attack.ToByteArray().AsSpan();
+                        var targetsBytes = targets.AsByteSpan();
+                        var combined     = attackBytes.CombineWith(targetsBytes);
+                        logger.ZLogInformation($"{BitConverter.ToString(combined.ToArray())}");
+                        fixed (byte* ptr = combined)
+                        {
+                            IntPtr ptrBuffer = (IntPtr)ptr;
+                            buffer = ptrBuffer;
+                            length = attackBytes.Length + targetsBytes.Length;
+                            return _originalSend!(socket, buffer, length, flags);
+                        }
+                    case 1486: // item , bucket damage
+
+                        var raw1     = data[0..6].CombineWith(result.MethodBody.AsSpan());
+                        var attack1  = raw1.ReadStruct<Attack1486>();
+                        var targets1 = raw1.SliceAfter<Attack1486>().CastTo<TargetData>();
+                        if (attack1.PlayerId == self.PersonInfo.PersonId)
+                        {
+                            //logger.ZLogInformation($"Attacked By me , now motify {result.Method}");
+                            for (var index = 0; index < targets1.Length; index++)
+                            {
+                                targets1[index].Damage = ushort.MaxValue;
+                            }
+                        }
+                        else
+                        {
+                            // logger
+                            //    .ZLogInformation($"1486 not attacked by me {attack1.PlayerId} | {attack1.PlayerId2}");
+                        }
+
+                        var attackBytes1  = attack1.ToByteArray().AsSpan();
+                        var targetsBytes1 = targets1.AsByteSpan();
+                        var combined1     = attackBytes1.CombineWith(targetsBytes1);
+
+                        logger.ZLogInformation($"{BitConverter.ToString(combined1.ToArray())}");
+                        fixed (byte* ptr = combined1)
+                        {
+                            IntPtr ptrBuffer = (IntPtr)ptr;
+                            buffer = ptrBuffer;
+                            length = attackBytes1.Length + targetsBytes1.Length;
+                            return _originalSend!(socket, buffer, length, flags);
+                        }
+                    case 1538:
+                        var buf = result.MethodBody;
+                        buf[46] = 0xFF;
+                        buf[47] = 0xFF;
+                        fixed (byte* ptr = data[0..6].CombineWith(buf))
+                        {
+                            IntPtr ptrBuffer = (IntPtr)ptr;
+                            buffer = ptrBuffer;
+                            return _originalSend!(socket, buffer, length, flags);
+                        }
+                }
+            }
+        }
+        catch
+        {
+
+        }
         //Span<byte> data = new Span<byte>((void*)buffer, length);
         // Modify data if needed
         // if (length > 4)
@@ -97,108 +192,37 @@ public sealed class WinsockHookManager(
         // }
         // //logger.ZLogInformation($"send hook PersonInfo: span length {data.Length} | hook len {length}");
         // if 02F5 , F502 (1522) then block if misison
-        if (self.ClientConfig.Features.FirstOrDefault(x => x.Name == FeatureName.IsMissionBomb) is not
-            { IsEnabled: true }) return _originalSend!(socket, buffer, length, flags);
-        Span<byte> data = new Span<byte>((void*)buffer, length);
-        if (data.Length <= 6) return _originalSend!(socket, buffer, length, flags);
-        var result = splitter.Split(data).AsValueEnumerable().FirstOrDefault();
-        if (result == null) return _originalSend!(socket, buffer, length, flags);
-        //TODO refractor later
-        var method = result.Method;
-        switch (method)
-        {
-            case 1335: // normal damage 
-                var raw     = data[0..6].CombineWith(result.MethodBody.AsSpan());
-                var attack  = raw.ReadStruct<Attack1335>();
-                var targets = raw.SliceAfter<Attack1335>().CastTo<TargetData>();
-                if (attack.PlayerId == self.PersonInfo.PersonId)
-                {
-                    //logger.ZLogInformation($"Attacked By me , now motify {result.Method}");
-                    for (var index = 0; index < targets.Length; index++)
-                    {
-                        targets[index].Damage = ushort.MaxValue;
-                    }
-                }
-                else
-                {
-                    //logger
-                    //   .ZLogInformation($"1335 not attacked by me {attack.PlayerId} | {attack.PlayerId2}");
-                }
-
-                var attackBytes  = attack.ToByteArray().AsSpan();
-                var targetsBytes = targets.AsByteSpan();
-                var combined     = attackBytes.CombineWith(targetsBytes);
-                logger.ZLogInformation($"{BitConverter.ToString(combined.ToArray())}");
-                fixed (byte* ptr = combined)
-                {
-                    IntPtr ptrBuffer = (IntPtr)ptr;
-                    buffer = ptrBuffer;
-                    length = attackBytes.Length + targetsBytes.Length;
-                    return _originalSend!(socket, buffer, length, flags);
-                }
-            case 1486: // item , bucket damage
-
-                var raw1     = data[0..6].CombineWith(result.MethodBody.AsSpan());
-                var attack1  = raw1.ReadStruct<Attack1486>();
-                var targets1 = raw1.SliceAfter<Attack1486>().CastTo<TargetData>();
-                if (attack1.PlayerId == self.PersonInfo.PersonId)
-                {
-                    //logger.ZLogInformation($"Attacked By me , now motify {result.Method}");
-                    for (var index = 0; index < targets1.Length; index++)
-                    {
-                        targets1[index].Damage = ushort.MaxValue;
-                    }
-                }
-                else
-                {
-                    // logger
-                    //    .ZLogInformation($"1486 not attacked by me {attack1.PlayerId} | {attack1.PlayerId2}");
-                }
-
-                var attackBytes1  = attack1.ToByteArray().AsSpan();
-                var targetsBytes1 = targets1.AsByteSpan();
-                var combined1     = attackBytes1.CombineWith(targetsBytes1);
-
-                logger.ZLogInformation($"{BitConverter.ToString(combined1.ToArray())}");
-                fixed (byte* ptr = combined1)
-                {
-                    IntPtr ptrBuffer = (IntPtr)ptr;
-                    buffer = ptrBuffer;
-                    length = attackBytes1.Length + targetsBytes1.Length;
-                    return _originalSend!(socket, buffer, length, flags);
-                }
-            case 1538:
-                var buf = result.MethodBody;
-                buf[46] = 0xFF;
-                buf[47] = 0xFF;
-                fixed (byte* ptr = data[0..6].CombineWith(buf))
-                {
-                    IntPtr ptrBuffer = (IntPtr)ptr;
-                    buffer = ptrBuffer;
-                    return _originalSend!(socket, buffer , length, flags);
-                }
-        }
+      
 
         return _originalSend!(socket, buffer, length, flags);
     }
 
     private unsafe int RecvHook(IntPtr socket, IntPtr buffer, int length, int flags)
     {
-        var receivedLength = _originalRecv!(socket, buffer, length, flags);
-//return receivedLength;
-        // if (receivedLength == -1)
-        // {
-        //     logger.ZLogInformation($"recv returned invalid length: {receivedLength}");
-        //     return receivedLength;
-        // }
-        if (receivedLength > 4)
+        try
         {
-            Span<byte> data = new Span<byte>((void*)buffer, receivedLength);
-            //logger.ZLogInformation($"new recv hook PersonInfo: span length {data.Length} | {BitConverter.ToString(data.ToArray())} | hook len {receivedLength}");
-            channel.Writer.TryWrite(new PacketContext(socket, data.ToArray()));
-        }
 
-        return receivedLength;
+            var receivedLength = _originalRecv!(socket, buffer, length, flags);
+    //return receivedLength;
+            // if (receivedLength == -1)
+            // {
+            //     logger.ZLogInformation($"recv returned invalid length: {receivedLength}");
+            //     return receivedLength;
+            // }
+            if (receivedLength > 4)
+            {
+                Span<byte> data = new Span<byte>((void*)buffer, receivedLength);
+                //logger.ZLogInformation($"new recv hook PersonInfo: span length {data.Length} | {BitConverter.ToString(data.ToArray())} | hook len {receivedLength}");
+                channel.Writer.TryWrite(new PacketContext(socket, data.ToArray()));
+            }
+
+            return receivedLength;
+            }
+        catch
+        {
+
+        }
+        return _originalRecv!(socket, buffer, length, flags);
     }
 
     private unsafe int SendToHook(IntPtr socket, IntPtr buffer, int length, int flags, IntPtr to, int tolen)
@@ -207,32 +231,56 @@ public sealed class WinsockHookManager(
 
         //logger.ZLogInformation($"send to hook PersonInfo: span length {data.Length} | hook len {length}");
         // Modify data if needed
-        return _originalSendTo!(socket, buffer, length, flags, to, tolen);
+        try
+        {
+
+            return _originalSendTo!(socket, buffer, length, flags, to, tolen);
+        }
+        catch
+        {
+
+        }
+
+            return _originalSendTo!(socket, buffer, length, flags, to, tolen);
     }
 
     private unsafe int RecvFromHook(IntPtr socket, IntPtr buffer, int length, int flags, IntPtr from, ref int fromlen)
     {
-        int receivedLength = _originalRecvFrom!(socket, buffer, length, flags, from, ref fromlen);
-        // if (receivedLength ==-1)
-        // {
-        //     logger.ZLogInformation($"recvfrom returned invalid length: {receivedLength}");
-        // }
-        if (receivedLength > 4)
+        try
         {
-            Span<byte> data = new Span<byte>((void*)buffer, receivedLength);
-            //var        hex  = BitConverter.ToString(data.ToArray()).Replace("-", " ");
-            //    logger.ZLogInformation($"Recv from : {hex}");
+            int receivedLength = _originalRecvFrom!(socket, buffer, length, flags, from, ref fromlen);
+            // if (receivedLength ==-1)
+            // {
+            //     logger.ZLogInformation($"recvfrom returned invalid length: {receivedLength}");
+            // }
+            if (receivedLength > 4)
+            {
+                //Span<byte> data = new Span<byte>((void*)buffer, receivedLength);
+                //var        hex  = BitConverter.ToString(data.ToArray()).Replace("-", " ");
+                //    logger.ZLogInformation($"Recv from : {hex}");
+            }
+
+            return receivedLength;
+        }
+        catch
+        {
         }
 
-        return receivedLength;
+        return _originalRecvFrom!(socket, buffer, length, flags, from, ref fromlen);
     }
 
     public unsafe void SendPacket(IntPtr socket, ReadOnlySpan<byte> data, int flags = 0)
     {
-        fixed (byte* ptr = data)
+        try
         {
-            IntPtr buffer = (IntPtr)ptr;
-            this.OriginalSend(socket, buffer, data.Length, flags);
+            fixed (byte* ptr = data)
+            {
+                IntPtr buffer = (IntPtr)ptr;
+                this.OriginalSend(socket, buffer, data.Length, flags);
+            }
+        }
+        catch
+        {
         }
     }
 

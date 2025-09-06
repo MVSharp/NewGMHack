@@ -18,13 +18,13 @@ namespace NewGMHack.Stub.Services
     internal sealed class BombServices(
         Channel<(nint, List<Reborn>)> bombChannel,
         ILogger<BombServices>   _logger,
-        //WinsockHookManager            _hookManager,
+        WinsockHookManager            _hookManager,
         SelfInformation               _selfInformation) : BackgroundService
     {
         /// <inheritdoc />
-        [DllImport("ws2_32.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Unicode,
-                   SetLastError = true)]
-        private static extern int send(nint socket, nint buffer, int length, int flags);
+        // [DllImport("ws2_32.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Unicode,
+        //            SetLastError = true)]
+        // private static extern int send(nint socket, nint buffer, int length, int flags);
 
         public unsafe void SendPacket(nint socket, ReadOnlySpan<byte> data, int flags = 0)
         {
@@ -34,7 +34,8 @@ namespace NewGMHack.Stub.Services
                 fixed (byte* ptr = data)
                 {
                     nint buffer = (nint)ptr;
-                    send(socket, buffer, data.Length, flags);
+                    _hookManager.SendPacket(socket, data, flags);
+                    //send(socket, buffer, data.Length, flags);
                     //this.OriginalSend(socket, buffer, data.Length, flags);
                 }
             }
@@ -104,7 +105,7 @@ namespace NewGMHack.Stub.Services
                     // _logger.ZLogInformation($"bomb bomb {attackPacket.Length} |the hex: {hex}");
                     // await Task.Run(() =>
                     // {
-                        for (int j = 0; j < 5; j++)
+                        for (int j = 0; j < 3; j++)
                         {
                             SendPacket(distinctTargets.Item1, attackPacket);
                             //_hookManager.SendPacket(distinctTargets.Item1, buf);

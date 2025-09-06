@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
@@ -53,13 +54,24 @@ public static class SpanExtensions
     /// </summary>
     public static Span<T> CastTo<T>(this Span<byte> span) where T : unmanaged =>
         MemoryMarshal.Cast<byte, T>(span);
-
+public static Span<T> ToSpan<T>(this ReadOnlySpan<T> readOnlySpan)
+{
+    T[] result=GC.AllocateUninitializedArray<T>(readOnlySpan.Length);
+    ref var space=ref MemoryMarshal.GetReference(readOnlySpan);
+    for(var c=0;c<readOnlySpan.Length;c++)
+    result[c]=Unsafe.Add(ref space, c);
+    return result;          
+}
+    public static Span<T> CastTo<T>(this ReadOnlySpan<byte> span) where T : unmanaged =>
+        MemoryMarshal.Cast<byte, T>(span.ToSpan());
     /// <summary>
     /// Reads the first struct of type T from a Span<byte>.
     /// </summary>
     public static T ReadStruct<T>(this Span<byte> span) where T : unmanaged =>
         span.CastTo<T>()[0];
 
+    public static T ReadStruct<T>(this ReadOnlySpan<byte> span) where T : unmanaged =>
+        span.CastTo<T>()[0];
     /// <summary>
     /// Slices a Span<byte> after a struct of type T.
     /// </summary>
