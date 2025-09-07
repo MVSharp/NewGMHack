@@ -29,12 +29,16 @@ public sealed class WinsockHookManager(
     private INativeHook?      _sendToHook;
     private INativeHook?      _recvFromHook;
     private List<INativeHook> Hooks = new(4);
+
     #region Dont Remove prevent GC
+
     private SendDelegate?     _sendHookDelegate;
     private RecvDelegate?     _recvHookDelegate;
     private SendToDelegate?   _sendToHookDelegate;
     private RecvFromDelegate? _recvFromHookDelegate;
+
     #endregion
+
     public void HookAll()
     {
         logger.ZLogInformation($"start hook");
@@ -43,7 +47,7 @@ public sealed class WinsockHookManager(
         _sendHookDelegate     = new(SendHook);
         _recvFromHookDelegate = new(RecvFromHook);
         _sendToHookDelegate   = new(SendToHook);
-        _recvHookDelegate = new(RecvHook);
+        _recvHookDelegate     = new(RecvHook);
         //prevent GC
         HookFunction(ws2_32, "send",     _sendHookDelegate,     out _sendHook,     out _originalSend);
         HookFunction(ws2_32, "recv",     _recvHookDelegate,     out _recvHook,     out _originalRecv);
@@ -94,12 +98,9 @@ public sealed class WinsockHookManager(
     {
         try
         {
-
-
             if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
                 self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
             {
-
                 Span<byte> data = new Span<byte>((void*)buffer, length);
                 if (data.Length <= 6) return _originalSend!(socket, buffer, length, flags);
                 var result = splitter.Split(data).AsValueEnumerable().FirstOrDefault();
@@ -183,7 +184,6 @@ public sealed class WinsockHookManager(
         }
         catch
         {
-
         }
         //Span<byte> data = new Span<byte>((void*)buffer, length);
         // Modify data if needed
@@ -200,7 +200,7 @@ public sealed class WinsockHookManager(
         // }
         // //logger.ZLogInformation($"send hook PersonInfo: span length {data.Length} | hook len {length}");
         // if 02F5 , F502 (1522) then block if misison
-      
+
 
         return _originalSend!(socket, buffer, length, flags);
     }
@@ -209,9 +209,8 @@ public sealed class WinsockHookManager(
     {
         try
         {
-
             var receivedLength = _originalRecv!(socket, buffer, length, flags);
-    //return receivedLength;
+            //return receivedLength;
             // if (receivedLength == -1)
             // {
             //     logger.ZLogInformation($"recv returned invalid length: {receivedLength}");
@@ -225,11 +224,11 @@ public sealed class WinsockHookManager(
             }
 
             return receivedLength;
-            }
+        }
         catch
         {
-
         }
+
         return _originalRecv!(socket, buffer, length, flags);
     }
 
@@ -241,15 +240,89 @@ public sealed class WinsockHookManager(
         // Modify data if needed
         try
         {
+            if (length > 6)
+            {
+                Span<byte> data = new Span<byte>((void*)buffer, length);
+                if ((data[4] == 0x6A || data[5]==0x6D) && data[5] == 0x27)
+                {
+                    //logger.ZLogInformation($"mock move 1");
+                    // ReadOnlySpan<byte> mockForTest =
+                    // [
+                    //     0x15, 0x00, 0xF0, 0x03, 0x6A, 0x27, 0x01, 0x00,
+                    //     0xCC, 0x20, 0x00, 0x00, 0x01, 0x01, 0x01, 0x2E,
+                    //     0x44, 0x48, 0x36, 0xBB, 0x51, 0xAB, 0x82, 0x22,
+                    //     0x78
+                    // ];
+                    //
+                    self.PersonInfo.X = BitConverter.ToInt16([data[20], data[19]], 0);
+
+                    self.PersonInfo.Y = BitConverter.ToInt16([data[22], data[21]], 0);
+
+                    self.PersonInfo.Z = BitConverter.ToInt16([data[24], data[23]], 0);
+                    if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsIllusion))
+                    {
+
+                        data[19]          = 0xFF;
+                        data[20]          = 0xFF;
+
+                        //possible is height 21,22
+                        data[21] = 0xFF;
+                        data[22] = 0xFF;
+
+                        data[23] = 0xFF;
+                        data[24] = 0xFF;
+                        fixed (byte* ptr = data)
+                        {
+                            IntPtr ptrBuffer = (IntPtr)ptr;
+                            buffer = ptrBuffer;
+                            return _originalSendTo!(socket, buffer, data.Length, flags, to, tolen);
+                        }
+                    }
+                }
+                else if (data[4] == 0x55 && data[5] == 0x27)
+                {
+                    for (int i = 16; i <= 23; i++)
+                    {
+                        data[i] = 0xFF;
+                    }
+
+                    fixed (byte* ptr = data)
+                    {
+                        IntPtr ptrBuffer = (IntPtr)ptr;
+                        buffer = ptrBuffer;
+                        return _originalSendTo!(socket, buffer, data.Length, flags, to, tolen);
+                    }
+                }
+//                 else if (data[4] == 0x6D && data[5] == 0x27)
+//                 {
+//
+// logger.ZLogInformation($"mock runnning 1");
+// byte[] mockForTest2 = new byte[]
+// {
+//     0x22, 0x00, 0xF0, 0x03, 0x6D, 0x27, 0x03, 0x00,
+//     0x15, 0x6A, 0x27, 0x01, 0x00, 0x7A, 0x41, 0x00,
+//     0x00, 0x01, 0x81, 0x01, 0x64, 0x44, 0x65, 0x34,
+//     0x20, 0x9F, 0xEC, 0x80, 0x03, 0xAD, 0x03, 0x12,
+//     0x27, 0x00, 0x03, 0x12, 0x27, 0x01
+// };
+//
+// fixed (byte* ptr = mockForTest2)
+// {
+//     IntPtr ptrBuffer = (IntPtr)ptr;
+//     buffer = ptrBuffer;
+//     return _originalSendTo!(socket, buffer, mockForTest2.Length, flags, to, tolen);
+// }
+//                 }
+            }
 
             return _originalSendTo!(socket, buffer, length, flags, to, tolen);
         }
-        catch
+        catch (Exception ex)
         {
-
+            logger.ZLogInformation($"sendto ex:{ex.Message}|{ex.StackTrace}");
         }
 
-            return _originalSendTo!(socket, buffer, length, flags, to, tolen);
+        return _originalSendTo!(socket, buffer, length, flags, to, tolen);
     }
 
     private unsafe int RecvFromHook(IntPtr socket, IntPtr buffer, int length, int flags, IntPtr from, ref int fromlen)

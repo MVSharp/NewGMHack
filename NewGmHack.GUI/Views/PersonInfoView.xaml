@@ -35,6 +35,20 @@
             <TextBlock Text="Weapon 3:" FontWeight="Bold"/>
             <TextBlock Text="{Binding PersonInfo.Weapon3, IsAsync=True}" Margin="0,0,0,10"/>
         </StackPanel>
+
+        <StackPanel Margin="10">
+            <TextBlock Text="X" FontWeight="Bold"/>
+            <TextBlock Text="{Binding PersonInfo.X, IsAsync=True}" Margin="0,0,0,10"/>
+        </StackPanel>
+        <StackPanel Margin="10">
+            <TextBlock Text="Y" FontWeight="Bold"/>
+            <TextBlock Text="{Binding PersonInfo.Y, IsAsync=True}" Margin="0,0,0,10"/>
+        </StackPanel>
+
+        <StackPanel Margin="10">
+            <TextBlock Text="Z 3:" FontWeight="Bold"/>
+            <TextBlock Text="{Binding PersonInfo.Z, IsAsync=True}" Margin="0,0,0,10"/>
+        </StackPanel>
     </WrapPanel>
 </Grid>
 </UserControl>

@@ -26,6 +26,7 @@ public class ClientConfig
         new HackFeatures() { Name = FeatureName.IsRandomLocation, IsEnabled = false },
         new HackFeatures() { Name = FeatureName.IsPlayerBomb, IsEnabled     = false },
         new HackFeatures() { Name = FeatureName.IsRebound, IsEnabled     = true },
+        new HackFeatures() { Name = FeatureName.IsIllusion, IsEnabled     = true },
     };
 }
 

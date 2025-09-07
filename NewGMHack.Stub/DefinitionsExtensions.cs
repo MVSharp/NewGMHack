@@ -78,6 +78,8 @@ public static Span<T> ToSpan<T>(this ReadOnlySpan<T> readOnlySpan)
     public static Span<byte> SliceAfter<T>(this Span<byte> span) where T : unmanaged =>
         span.Slice(Marshal.SizeOf<T>());
 
+    public static ReadOnlySpan<byte> SliceAfter<T>(this ReadOnlySpan<byte> span) where T : unmanaged =>
+        span.Slice(Marshal.SizeOf<T>());
     /// <summary>
     /// Converts a blittable struct to a byte array.
     /// </summary>

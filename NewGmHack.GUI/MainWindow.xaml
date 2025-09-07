@@ -37,12 +37,12 @@
                 <ItemsControl ItemsSource="{Binding Features}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal" />
+                            <WrapPanel Orientation="Horizontal" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <CheckBox Content="{Binding Name}" IsChecked="{Binding IsEnabled}" Margin="0,0,10,0" />
+                            <CheckBox Content="{Binding Name}" IsChecked="{Binding IsEnabled}" Margin="0,0,10,10" />
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>

@@ -8,5 +8,6 @@ public enum FeatureName
     IsPlayerBomb,
     IsRandomLocation,
     IsAutoReady,
-    IsRebound
+    IsRebound,
+    IsIllusion
 }

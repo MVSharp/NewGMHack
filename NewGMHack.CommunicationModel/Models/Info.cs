@@ -15,4 +15,13 @@ public class Info
     public uint Weapon2  { get; set; }
     [Key(4)]
     public uint Weapon3  { get; set; }
+
+    [Key(5)]
+    public short X { get;      set; }
+
+    [Key(6)]
+    public short Y { get;      set; }
+
+    [Key(7)]
+    public short Z { get;      set; }
 }

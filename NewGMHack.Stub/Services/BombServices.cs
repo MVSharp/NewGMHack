@@ -45,6 +45,7 @@ namespace NewGMHack.Stub.Services
             }
         }
 
+        private IntPtr cachedSocket = 0;
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             while (_selfInformation.PersonInfo.PersonId == 0)
@@ -56,16 +57,18 @@ namespace NewGMHack.Stub.Services
             {
                 await Task.Delay(100, stoppingToken);
             }
-            
+
             await foreach (var distinctTargets in bombChannel.Reader.ReadAllAsync(stoppingToken)) {
                 foreach (var chunkedReborn in distinctTargets.Item2.AsValueEnumerable().OrderBy(c => c.Location)
                                                              .Chunk(12).ToArray())
                 {
+                    cachedSocket = distinctTargets.Item1;
                     //   InitTargetData();
                     try
                     {
-
-                        await Attack(chunkedReborn, distinctTargets);
+                        AddHistories(chunkedReborn);
+                        await Attack(chunkedReborn, distinctTargets.Item1);
+                        await HandleHistories();
                     }
                     catch
                     {
@@ -75,7 +78,50 @@ namespace NewGMHack.Stub.Services
             }
         }
 
-        private async Task Attack(Reborn[] chunkedReborn, (IntPtr, List<Reborn>) distinctTargets)
+        private void AddHistories(IEnumerable<Reborn> reborns)
+        {
+            foreach (var r in reborns)
+            {
+                
+                var isInserted =_selfInformation.BombHistory.Emplace(r.TargetId ,1);
+                if (!isInserted)
+                {
+                    if (_selfInformation.BombHistory.Get(r.TargetId, out var count))
+                    {
+                        _selfInformation.BombHistory.Update(r.TargetId, ++count);
+                    }
+                }
+            }
+        }
+
+        private async Task HandleHistories()
+        {
+            foreach (var keys in _selfInformation.BombHistory.Keys.Chunk(12))
+            {
+                List<uint> reborns = new(12);
+                foreach (var key in keys)
+                {
+                    var isGetSucessfully = _selfInformation.BombHistory.Get(key, out var count);
+                    if (isGetSucessfully)
+                    {
+                        if (count >= 10)
+                        {
+                            _selfInformation.BombHistory.Remove(key);
+                            continue;
+                        }
+                        _selfInformation.BombHistory.Update(key, ++count);
+                        reborns.Add(key);
+                    }
+                }
+                _logger.ZLogInformation($"bomb history bomb : {string.Join("|",reborns)}");
+                if (reborns.Count > 0)
+                {
+
+                    await Attack(reborns.AsValueEnumerable().Select(c => new Reborn(_selfInformation.PersonInfo.PersonId, c, 0)).ToArray(),cachedSocket);
+                }
+            }
+        }
+        private async Task Attack(Reborn[] chunkedReborn,IntPtr socket)
         {
             var targets = ValueEnumerable.Repeat(1, 12)
                                          .Select(_ => new TargetData() { Damage = ushort.MaxValue - 1 })
@@ -121,7 +167,7 @@ namespace NewGMHack.Stub.Services
             {
                 for (int j = 0; j < 3; j++)
             {
-                SendPacket(distinctTargets.Item1, attackPacket);
+                SendPacket(socket, attackPacket);
                 //_hookManager.SendPacket(distinctTargets.Item1, buf);
             }
             });

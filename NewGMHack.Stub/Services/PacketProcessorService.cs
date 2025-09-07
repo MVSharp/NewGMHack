@@ -156,12 +156,38 @@ public class PacketProcessorService : BackgroundService
 
                 ReadHitResponse1525(methodPacket.MethodBody.AsMemory(), reborns);
                 break;
+            case 1340:
+                ReadDeads(methodPacket.MethodBody.AsMemory());
+                break;
+            case 2042:
+//1E 00 F0 03 FA 07 46 EF 00 00 (personId[the guy changeit]) 4F 14 00 00 00 00 00 00 04 00 45 C7 00 00 30 75 45 24 14 00
+                break;
             case 2080:
                 // No-op
                 break;
             default:
                 break;
         }
+    }
+
+    private void ReadDeads(ReadOnlyMemory<byte> buffer)
+    {
+         var deadStruct = buffer.Span.ReadStruct<DeadStruct>();
+         var deads      = buffer.Span.SliceAfter<DeadStruct>().CastTo<Deads>();
+
+             _logger.ZLogInformation($"sstruct : {deadStruct.PersonId}|{deadStruct.KillerId}|{deadStruct.Count}");
+         if (deadStruct.Count > 0)
+         {
+             _logger.ZLogInformation($"the deads:{string.Join("|" , deads.AsValueEnumerable().Select(c=>c.Id).ToArray())}");
+             foreach (var dead in deads)
+             {
+                 if (_selfInformation.BombHistory.Get(dead.Id,out var count))
+                 {
+                     _selfInformation.BombHistory.Remove(dead.Id);
+                    _logger.ZLogInformation($"Removed:{dead.Id} since it is dead");
+                 }
+             }
+         }
     }
 
     private void ReadHitResponse1338(ReadOnlyMemory<byte> bytes, ConcurrentBag<Reborn> reborns )
@@ -255,7 +281,24 @@ public class PacketProcessorService : BackgroundService
         ReadOnlySpan<byte> start         = [0xE8, 0x03, 0x00, 0x00, 0xE9, 0x03, 0x00, 0x00];
         ReadOnlySpan<byte> end           = [0xB5, 0x1E, 0x04, 0x00, 0x33, 0xC1, 0x1D, 0x00];
         var                roommateBytes = data.Span.SliceBetweenMarkers(start, end);
-        List<Roommate>     roomates      = new(12);
+        if (data.Span.IndexOf(start) >= 0)
+        {
+            _logger.ZLogInformation($"room start index found");
+        }
+        else
+        {
+            return [];
+        }
+
+        if (data.Span.IndexOf(end) >= 0)
+        {
+            _logger.ZLogInformation($"room end index found");
+        }
+        else
+        {
+            return [];
+        }
+        List<Roommate> roomates = new(12);
         //normally , the first mother fucker is the room leader once join room (of cuz reassign when room leader fucked off)
         foreach (var roommateByte in roommateBytes)
         {
