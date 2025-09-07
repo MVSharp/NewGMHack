@@ -10,6 +10,7 @@ using NewGmHack.GUI.Abstracts;
 using NewGmHack.GUI.Views;
 using ObservableCollections;
 using ZLinq;
+using System.Text;
 
 // using MessagePipe;
 // using NewGMHack.CommunicationModel.IPC;
@@ -49,10 +50,12 @@ namespace NewGmHack.GUI.ViewModels
         [RelayCommand]
         private async Task Inject()
         {
-            var target = Process.GetProcessesByName("GOnline").FirstOrDefault();
+
+            string processName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ=="));
+            var target = Process.GetProcessesByName(processName).FirstOrDefault();
             while (target == null)
             {
-                target = Process.GetProcessesByName("GOnline").FirstOrDefault();
+                target = Process.GetProcessesByName(processName).FirstOrDefault();
                 Console.WriteLine("Waiting inject");
                 await Task.Delay(2000);
             }

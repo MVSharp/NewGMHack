@@ -128,9 +128,11 @@ public class PacketProcessorService : BackgroundService
 
                 break;
             case 1550: // 1691 or 2337 or 1550:
+                _selfInformation.BombHistory.Clear();
                 SendSkipScreen(socket);
                 break;
             case 1858 or 1270:
+                _selfInformation.BombHistory.Clear();
                 var mates = ReadRoommates(methodPacket.MethodBody.AsMemory());
 
                 _logger.LogInformation($"local Roomate:{string.Join("|", mates)}");
@@ -143,9 +145,11 @@ public class PacketProcessorService : BackgroundService
                 _logger.LogInformation($" global Roomate:{string.Join("|", _selfInformation.Roommates)}");
                 break;
             case 1847: // someone join 
+                _selfInformation.BombHistory.Clear();
                 RequestRoomInfo(socket);
                 break;
             case 1851: //someone leave
+                _selfInformation.BombHistory.Clear();
                 HandleRoommateLeave(socket, methodPacket.MethodBody.AsMemory());
                 break;
 
@@ -370,6 +374,7 @@ public class PacketProcessorService : BackgroundService
         lock (_lock)
         {
             _selfInformation.PersonInfo.GundamId = machineId;
+            if(!string.IsNullOrEmpty(w.gname)) _selfInformation.PersonInfo.GundamName = w.gname;
             if (w.w1 != 0) _selfInformation.PersonInfo.Weapon1 = (uint)w.w1;
             if (w.w2 != 0) _selfInformation.PersonInfo.Weapon2 = (uint)w.w2;
             if (w.w3 != 0) _selfInformation.PersonInfo.Weapon3 = (uint)w.w3;

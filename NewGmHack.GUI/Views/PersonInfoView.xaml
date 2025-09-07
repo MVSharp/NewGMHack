@@ -22,6 +22,10 @@
         </StackPanel>
 
         <StackPanel Margin="10">
+            <TextBlock Text="Gundam Name:" FontWeight="Bold"/>
+            <TextBlock Text="{Binding PersonInfo.GundamName, IsAsync=True}" Margin="0,0,0,10"/>
+        </StackPanel>
+        <StackPanel Margin="10">
             <TextBlock Text="Weapon 1:" FontWeight="Bold"/>
             <TextBlock Text="{Binding PersonInfo.Weapon1, IsAsync=True}" Margin="0,0,0,10"/>
         </StackPanel>

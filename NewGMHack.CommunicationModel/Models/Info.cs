@@ -24,4 +24,7 @@ public class Info
 
     [Key(7)]
     public short Z { get;      set; }
+
+    [Key(8)]
+    public string GundamName { get; set; } = "";
 }

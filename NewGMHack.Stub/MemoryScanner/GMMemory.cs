@@ -19,13 +19,13 @@ namespace NewGMHack.Stub.MemoryScanner
         private static byte[] IgnoreBytes =
         "sprs/"u8.ToArray();
 
-        private readonly ConcurrentDictionary<uint, (int w1, int w2, int w3)> _cache = new();
+        private readonly ConcurrentDictionary<uint, (string,int w1, int w2, int w3)> _cache = new();
 
         public void CleanCache()
         {
             _cache.Clear();
         }
-        public async Task<(int w1, int w2, int w3)> ScanAsync(uint id)
+        public async Task<(string gname,int w1, int w2, int w3)> ScanAsync(uint id)
         {
             try
             {
@@ -36,13 +36,14 @@ namespace NewGMHack.Stub.MemoryScanner
                 //var    mem    = new Mem();
                 string text   = id.ToString("X");
                 string realID = text.Substring(2, 2) + " " + text.Substring(0, 2);
-                if (!mem.OpenProcess("GOnline.exe"))
-                    return (0, 0, 0);
+                string processName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZS5leGU="));
+                if (!mem.OpenProcess(processName))
+                    return ("",0, 0, 0);
                 var addresses = (await mem.AoBScan($"{realID} 00 00", true, true)).ToList();
                 if (addresses.Count == 0)
                 {
                     logger.ZLogInformation($"not found gundam:{id}");
-                    return (0, 0, 0);
+                    return ("",0, 0, 0);
                 }
 
                 logger.ZLogInformation($"Address count : {addresses.Count}");
@@ -73,25 +74,25 @@ namespace NewGMHack.Stub.MemoryScanner
                     if (string.IsNullOrWhiteSpace(name) || name.Contains("sprs") || !IsValid(name))
                         continue;
 
-                    var r =(
+                    var r =(name,
                         BitConverter.ToInt32(buffer, 585),
                         BitConverter.ToInt32(buffer, 589),
                         BitConverter.ToInt32(buffer, 593)
                     );
-                    if (r.Item1 + 1 == r.Item2 || r.Item2 + 1 == r.Item3)
+                    if (r.Item2 + 1 == r.Item3 || r.Item3 + 1 == r.Item4)
                     {
                         _cache.TryAdd(id, r);
                     }
                 }
 
-                return (0, 0, 0);
+                return ("", 0, 0, 0);
             }
             catch
             {
                 // ignored
             }
 
-            return (0, 0, 0);
+            return ("", 0, 0, 0);
         }
 
 
