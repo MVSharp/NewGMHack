@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NewGMHack.CommunicationModel.Models;
 using NewGMHack.CommunicationModel.PacketStructs.Recv;
+using NewGMHack.CommunicationModel.PacketStructs.Send;
 using NewGMHack.Stub.MemoryScanner;
 using NewGMHack.Stub.PacketStructs;
 using NewGMHack.Stub.PacketStructs.Recv;
@@ -120,7 +121,13 @@ public class PacketProcessorService : BackgroundService
             //     //damage recv
             //     break;
             case 1246:
-                await ScanGundam(reader);
+
+                var changed   = reader.ReadChangedMachine();
+                var slot = changed.Slot;
+                _selfInformation.PersonInfo.Slot = slot;
+                await ScanGundam(changed.MachineId);
+                ChargeGundam(socket, slot);
+
                 break;
 
             case 1244:
@@ -358,18 +365,23 @@ public class PacketProcessorService : BackgroundService
         {
         }
     }
-
-    private async Task ScanGundam(ByteReader reader)
+    private  void ChargeGundam(IntPtr socket  ,UInt32 slot)
     {
-        var changed   = reader.ReadChangedMachine();
-        var machineId = changed.MachineId;
-
+        ChargeRequest r = new();
+        r.Version = 13;
+        r.Split = 1008;
+        r.Method = 1668;
+        r.Slot = slot;
+        _winsockHookManager.SendPacket(socket,r.ToByteArray().AsSpan());
+    }
+    private async Task ScanGundam(UInt32 machineId)
+    {
         _logger
-           .ZLogInformation($"Machine id begin scan: {changed.MachineId} ");
+           .ZLogInformation($"Machine id begin scan: {machineId} ");
         var w = await gm.ScanAsync(machineId).ConfigureAwait(false);
 
         _logger
-           .ZLogInformation($"Machine id  scan completed: {changed.MachineId} ");
+           .ZLogInformation($"Machine id  scan completed: {machineId} ");
         if (w is { w1: 0, w2: 0, w3: 0 }) return;
         lock (_lock)
         {

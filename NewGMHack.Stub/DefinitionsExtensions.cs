@@ -164,7 +164,7 @@ public static Span<T> ToSpan<T>(this ReadOnlySpan<T> readOnlySpan)
 
         public static GetChangedMachine ReadChangedMachine(ref this ByteReader reader)
         {
-            return new GetChangedMachine(reader.Read<uint>(), reader.Read<ushort>(), reader.Read<uint>());
+            return new GetChangedMachine(reader.Read<uint>(), reader.Read<ushort>(), reader.Read<uint>(),reader.Read<uint>(),reader.Read<uint>());
         }
 
         public static MapItemExisted ReadMapItemExisted(ref this ByteReader reader)

@@ -27,4 +27,7 @@ public class Info
 
     [Key(8)]
     public string GundamName { get; set; } = "";
+
+    [Key(9)]
+    public uint Slot { get; set; } = 0;
 }
