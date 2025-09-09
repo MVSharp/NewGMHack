@@ -108,6 +108,13 @@ public static Span<T> ToSpan<T>(this ReadOnlySpan<T> readOnlySpan)
         return combined;
     }
 
+    public static ReadOnlySpan<byte> CombineWith(this ReadOnlySpan<byte> first, ReadOnlySpan<byte> second)
+    {
+        Span<byte> combined = new byte[first.Length + second.Length];
+        first.CopyTo(combined);
+        second.CopyTo(combined.Slice(first.Length));
+        return combined;
+    }
     /// <summary>
     /// Converts a Span<byte> to a hex string.
     /// </summary>

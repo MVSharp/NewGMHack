@@ -367,12 +367,12 @@ public class PacketProcessorService : BackgroundService
     }
     private  void ChargeGundam(IntPtr socket  ,UInt32 slot)
     {
-        ChargeRequest r = new();
-        r.Version = 13;
-        r.Split = 1008;
-        r.Method = 1668;
-        r.Slot = slot;
-        _winsockHookManager.SendPacket(socket,r.ToByteArray().AsSpan());
+        //ChargeRequest r = new();
+        //r.Version = 13;
+        //r.Split = 1008;
+        //r.Method = 1668;
+        //r.Slot = slot;
+        //_winsockHookManager.SendPacket(socket,r.ToByteArray().AsSpan());
     }
     private async Task ScanGundam(UInt32 machineId)
     {

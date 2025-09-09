@@ -29,7 +29,7 @@ namespace NewGmHack.GUI.Services
                     // ignored
                 }
 
-                await Task.Delay(2000, stoppingToken);
+                await Task.Delay(500, stoppingToken).ConfigureAwait(false);
             }
         }
     }

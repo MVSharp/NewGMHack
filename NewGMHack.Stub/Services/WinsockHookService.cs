@@ -12,12 +12,13 @@ public class WinsockHookService : IHostedService
     private readonly WinsockHookManager          _hookManager;
     private readonly ILogger<WinsockHookService> _logger;
     private readonly RpcBuffer                       _slave;
-
-    public WinsockHookService(WinsockHookManager hookManager, ILogger<WinsockHookService> logger, RpcBuffer slave)
+    private readonly D3D9HookManager _d3d9HookManager;
+    public WinsockHookService(WinsockHookManager hookManager, ILogger<WinsockHookService> logger, RpcBuffer slave , D3D9HookManager d3D9HookManager)
     {
         _hookManager = hookManager;
         _logger      = logger;
         _slave       = slave;
+        _d3d9HookManager = d3D9HookManager;
     }
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -25,6 +26,7 @@ public class WinsockHookService : IHostedService
         {
             _logger.ZLogInformation($"Starting hook service...");
             _hookManager.HookAll();
+            _d3d9HookManager.HookAll();
         }
         catch(Exception ex) {
             _logger.ZLogInformation($"{ex.Message}|{ex.StackTrace}");
@@ -44,6 +46,7 @@ public class WinsockHookService : IHostedService
     public Task StopAsync(CancellationToken cancellationToken)
     {
         _hookManager.UnHookAll();
+        _d3d9HookManager.UnHookAll();
         _logger.ZLogInformation($"Stopping hook service...");
         return Task.CompletedTask;
     }

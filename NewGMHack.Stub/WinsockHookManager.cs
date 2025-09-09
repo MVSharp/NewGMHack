@@ -17,7 +17,9 @@ public sealed class WinsockHookManager(
     ILogger<WinsockHookManager> logger,
     Channel<PacketContext>      channel,
     SelfInformation             self,
-    IBuffSplitter               splitter)
+    IBuffSplitter               splitter,
+    PacketDataModifier          modifier
+    )
 {
     private SendDelegate?     _originalSend;
     private RecvDelegate?     _originalRecv;
@@ -93,115 +95,31 @@ public sealed class WinsockHookManager(
         logger.ZLogInformation($"Hooked {functionName} successfully. Hook ptr: {hook.HookFunction}, Original ptr: {hook.OriginalFunction}");
     }
 
-    // Hooked implementations
     private unsafe int SendHook(IntPtr socket, IntPtr buffer, int length, int flags)
     {
         try
         {
-            if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
-                self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+            Span<byte> data = new((void*)buffer, length);
+            var modified = modifier.TryModifySendData(data);
+            if (modified != null)
             {
-                Span<byte> data = new Span<byte>((void*)buffer, length);
-                if (data.Length <= 6) return _originalSend!(socket, buffer, length, flags);
-                var result = splitter.Split(data).AsValueEnumerable().FirstOrDefault();
-                if (result == null) return _originalSend!(socket, buffer, length, flags);
-                //TODO refractor later
-                var method = result.Method;
-                switch (method)
+                try
                 {
-                    case 1335: // normal damage 
-                        var raw     = data[0..6].CombineWith(result.MethodBody.AsSpan());
-                        var attack  = raw.ReadStruct<Attack1335>();
-                        var targets = raw.SliceAfter<Attack1335>().CastTo<TargetData>();
-                        if (attack.PlayerId == self.PersonInfo.PersonId)
-                        {
-                            //logger.ZLogInformation($"Attacked By me , now motify {result.Method}");
-                            for (var index = 0; index < targets.Length; index++)
-                            {
-                                targets[index].Damage = ushort.MaxValue;
-                            }
-                        }
-                        else
-                        {
-                            //logger
-                            //   .ZLogInformation($"1335 not attacked by me {attack.PlayerId} | {attack.PlayerId2}");
-                        }
-
-                        var attackBytes  = attack.ToByteArray().AsSpan();
-                        var targetsBytes = targets.AsByteSpan();
-                        var combined     = attackBytes.CombineWith(targetsBytes);
-                        logger.ZLogInformation($"{BitConverter.ToString(combined.ToArray())}");
-                        fixed (byte* ptr = combined)
-                        {
-                            IntPtr ptrBuffer = (IntPtr)ptr;
-                            buffer = ptrBuffer;
-                            length = attackBytes.Length + targetsBytes.Length;
-                            return _originalSend!(socket, buffer, length, flags);
-                        }
-                    case 1486: // item , bucket damage
-
-                        var raw1     = data[0..6].CombineWith(result.MethodBody.AsSpan());
-                        var attack1  = raw1.ReadStruct<Attack1486>();
-                        var targets1 = raw1.SliceAfter<Attack1486>().CastTo<TargetData>();
-                        if (attack1.PlayerId == self.PersonInfo.PersonId)
-                        {
-                            //logger.ZLogInformation($"Attacked By me , now motify {result.Method}");
-                            for (var index = 0; index < targets1.Length; index++)
-                            {
-                                targets1[index].Damage = ushort.MaxValue;
-                            }
-                        }
-                        else
-                        {
-                            // logger
-                            //    .ZLogInformation($"1486 not attacked by me {attack1.PlayerId} | {attack1.PlayerId2}");
-                        }
-
-                        var attackBytes1  = attack1.ToByteArray().AsSpan();
-                        var targetsBytes1 = targets1.AsByteSpan();
-                        var combined1     = attackBytes1.CombineWith(targetsBytes1);
-
-                        logger.ZLogInformation($"{BitConverter.ToString(combined1.ToArray())}");
-                        fixed (byte* ptr = combined1)
-                        {
-                            IntPtr ptrBuffer = (IntPtr)ptr;
-                            buffer = ptrBuffer;
-                            length = attackBytes1.Length + targetsBytes1.Length;
-                            return _originalSend!(socket, buffer, length, flags);
-                        }
-                    case 1538:
-                        var buf = result.MethodBody;
-                        buf[46] = 0xFF;
-                        buf[47] = 0xFF;
-                        fixed (byte* ptr = data[0..6].CombineWith(buf))
-                        {
-                            IntPtr ptrBuffer = (IntPtr)ptr;
-                            buffer = ptrBuffer;
-                            return _originalSend!(socket, buffer, length, flags);
-                        }
+                    fixed (byte* ptr = modified)
+                    {
+                        return _originalSend!(socket, (IntPtr)ptr, modified.Length, flags);
+                    }
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(modified, clearArray: true);
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
+            logger.ZLogError($"SendHook error: {ex.Message}");
         }
-        //Span<byte> data = new Span<byte>((void*)buffer, length);
-        // Modify data if needed
-        // if (length > 4)
-        // {
-
-        // Span<byte> data = new Span<byte>((void*)buffer, length);
-        // if ((data[0] == 0xA3 && data[1] == 0x00) || (data[0]==0xA6 && data[1] == 0x00))
-        // {
-        //
-        // var        hex  = BitConverter.ToString(data.ToArray()).Replace("-", " ");
-        //     //logger.ZLogInformation($"Send : {hex}");
-        // }
-        // }
-        // //logger.ZLogInformation($"send hook PersonInfo: span length {data.Length} | hook len {length}");
-        // if 02F5 , F502 (1522) then block if misison
-
-
         return _originalSend!(socket, buffer, length, flags);
     }
 
@@ -234,94 +152,29 @@ public sealed class WinsockHookManager(
 
     private unsafe int SendToHook(IntPtr socket, IntPtr buffer, int length, int flags, IntPtr to, int tolen)
     {
-        //Span<byte> data = new Span<byte>((void*)buffer, length);
-
-        //logger.ZLogInformation($"send to hook PersonInfo: span length {data.Length} | hook len {length}");
-        // Modify data if needed
         try
         {
-            if (length > 6)
+            Span<byte> data = new((void*)buffer, length);
+            var modified = modifier.TryModifySendToData(data);
+            if (modified != null)
             {
-                Span<byte> data = new Span<byte>((void*)buffer, length);
-                if ((data[4] == 0x6A || data[5]==0x6D) && data[5] == 0x27)
+                try
                 {
-                    //logger.ZLogInformation($"mock move 1");
-                    // ReadOnlySpan<byte> mockForTest =
-                    // [
-                    //     0x15, 0x00, 0xF0, 0x03, 0x6A, 0x27, 0x01, 0x00,
-                    //     0xCC, 0x20, 0x00, 0x00, 0x01, 0x01, 0x01, 0x2E,
-                    //     0x44, 0x48, 0x36, 0xBB, 0x51, 0xAB, 0x82, 0x22,
-                    //     0x78
-                    // ];
-                    //
-                    self.PersonInfo.X = BitConverter.ToInt16([data[20], data[19]], 0);
-
-                    self.PersonInfo.Y = BitConverter.ToInt16([data[22], data[21]], 0);
-
-                    self.PersonInfo.Z = BitConverter.ToInt16([data[24], data[23]], 0);
-                    if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsIllusion))
+                    fixed (byte* ptr = modified)
                     {
-
-                        data[19]          = 0xFF;
-                        data[20]          = 0xFF;
-
-                        //possible is height 21,22
-                        data[21] = 0xFF;
-                        data[22] = 0xFF;
-
-                        data[23] = 0xFF;
-                        data[24] = 0xFF;
-                        fixed (byte* ptr = data)
-                        {
-                            IntPtr ptrBuffer = (IntPtr)ptr;
-                            buffer = ptrBuffer;
-                            return _originalSendTo!(socket, buffer, data.Length, flags, to, tolen);
-                        }
+                        return _originalSendTo!(socket, (IntPtr)ptr, modified.Length, flags, to, tolen);
                     }
                 }
-                else if (data[4] == 0x55 && data[5] == 0x27)
+                finally
                 {
-                    for (int i = 16; i <= 23; i++)
-                    {
-                        data[i] = 0xFF;
-                    }
-
-                    fixed (byte* ptr = data)
-                    {
-                        IntPtr ptrBuffer = (IntPtr)ptr;
-                        buffer = ptrBuffer;
-                        return _originalSendTo!(socket, buffer, data.Length, flags, to, tolen);
-                    }
+                    ArrayPool<byte>.Shared.Return(modified, clearArray: true);
                 }
-//                 else if (data[4] == 0x6D && data[5] == 0x27)
-//                 {
-//
-// logger.ZLogInformation($"mock runnning 1");
-// byte[] mockForTest2 = new byte[]
-// {
-//     0x22, 0x00, 0xF0, 0x03, 0x6D, 0x27, 0x03, 0x00,
-//     0x15, 0x6A, 0x27, 0x01, 0x00, 0x7A, 0x41, 0x00,
-//     0x00, 0x01, 0x81, 0x01, 0x64, 0x44, 0x65, 0x34,
-//     0x20, 0x9F, 0xEC, 0x80, 0x03, 0xAD, 0x03, 0x12,
-//     0x27, 0x00, 0x03, 0x12, 0x27, 0x01
-// };
-//
-// fixed (byte* ptr = mockForTest2)
-// {
-//     IntPtr ptrBuffer = (IntPtr)ptr;
-//     buffer = ptrBuffer;
-//     return _originalSendTo!(socket, buffer, mockForTest2.Length, flags, to, tolen);
-// }
-//                 }
             }
-
-            return _originalSendTo!(socket, buffer, length, flags, to, tolen);
         }
         catch (Exception ex)
         {
-            logger.ZLogInformation($"sendto ex:{ex.Message}|{ex.StackTrace}");
+            logger.ZLogError($"SendToHook error: {ex.Message}");
         }
-
         return _originalSendTo!(socket, buffer, length, flags, to, tolen);
     }
 

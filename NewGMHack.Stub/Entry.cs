@@ -99,6 +99,7 @@ namespace NewGMHack.Stub
                                                                   { SingleReader = true, SingleWriter = false }));
                                        services.AddSingleton<IHostedService, BombServices>();
                                        services.AddSingleton<RemoteHandler>();
+                                       services.AddSingleton<PacketDataModifier>();
                                        services.AddSingleton(sp =>
                                        {
                                            var handler = sp.GetRequiredService<RemoteHandler>();
@@ -106,6 +107,7 @@ namespace NewGMHack.Stub
                                                                 (msgId, payload) =>
                                                                     handler.HandleAsync(msgId, payload.AsMemory()));
                                        });
+                                       services.AddSingleton<D3D9HookManager>();
                                        //services.AddHostedService<PacketProcessorService>();
                                    })
                                   .Build();
@@ -114,11 +116,6 @@ namespace NewGMHack.Stub
                 try
                 {
                      await hostBuilder.RunAsync();
-                    // AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
-                    // {
-                    //     var ex = (Exception)e.ExceptionObject;
-                    //     MessageBox(0, $"unknown global:{ex.Message} | {ex.StackTrace}", "Critical Error", 0);
-                    // };
                 }
                 catch (Exception ex)
                 {

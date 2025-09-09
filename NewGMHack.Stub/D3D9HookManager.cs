@@ -1,0 +1,456 @@
+﻿using InjectDotnet.NativeHelper;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading.Tasks;
+using ZLogger;
+//using Vortice.Direct3D9;
+//using Vortice.Mathematics;
+//using Color = Vortice.Mathematics.Color;
+using SharpDX;
+using SharpDX.Direct3D9;
+using Rectangle = SharpDX.Rectangle;
+using Color = SharpDX.Color;
+namespace NewGMHack.Stub
+{
+
+    //public class OverlayManager
+    //{
+    //    private ID3DXFont? _font;
+    //    private bool _initialized;
+
+    //    private readonly Color _titleColor = new Color(255, 0, 0, 255); // Red
+    //    private readonly Rectangle _titleRect = new Rectangle(10, 10, 400, 30);
+
+    //    public void Initialize(IDirect3DDevice9 device)
+    //    {
+    //        if (_initialized || device == null)
+    //            return;
+
+    //        var fontDesc = new D3DXFontDescription
+    //        {
+    //            Height = 20,
+    //            FaceName = "Arial",
+    //            Weight = FontWeight.Bold,
+    //            OutputPrecision = FontPrecision.Default,
+    //            Quality = FontQuality.Default,
+    //            PitchAndFamily = FontPitchAndFamily.Default | FontPitchAndFamily.Roman
+    //        };
+    //        _font = D3DX9.CreateFont(device, fontDesc);
+    //        _initialized = true;
+    //    }
+
+    //    public void Draw(IDirect3DDevice9 device)
+    //    {
+    //        if (!_initialized || _font == null || device == null)
+    //            return;
+
+    //        string timestamp = $"NewGmHack:{DateTime.Now:yyyy:MM:dd HH:mm:ss}";
+    //        _font.DrawText(null, timestamp, _titleRect, DrawTextFormat.NoClip, _titleColor);
+    //    }
+
+    //    public void Reset()
+    //    {
+    //        _font?.Dispose();
+    //        _font = null;
+    //        _initialized = false;
+    //    }
+    //}
+    public class OverlayManager
+    {
+        private Font _font;
+        private bool _initialized;
+
+        private readonly Color _titleColor = new Color(255, 0, 0, 255); // Red
+        private readonly Rectangle _titleRect = new Rectangle(10, 10, 400, 30);
+
+        public void Initialize(Device device)
+        {
+            if (_initialized || device == null)
+                return;
+
+            var fontDesc = new FontDescription
+            {
+                Height = 20,
+                FaceName = "Arial",
+                Weight = FontWeight.Bold,
+                OutputPrecision = FontPrecision.Default,
+                Quality = FontQuality.Default,
+                PitchAndFamily = FontPitchAndFamily.Default | FontPitchAndFamily.Roman
+            };
+
+            _font = new Font(device, fontDesc);
+            _initialized = true;
+        }
+
+        public void Draw(Device device)
+        {
+            if (!_initialized || _font == null || device == null)
+                return;
+
+            string timestamp = $"NewGmHack:{DateTime.Now:yyyy:MM:dd HH:mm:ss}";
+            _font.DrawText(null, timestamp, _titleRect, FontDrawFlags.NoClip, _titleColor);
+        }
+
+        public void Reset()
+        {
+            _font?.Dispose();
+            _font = null;
+            _initialized = false;
+        }
+    }
+    //https://github.com/justinstenning/Direct3DHook/blob/master/Capture/Hook/DXHookD3D9.cs
+    public class D3D9HookManager(ILogger<D3D9HookManager> logger)
+    {
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern IntPtr CreateWindowEx(
+            int dwExStyle, string lpClassName, string lpWindowName,
+            int dwStyle, int x, int y, int nWidth, int nHeight,
+            IntPtr hWndParent, IntPtr hMenu, IntPtr hInstance, IntPtr lpParam);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool DestroyWindow(IntPtr hWnd);
+        private const int D3D9_DEVICE_METHOD_COUNT = 119;
+        private const int D3D9Ex_DEVICE_METHOD_COUNT = 15;
+        private readonly List<IntPtr> id3dDeviceFunctionAddresses = new List<IntPtr>();
+        bool _supportsDirect3D9Ex = false;
+
+        private EndSceneDelegate? _endSceneHookDelegate;
+        private EndSceneDelegate? _originalEndScene;
+        private INativeHook? _endSceneHook;
+
+        private PresentDelegate? _presentHookDelegate;
+        private PresentDelegate? _originalPresent;
+        private INativeHook? _presentHook;
+        private readonly List<INativeHook> _hooks = new();
+        private IntPtr _devicePtr = IntPtr.Zero;
+
+        private delegate int ResetDelegate(IntPtr devicePtr, IntPtr presentationParameters);
+        private ResetDelegate _resetHookDelegate;
+        private JumpHook _resetHook;
+        private ResetDelegate _originalReset;
+        #region Hook Delegates
+
+        private delegate int EndSceneDelegate(IntPtr devicePtr);
+            //DI later , now for test 
+        private readonly OverlayManager _overlayManager = new OverlayManager();
+        private int EndSceneHook(IntPtr devicePtr)
+        {
+            logger.ZLogInformation($"EndScene called");
+            var device = new Device(devicePtr); 
+            try
+            {
+                _overlayManager.Draw(device);
+            }
+            catch (Exception ex)
+            {
+                logger.ZLogError($"OverlayManager.Draw failed: {ex.GetType().Name} - {ex.Message}");
+            }
+            
+            return _originalEndScene?.Invoke(devicePtr) ?? 0;
+        }
+
+        private delegate int PresentDelegate(IntPtr devicePtr, IntPtr srcRect, IntPtr destRect, IntPtr hDestWindowOverride, IntPtr dirtyRegion);
+        private int PresentHook(IntPtr devicePtr, IntPtr srcRect, IntPtr destRect, IntPtr hDestWindowOverride, IntPtr dirtyRegion)
+        {
+            //logger.ZLogInformation($"Present called");
+            if(devicePtr != IntPtr.Zero)
+            {
+                _devicePtr = devicePtr;
+            }
+            var device = new Device(devicePtr); 
+
+            try
+            {
+                _overlayManager.Initialize(device);
+            }
+            catch (Exception ex)
+            {
+                logger.ZLogError($"OverlayManager.Initialize failed: {ex.GetType().Name} - {ex.Message}");
+            }
+            return _originalPresent?.Invoke(devicePtr, srcRect, destRect, hDestWindowOverride, dirtyRegion) ?? 0;
+        }
+
+        #endregion
+
+        private int ResetHook(IntPtr devicePtr, IntPtr presentationParameters)
+        {
+            logger.ZLogInformation($"Reset called");
+
+            try
+            {
+                _overlayManager.Reset(); // Dispose font and other resources
+            }
+            catch (Exception ex)
+            {
+                logger.ZLogError($"OverlayManager.Reset failed: {ex.GetType().Name} - {ex.Message}");
+            }
+
+            int result = _originalReset?.Invoke(devicePtr, presentationParameters) ?? 0;
+
+            try
+            {
+                var device = SharpDX.Direct3D9.Device.FromPointer<SharpDX.Direct3D9.Device>(devicePtr);
+                _overlayManager.Initialize(device); // Recreate font after reset
+            }
+            catch (Exception ex)
+            {
+                logger.ZLogError($"OverlayManager.Initialize after Reset failed: {ex.GetType().Name} - {ex.Message}");
+            }
+
+            return result;
+        }
+        public void HookAll()
+        {
+            logger.ZLogInformation($"Starting D3D9 hook setup");
+
+            GetD3D9Address();
+
+            if (id3dDeviceFunctionAddresses.Count == 0)
+            {
+                logger.ZLogError($"No D3D9 function addresses found");
+                return;
+            }
+
+
+           // Hook EndScene
+            _endSceneHookDelegate = new EndSceneDelegate(EndSceneHook);
+            IntPtr hookPtr = Marshal.GetFunctionPointerForDelegate(_endSceneHookDelegate);
+
+            _endSceneHook = JumpHook.Create(
+                id3dDeviceFunctionAddresses[(int)Direct3DDevice9FunctionOrdinals.EndScene], // vtable address for EndScene
+                hookPtr,
+                installAfterCreate: true,
+                moduleName: "d3d9.dll",
+                functionName: "EndScene"
+            );
+
+            _originalEndScene = Marshal.GetDelegateForFunctionPointer<EndSceneDelegate>(_endSceneHook.OriginalFunction);
+
+            _presentHookDelegate = new PresentDelegate(PresentHook);
+            IntPtr presentHookPtr = Marshal.GetFunctionPointerForDelegate(_presentHookDelegate);
+
+            _presentHook = JumpHook.Create(
+                id3dDeviceFunctionAddresses[(int)Direct3DDevice9FunctionOrdinals.Present], // vtable index for Present
+                presentHookPtr,
+                installAfterCreate: true,
+                moduleName: "d3d9.dll",
+                functionName: "Present"
+            );
+
+            _resetHookDelegate = new ResetDelegate(ResetHook);
+            IntPtr resetHookPtr = Marshal.GetFunctionPointerForDelegate(_resetHookDelegate);
+
+            _resetHook = JumpHook.Create(
+                id3dDeviceFunctionAddresses[(int)Direct3DDevice9FunctionOrdinals.Reset], // index 16
+                resetHookPtr,
+                installAfterCreate: true,
+                moduleName: "d3d9.dll",
+                functionName: "Reset"
+            );
+
+            _originalReset = Marshal.GetDelegateForFunctionPointer<ResetDelegate>(_resetHook.OriginalFunction);
+            _originalPresent = Marshal.GetDelegateForFunctionPointer<PresentDelegate>(_presentHook.OriginalFunction);
+            _hooks.AddRange([_endSceneHook, _presentHook]);
+
+            logger.ZLogInformation($"D3D9 hooks enabled: EndScene and Present");
+
+        }
+
+        public void UnHookAll()
+        {
+            foreach (var hook in _hooks)
+            {
+                hook?.Dispose();
+            }
+            _hooks.Clear();
+        }
+
+        private void GetD3D9Address()
+        {
+            try
+            {
+                logger.ZLogInformation($" Begin Get D3d9 Address");
+                Device device;
+                IntPtr renderPtr = CreateWindowEx(0, "STATIC", "DummyWindow", 0, 0, 0, 1, 1, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+                logger.ZLogInformation($"Render Ptr : {renderPtr}");
+                using (Direct3D d3d = new Direct3D())
+                {
+                    using (device = new Device(d3d, 0, DeviceType.NullReference, IntPtr.Zero, CreateFlags.HardwareVertexProcessing, new PresentParameters() { BackBufferWidth = 1, BackBufferHeight = 1, DeviceWindowHandle = renderPtr }))
+                    {
+                        id3dDeviceFunctionAddresses.AddRange(GetVTblAddresses(device.NativePointer, D3D9_DEVICE_METHOD_COUNT));
+                        logger.ZLogInformation($"Devices Address Count : {id3dDeviceFunctionAddresses.Count}");
+                    }
+                }
+                DestroyWindow(renderPtr);
+            }
+            catch
+            {
+
+            }
+        }
+        private IntPtr[] GetVTblAddresses(IntPtr pointer, int numberOfMethods)
+        {
+            return GetVTblAddresses(pointer, 0, numberOfMethods);
+        }
+        private IntPtr[] GetVTblAddresses(IntPtr pointer, int startIndex, int numberOfMethods)
+        {
+            List<IntPtr> vtblAddresses = new List<IntPtr>();
+
+            IntPtr vTable = Marshal.ReadIntPtr(pointer);
+            for (int i = startIndex; i < startIndex + numberOfMethods; i++)
+                vtblAddresses.Add(Marshal.ReadIntPtr(vTable, i * IntPtr.Size)); // using IntPtr.Size allows us to support both 32 and 64-bit processes
+
+            return vtblAddresses.ToArray();
+        }
+
+    }
+    #region https://github.com/justinstenning/Direct3DHook/blob/master/Capture/Hook/D3D9.cs
+    // https://github.com/justinstenning/Direct3DHook/blob/master/Capture/Hook/D3D9.cs
+    public enum Direct3DDevice9FunctionOrdinals : short
+    {
+        QueryInterface = 0,
+        AddRef = 1,
+        Release = 2,
+        TestCooperativeLevel = 3,
+        GetAvailableTextureMem = 4,
+        EvictManagedResources = 5,
+        GetDirect3D = 6,
+        GetDeviceCaps = 7,
+        GetDisplayMode = 8,
+        GetCreationParameters = 9,
+        SetCursorProperties = 10,
+        SetCursorPosition = 11,
+        ShowCursor = 12,
+        CreateAdditionalSwapChain = 13,
+        GetSwapChain = 14,
+        GetNumberOfSwapChains = 15,
+        Reset = 16,
+        Present = 17,
+        GetBackBuffer = 18,
+        GetRasterStatus = 19,
+        SetDialogBoxMode = 20,
+        SetGammaRamp = 21,
+        GetGammaRamp = 22,
+        CreateTexture = 23,
+        CreateVolumeTexture = 24,
+        CreateCubeTexture = 25,
+        CreateVertexBuffer = 26,
+        CreateIndexBuffer = 27,
+        CreateRenderTarget = 28,
+        CreateDepthStencilSurface = 29,
+        UpdateSurface = 30,
+        UpdateTexture = 31,
+        GetRenderTargetData = 32,
+        GetFrontBufferData = 33,
+        StretchRect = 34,
+        ColorFill = 35,
+        CreateOffscreenPlainSurface = 36,
+        SetRenderTarget = 37,
+        GetRenderTarget = 38,
+        SetDepthStencilSurface = 39,
+        GetDepthStencilSurface = 40,
+        BeginScene = 41,
+        EndScene = 42,
+        Clear = 43,
+        SetTransform = 44,
+        GetTransform = 45,
+        MultiplyTransform = 46,
+        SetViewport = 47,
+        GetViewport = 48,
+        SetMaterial = 49,
+        GetMaterial = 50,
+        SetLight = 51,
+        GetLight = 52,
+        LightEnable = 53,
+        GetLightEnable = 54,
+        SetClipPlane = 55,
+        GetClipPlane = 56,
+        SetRenderState = 57,
+        GetRenderState = 58,
+        CreateStateBlock = 59,
+        BeginStateBlock = 60,
+        EndStateBlock = 61,
+        SetClipStatus = 62,
+        GetClipStatus = 63,
+        GetTexture = 64,
+        SetTexture = 65,
+        GetTextureStageState = 66,
+        SetTextureStageState = 67,
+        GetSamplerState = 68,
+        SetSamplerState = 69,
+        ValidateDevice = 70,
+        SetPaletteEntries = 71,
+        GetPaletteEntries = 72,
+        SetCurrentTexturePalette = 73,
+        GetCurrentTexturePalette = 74,
+        SetScissorRect = 75,
+        GetScissorRect = 76,
+        SetSoftwareVertexProcessing = 77,
+        GetSoftwareVertexProcessing = 78,
+        SetNPatchMode = 79,
+        GetNPatchMode = 80,
+        DrawPrimitive = 81,
+        DrawIndexedPrimitive = 82,
+        DrawPrimitiveUP = 83,
+        DrawIndexedPrimitiveUP = 84,
+        ProcessVertices = 85,
+        CreateVertexDeclaration = 86,
+        SetVertexDeclaration = 87,
+        GetVertexDeclaration = 88,
+        SetFVF = 89,
+        GetFVF = 90,
+        CreateVertexShader = 91,
+        SetVertexShader = 92,
+        GetVertexShader = 93,
+        SetVertexShaderConstantF = 94,
+        GetVertexShaderConstantF = 95,
+        SetVertexShaderConstantI = 96,
+        GetVertexShaderConstantI = 97,
+        SetVertexShaderConstantB = 98,
+        GetVertexShaderConstantB = 99,
+        SetStreamSource = 100,
+        GetStreamSource = 101,
+        SetStreamSourceFreq = 102,
+        GetStreamSourceFreq = 103,
+        SetIndices = 104,
+        GetIndices = 105,
+        CreatePixelShader = 106,
+        SetPixelShader = 107,
+        GetPixelShader = 108,
+        SetPixelShaderConstantF = 109,
+        GetPixelShaderConstantF = 110,
+        SetPixelShaderConstantI = 111,
+        GetPixelShaderConstantI = 112,
+        SetPixelShaderConstantB = 113,
+        GetPixelShaderConstantB = 114,
+        DrawRectPatch = 115,
+        DrawTriPatch = 116,
+        DeletePatch = 117,
+        CreateQuery = 118,
+    }
+
+    public enum Direct3DDevice9ExFunctionOrdinals : short
+    {
+        SetConvolutionMonoKernel = 119,
+        ComposeRects = 120,
+        PresentEx = 121,
+        GetGPUThreadPriority = 122,
+        SetGPUThreadPriority = 123,
+        WaitForVBlank = 124,
+        CheckResourceResidency = 125,
+        SetMaximumFrameLatency = 126,
+        GetMaximumFrameLatency = 127,
+        CheckDeviceState_ = 128,
+        CreateRenderTargetEx = 129,
+        CreateOffscreenPlainSurfaceEx = 130,
+        CreateDepthStencilSurfaceEx = 131,
+        ResetEx = 132,
+        GetDisplayModeEx = 133,
+    }
+    #endregion
+}

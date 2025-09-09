@@ -15,6 +15,10 @@
             <TextBlock Text="Person ID:" FontWeight="Bold" Foreground="DeepSkyBlue"/>
             <TextBlock Text="{Binding PersonInfo.PersonId, IsAsync=True}" Foreground="DeepSkyBlue" Margin="0,0,0,10"/>
         </StackPanel>
+        <StackPanel Margin="10">
+            <TextBlock Text="Gundam ID:" FontWeight="Bold"/>
+            <TextBlock Text="{Binding PersonInfo.Slot, IsAsync=True}" Margin="0,0,0,10"/>
+        </StackPanel>
 
         <StackPanel Margin="10">
             <TextBlock Text="Gundam ID:" FontWeight="Bold"/>
