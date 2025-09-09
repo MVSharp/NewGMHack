@@ -93,6 +93,7 @@ namespace NewGMHack.Stub
                                        // {
                                            services.AddSingleton<IHostedService, PacketProcessorService>();
                                        // }
+                                       services.AddSingleton<OverlayManager>();
 
                                        services.AddSingleton(Channel.CreateUnbounded<(IntPtr, List<Reborn>)>(
                                                               new UnboundedChannelOptions

@@ -60,51 +60,84 @@ namespace NewGMHack.Stub
     //        _initialized = false;
     //    }
     //}
-    public class OverlayManager
+public class OverlayManager(SelfInformation self)
+{
+    private Font _font;
+    private bool _initialized;
+
+    private readonly int RightMargin = 20;
+    private readonly int LineHeight = 18;
+    private readonly int SectionSpacing = 10;
+
+    public void Initialize(Device device)
     {
-        private Font _font;
-        private bool _initialized;
+        if (_initialized || device == null)
+            return;
 
-        private readonly Color _titleColor = new Color(255, 0, 0, 255); // Red
-        private readonly Rectangle _titleRect = new Rectangle(10, 10, 400, 30);
-
-        public void Initialize(Device device)
+        var fontDesc = new FontDescription
         {
-            if (_initialized || device == null)
-                return;
+            Height = 16,
+            FaceName = "Consolas",
+            Weight = FontWeight.Normal,
+            Quality = FontQuality.ClearType,
+            PitchAndFamily = FontPitchAndFamily.Default | FontPitchAndFamily.Mono
+        };
 
-            var fontDesc = new FontDescription
-            {
-                Height = 20,
-                FaceName = "Arial",
-                Weight = FontWeight.Bold,
-                OutputPrecision = FontPrecision.Default,
-                Quality = FontQuality.Default,
-                PitchAndFamily = FontPitchAndFamily.Default | FontPitchAndFamily.Roman
-            };
-
-            _font = new Font(device, fontDesc);
-            _initialized = true;
-        }
-
-        public void Draw(Device device)
-        {
-            if (!_initialized || _font == null || device == null)
-                return;
-
-            string timestamp = $"NewGmHack:{DateTime.Now:yyyy:MM:dd HH:mm:ss}";
-            _font.DrawText(null, timestamp, _titleRect, FontDrawFlags.NoClip, _titleColor);
-        }
-
-        public void Reset()
-        {
-            _font?.Dispose();
-            _font = null;
-            _initialized = false;
-        }
+        _font = new Font(device, fontDesc);
+        _initialized = true;
     }
+
+    public void Draw(Device device)
+    {
+        if (!_initialized || _font == null || device == null)
+            return;
+
+        int screenWidth = device.Viewport.Width;
+        int x = screenWidth - 300; // right side
+        int y = 50;
+
+        // Draw Features Table
+        _font.DrawText(null, "== Hack Features ==", new Rectangle(x, y, 300, LineHeight), FontDrawFlags.NoClip, Color.White);
+        y += LineHeight + SectionSpacing;
+
+        foreach (var feature in self.ClientConfig.Features)
+        {
+            string status = feature.IsEnabled ? "🟢 Enabled" : "🔴 Disabled";
+            string line = $"{feature.Name,-20} {status}";
+            _font.DrawText(null, line, new Rectangle(x, y, 300, LineHeight), FontDrawFlags.NoClip, feature.IsEnabled ? Color.Lime : Color.Red);
+            y += LineHeight;
+        }
+
+        y += SectionSpacing * 2;
+
+        // Draw Info Table
+        _font.DrawText(null, "== Player Info ==", new Rectangle(x, y, 300, LineHeight), FontDrawFlags.NoClip, Color.White);
+        y += LineHeight + SectionSpacing;
+
+        DrawInfoRow(device, x, ref y, "PersonId", self.PersonInfo.PersonId.ToString());
+        DrawInfoRow(device, x, ref y, "GundamId", self.PersonInfo.GundamId.ToString());
+        DrawInfoRow(device, x, ref y, "Weapons", $"{self.PersonInfo.Weapon1}, {self.PersonInfo.Weapon2}, {self.PersonInfo.Weapon3}");
+        DrawInfoRow(device, x, ref y, "Position", $"X:{self.PersonInfo.X} Y:{self.PersonInfo.Y} Z:{self.PersonInfo.Z}");
+        DrawInfoRow(device, x, ref y, "GundamName", self.PersonInfo.GundamName);
+        DrawInfoRow(device, x, ref y, "Slot", self.PersonInfo.Slot.ToString());
+    }
+
+    private void DrawInfoRow(Device device, int x, ref int y, string label, string value)
+    {
+        string line = $"{label,-12}: {value}";
+        _font.DrawText(null, line, new Rectangle(x, y, 300, LineHeight), FontDrawFlags.NoClip, Color.LightBlue);
+        y += LineHeight;
+    }
+
+    public void Reset()
+    {
+        _font?.Dispose();
+        _font = null;
+        _initialized = false;
+    }
+}
     //https://github.com/justinstenning/Direct3DHook/blob/master/Capture/Hook/DXHookD3D9.cs
-    public class D3D9HookManager(ILogger<D3D9HookManager> logger)
+    public class D3D9HookManager(ILogger<D3D9HookManager> logger , OverlayManager overlayManager)
     {
         [DllImport("user32.dll", SetLastError = true)]
         static extern IntPtr CreateWindowEx(
@@ -136,15 +169,15 @@ namespace NewGMHack.Stub
         #region Hook Delegates
 
         private delegate int EndSceneDelegate(IntPtr devicePtr);
-            //DI later , now for test 
-        private readonly OverlayManager _overlayManager = new OverlayManager();
+        //DI later , now for test 
+        //private readonly OverlayManager _overlayManager;
         private int EndSceneHook(IntPtr devicePtr)
         {
-            logger.ZLogInformation($"EndScene called");
+            //logger.ZLogInformation($"EndScene called");
             var device = new Device(devicePtr); 
             try
             {
-                _overlayManager.Draw(device);
+                overlayManager.Draw(device);
             }
             catch (Exception ex)
             {
@@ -166,7 +199,7 @@ namespace NewGMHack.Stub
 
             try
             {
-                _overlayManager.Initialize(device);
+                overlayManager.Initialize(device);
             }
             catch (Exception ex)
             {
@@ -183,7 +216,7 @@ namespace NewGMHack.Stub
 
             try
             {
-                _overlayManager.Reset(); // Dispose font and other resources
+                overlayManager.Reset(); // Dispose font and other resources
             }
             catch (Exception ex)
             {
@@ -195,7 +228,7 @@ namespace NewGMHack.Stub
             try
             {
                 var device = SharpDX.Direct3D9.Device.FromPointer<SharpDX.Direct3D9.Device>(devicePtr);
-                _overlayManager.Initialize(device); // Recreate font after reset
+                overlayManager.Initialize(device); // Recreate font after reset
             }
             catch (Exception ex)
             {
