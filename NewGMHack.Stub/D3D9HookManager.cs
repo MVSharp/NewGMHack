@@ -97,7 +97,7 @@ public class OverlayManager(SelfInformation self)
         int y = 50;
 
         // Draw Features Table
-        _font.DrawText(null, "== Hack Features ==", new Rectangle(x, y, 300, LineHeight), FontDrawFlags.NoClip, Color.White);
+        _font.DrawText(null, "== Hack Features ==(By MichaelVan", new Rectangle(x, y, 300, LineHeight), FontDrawFlags.NoClip, Color.White);
         y += LineHeight + SectionSpacing;
 
         foreach (var feature in self.ClientConfig.Features)

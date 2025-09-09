@@ -378,7 +378,7 @@ public class PacketProcessorService : BackgroundService
     {
         _logger
            .ZLogInformation($"Machine id begin scan: {machineId} ");
-        var w = await gm.ScanAsync(machineId).ConfigureAwait(false);
+        var w =  await gm.Scan(machineId);
 
         _logger
            .ZLogInformation($"Machine id  scan completed: {machineId} ");

@@ -95,35 +95,27 @@ public sealed class WinsockHookManager(
         logger.ZLogInformation($"Hooked {functionName} successfully. Hook ptr: {hook.HookFunction}, Original ptr: {hook.OriginalFunction}");
     }
 
-    private unsafe int SendHook(IntPtr socket, IntPtr buffer, int length, int flags)
+   private unsafe int SendHook(IntPtr socket, IntPtr buffer, int length, int flags)
+{
+    try
     {
-        try
+        Span<byte> data = new((void*)buffer, length);
+        var modified = modifier.TryModifySendData(data);
+        if (modified != null)
         {
-            Span<byte> data = new((void*)buffer, length);
-            var modified = modifier.TryModifySendData(data);
-            if (modified != null)
+            fixed (byte* ptr = modified)
             {
-                try
-                {
-                    fixed (byte* ptr = modified)
-                    {
-                        return _originalSend!(socket, (IntPtr)ptr, modified.Length, flags);
-                    }
-                }
-                finally
-                {
-                    ArrayPool<byte>.Shared.Return(modified, clearArray: true);
-                }
+                return _originalSend!(socket, (IntPtr)ptr, modified.Length, flags);
             }
         }
-        catch (Exception ex)
-        {
-            logger.ZLogError($"SendHook error: {ex.Message}");
-        }
-        return _originalSend!(socket, buffer, length, flags);
+    }
+    catch (Exception ex)
+    {
+        logger.ZLogError($"SendHook error: {ex.Message}");
     }
 
-    private unsafe int RecvHook(IntPtr socket, IntPtr buffer, int length, int flags)
+    return _originalSend!(socket, buffer, length, flags);
+}    private unsafe int RecvHook(IntPtr socket, IntPtr buffer, int length, int flags)
     {
         try
         {
@@ -150,33 +142,27 @@ public sealed class WinsockHookManager(
         return _originalRecv!(socket, buffer, length, flags);
     }
 
-    private unsafe int SendToHook(IntPtr socket, IntPtr buffer, int length, int flags, IntPtr to, int tolen)
+private unsafe int SendToHook(IntPtr socket, IntPtr buffer, int length, int flags, IntPtr to, int tolen)
+{
+    try
     {
-        try
+        Span<byte> data = new((void*)buffer, length);
+        var modified = modifier.TryModifySendToData(data);
+        if (modified != null)
         {
-            Span<byte> data = new((void*)buffer, length);
-            var modified = modifier.TryModifySendToData(data);
-            if (modified != null)
+            fixed (byte* ptr = modified)
             {
-                try
-                {
-                    fixed (byte* ptr = modified)
-                    {
-                        return _originalSendTo!(socket, (IntPtr)ptr, modified.Length, flags, to, tolen);
-                    }
-                }
-                finally
-                {
-                    ArrayPool<byte>.Shared.Return(modified, clearArray: true);
-                }
+                return _originalSendTo!(socket, (IntPtr)ptr, modified.Length, flags, to, tolen);
             }
         }
-        catch (Exception ex)
-        {
-            logger.ZLogError($"SendToHook error: {ex.Message}");
-        }
-        return _originalSendTo!(socket, buffer, length, flags, to, tolen);
     }
+    catch (Exception ex)
+    {
+        logger.ZLogError($"SendToHook error: {ex.Message}");
+    }
+
+    return _originalSendTo!(socket, buffer, length, flags, to, tolen);
+}
 
     private unsafe int RecvFromHook(IntPtr socket, IntPtr buffer, int length, int flags, IntPtr from, ref int fromlen)
     {

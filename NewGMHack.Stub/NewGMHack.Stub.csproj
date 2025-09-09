@@ -15,6 +15,10 @@
 	<ItemGroup>
 		<PackageReference Include="Faster.Map" Version="7.0.1" />
 		<PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
+		<PackageReference Include="Reloaded.Memory" Version="9.4.2" />
+		<PackageReference Include="Reloaded.Memory.Buffers" Version="3.0.6" />
+		<PackageReference Include="Reloaded.Memory.Sigscan.Definitions" Version="1.1.1" />
+		<PackageReference Include="Reloaded.Memory.SigScan.ReloadedII.Interfaces" Version="1.2.0" />
 	<!--	<PackageReference Include="Vortice.D3DCompiler" Version="3.6.2" />
 		<PackageReference Include="Vortice.Direct2D1" Version="3.6.2" />
 		<PackageReference Include="Vortice.Direct3D9" Version="3.6.2" />

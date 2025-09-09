@@ -82,6 +82,7 @@ namespace NewGMHack.Stub
                                        services.AddSingleton<SelfInformation>();
                                        services.AddTransient<Mem>();
                                        services.AddTransient<GmMemory>();
+                                       //services.AddSingleton<FullAoBScanner>();
                                        services.AddTransient<IBuffSplitter, BuffSplitter>();
                                        services.AddSingleton<IHostedService, WinsockHookService>();
                                        //services.AddHostedService<WinsockHookService>();
