@@ -9,5 +9,6 @@ public enum FeatureName
     IsRandomLocation,
     IsAutoReady,
     IsRebound,
-    IsIllusion
+    IsIllusion,
+    IsAimSupport,
 }
