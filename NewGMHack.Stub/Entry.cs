@@ -8,6 +8,7 @@ using MessagePack;
 // using MessagePipe;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using NewGMHack.Stub.Hooks;
 using NewGMHack.Stub.MemoryScanner;
 using NewGMHack.Stub.PacketStructs.Recv;
 using NewGMHack.Stub.Services;
@@ -62,12 +63,12 @@ namespace NewGMHack.Stub
                                    })
                                   .ConfigureServices(services =>
                                    {
-                                       // services.Configure<HostOptions>(hostOptions =>
-                                       // {
-                                       //     hostOptions
-                                       //            .BackgroundServiceExceptionBehavior =
-                                       //         BackgroundServiceExceptionBehavior.Ignore;
-                                       // });
+                                       services.Configure<HostOptions>(hostOptions =>
+                                       {
+                                           hostOptions
+                                                  .BackgroundServiceExceptionBehavior =
+                                               BackgroundServiceExceptionBehavior.Ignore;
+                                       });
                                        // services.AddMessagePipe()
                                        //                         .AddNamedPipeInterprocess("SdHook",
                                        //                                   options =>
@@ -84,12 +85,12 @@ namespace NewGMHack.Stub
                                        services.AddTransient<GmMemory>();
                                        //services.AddSingleton<FullAoBScanner>();
                                        services.AddTransient<IBuffSplitter, BuffSplitter>();
-                                       services.AddSingleton<IHostedService, WinsockHookService>();
-                                       //services.AddHostedService<WinsockHookService>();
+                                       services.AddSingleton<IHostedService, MainHookService>();
+                                       //services.AddHostedService<MainHookService>();
                                        services.AddSingleton(Channel.CreateUnbounded<PacketContext>(
                                                               new UnboundedChannelOptions
                                                                   { SingleReader = false, SingleWriter = true }));
-                                       services.AddSingleton<WinsockHookManager>();
+
                                        // for (int i = 0; i < 3; i++)
                                        // {
                                            services.AddSingleton<IHostedService, PacketProcessorService>();
@@ -109,7 +110,10 @@ namespace NewGMHack.Stub
                                                                 (msgId, payload) =>
                                                                     handler.HandleAsync(msgId, payload.AsMemory()));
                                        });
-                                       services.AddSingleton<D3D9HookManager>();
+                                       services.AddSingleton<WinsockHookManager>(); // this is no problem , only once
+                                       services.AddSingleton<IHookManager ,D3D9HookManager>();
+                                       services.AddSingleton<IHookManager ,DirectInputHookManager>();
+                                       services.AddSingleton<IHookManager,WinsockHookManager>();
                                        //services.AddHostedService<PacketProcessorService>();
                                    })
                                   .Build();

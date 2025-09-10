@@ -28,7 +28,7 @@ namespace NewGmHack.GUI.Services
                 {
                     // ignored
                 }
-
+                if (stoppingToken.IsCancellationRequested) break;
                 await Task.Delay(500, stoppingToken).ConfigureAwait(false);
             }
         }

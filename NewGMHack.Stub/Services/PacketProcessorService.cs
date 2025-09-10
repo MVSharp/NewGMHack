@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using NewGMHack.CommunicationModel.Models;
 using NewGMHack.CommunicationModel.PacketStructs.Recv;
 using NewGMHack.CommunicationModel.PacketStructs.Send;
+using NewGMHack.Stub.Hooks;
 using NewGMHack.Stub.MemoryScanner;
 using NewGMHack.Stub.PacketStructs;
 using NewGMHack.Stub.PacketStructs.Recv;

@@ -11,7 +11,7 @@ using Reloaded.Memory.Extensions;
 using ZLinq;
 using ZLogger;
 
-namespace NewGMHack.Stub;
+namespace NewGMHack.Stub.Hooks;
 
 public sealed class WinsockHookManager(
     ILogger<WinsockHookManager> logger,
@@ -19,7 +19,7 @@ public sealed class WinsockHookManager(
     SelfInformation             self,
     IBuffSplitter               splitter,
     PacketDataModifier          modifier
-    )
+    ) : IHookManager
 {
     private SendDelegate?     _originalSend;
     private RecvDelegate?     _originalRecv;
@@ -95,7 +95,7 @@ public sealed class WinsockHookManager(
         logger.ZLogInformation($"Hooked {functionName} successfully. Hook ptr: {hook.HookFunction}, Original ptr: {hook.OriginalFunction}");
     }
 
-   private unsafe int SendHook(IntPtr socket, IntPtr buffer, int length, int flags)
+   private unsafe int SendHook(nint socket, nint buffer, int length, int flags)
 {
     try
     {
@@ -105,7 +105,7 @@ public sealed class WinsockHookManager(
         {
             fixed (byte* ptr = modified)
             {
-                return _originalSend!(socket, (IntPtr)ptr, modified.Length, flags);
+                return _originalSend!(socket, (nint)ptr, modified.Length, flags);
             }
         }
     }
@@ -115,7 +115,7 @@ public sealed class WinsockHookManager(
     }
 
     return _originalSend!(socket, buffer, length, flags);
-}    private unsafe int RecvHook(IntPtr socket, IntPtr buffer, int length, int flags)
+}    private unsafe int RecvHook(nint socket, nint buffer, int length, int flags)
     {
         try
         {
@@ -142,7 +142,7 @@ public sealed class WinsockHookManager(
         return _originalRecv!(socket, buffer, length, flags);
     }
 
-private unsafe int SendToHook(IntPtr socket, IntPtr buffer, int length, int flags, IntPtr to, int tolen)
+private unsafe int SendToHook(nint socket, nint buffer, int length, int flags, nint to, int tolen)
 {
     try
     {
@@ -152,7 +152,7 @@ private unsafe int SendToHook(IntPtr socket, IntPtr buffer, int length, int flag
         {
             fixed (byte* ptr = modified)
             {
-                return _originalSendTo!(socket, (IntPtr)ptr, modified.Length, flags, to, tolen);
+                return _originalSendTo!(socket, (nint)ptr, modified.Length, flags, to, tolen);
             }
         }
     }
@@ -164,7 +164,7 @@ private unsafe int SendToHook(IntPtr socket, IntPtr buffer, int length, int flag
     return _originalSendTo!(socket, buffer, length, flags, to, tolen);
 }
 
-    private unsafe int RecvFromHook(IntPtr socket, IntPtr buffer, int length, int flags, IntPtr from, ref int fromlen)
+    private unsafe int RecvFromHook(nint socket, nint buffer, int length, int flags, nint from, ref int fromlen)
     {
         try
         {
@@ -189,14 +189,14 @@ private unsafe int SendToHook(IntPtr socket, IntPtr buffer, int length, int flag
         return _originalRecvFrom!(socket, buffer, length, flags, from, ref fromlen);
     }
 
-    public unsafe void SendPacket(IntPtr socket, ReadOnlySpan<byte> data, int flags = 0)
+    public unsafe void SendPacket(nint socket, ReadOnlySpan<byte> data, int flags = 0)
     {
         try
         {
             fixed (byte* ptr = data)
             {
-                IntPtr buffer = (IntPtr)ptr;
-                this.OriginalSend(socket, buffer, data.Length, flags);
+                nint buffer = (nint)ptr;
+                OriginalSend(socket, buffer, data.Length, flags);
             }
         }
         catch
@@ -208,15 +208,15 @@ private unsafe int SendToHook(IntPtr socket, IntPtr buffer, int length, int flag
 
     // Delegates
     [UnmanagedFunctionPointer(CallingConvention.StdCall, SetLastError = true)]
-    public delegate int SendDelegate(IntPtr socket, IntPtr buffer, int length, int flags);
+    public delegate int SendDelegate(nint socket, nint buffer, int length, int flags);
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall, SetLastError = true)]
-    private delegate int RecvDelegate(IntPtr socket, IntPtr buffer, int length, int flags);
+    private delegate int RecvDelegate(nint socket, nint buffer, int length, int flags);
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall, SetLastError = true)]
-    private delegate int SendToDelegate(IntPtr socket, IntPtr buffer, int length, int flags, IntPtr to, int tolen);
+    private delegate int SendToDelegate(nint socket, nint buffer, int length, int flags, nint to, int tolen);
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall, SetLastError = true)]
-    private delegate int RecvFromDelegate(IntPtr  socket, IntPtr buffer, int length, int flags, IntPtr from,
+    private delegate int RecvFromDelegate(nint socket, nint buffer, int length, int flags, nint from,
                                           ref int fromlen);
 }

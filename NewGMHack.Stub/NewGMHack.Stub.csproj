@@ -10,6 +10,7 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<DebugType>embedded</DebugType>
 		<EnableDynamicLoading>true</EnableDynamicLoading>
+		<UserSecretsId>8cfe72c6-d0db-49ea-83a5-380afe6d8698</UserSecretsId>
 	</PropertyGroup>
 
 	<ItemGroup>

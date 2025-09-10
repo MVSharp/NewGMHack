@@ -38,7 +38,7 @@ namespace NewGMHack.Stub
 
         public async Task<byte[]> HandleAsync(ulong uid, ReadOnlyMemory<byte> payload)
         {
-            //logger.ZLogInformation($"Operations client:{"recviced"}");
+            logger.ZLogInformation($"Operations client:{"recviced"}");
             try
             {
                 return await InternalHandleAsync(payload);
@@ -53,7 +53,7 @@ namespace NewGMHack.Stub
         private async Task<byte[]> InternalHandleAsync(ReadOnlyMemory<byte> payload)
         {
             var dynamicRequest = MessagePackSerializer.Deserialize<DynamicOperationRequest>(payload, _options);
-            //logger.ZLogInformation($"Operations client:{dynamicRequest.Operation}");
+            logger.ZLogInformation($"Operations client:{dynamicRequest.Operation}");
 
             await using var stream = recyclableMemoryStreamManager.GetStream("sdhook");
 

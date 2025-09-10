@@ -15,7 +15,7 @@ using SharpDX;
 using SharpDX.Direct3D9;
 using Rectangle = SharpDX.Rectangle;
 using Color = SharpDX.Color;
-namespace NewGMHack.Stub
+namespace NewGMHack.Stub.Hooks
 {
 
     //public class OverlayManager
@@ -137,19 +137,19 @@ public class OverlayManager(SelfInformation self)
     }
 }
     //https://github.com/justinstenning/Direct3DHook/blob/master/Capture/Hook/DXHookD3D9.cs
-    public class D3D9HookManager(ILogger<D3D9HookManager> logger , OverlayManager overlayManager)
+    public class D3D9HookManager(ILogger<D3D9HookManager> logger , OverlayManager overlayManager) : IHookManager
     {
         [DllImport("user32.dll", SetLastError = true)]
-        static extern IntPtr CreateWindowEx(
+        static extern nint CreateWindowEx(
             int dwExStyle, string lpClassName, string lpWindowName,
             int dwStyle, int x, int y, int nWidth, int nHeight,
-            IntPtr hWndParent, IntPtr hMenu, IntPtr hInstance, IntPtr lpParam);
+            nint hWndParent, nint hMenu, nint hInstance, nint lpParam);
 
         [DllImport("user32.dll", SetLastError = true)]
-        static extern bool DestroyWindow(IntPtr hWnd);
+        static extern bool DestroyWindow(nint hWnd);
         private const int D3D9_DEVICE_METHOD_COUNT = 119;
         private const int D3D9Ex_DEVICE_METHOD_COUNT = 15;
-        private readonly List<IntPtr> id3dDeviceFunctionAddresses = new List<IntPtr>();
+        private readonly List<nint> id3dDeviceFunctionAddresses = new List<nint>();
         bool _supportsDirect3D9Ex = false;
 
         private EndSceneDelegate? _endSceneHookDelegate;
@@ -160,18 +160,18 @@ public class OverlayManager(SelfInformation self)
         private PresentDelegate? _originalPresent;
         private INativeHook? _presentHook;
         private readonly List<INativeHook> _hooks = new();
-        private IntPtr _devicePtr = IntPtr.Zero;
+        private nint _devicePtr = nint.Zero;
 
-        private delegate int ResetDelegate(IntPtr devicePtr, IntPtr presentationParameters);
+        private delegate int ResetDelegate(nint devicePtr, nint presentationParameters);
         private ResetDelegate _resetHookDelegate;
         private JumpHook _resetHook;
         private ResetDelegate _originalReset;
         #region Hook Delegates
 
-        private delegate int EndSceneDelegate(IntPtr devicePtr);
+        private delegate int EndSceneDelegate(nint devicePtr);
         //DI later , now for test 
         //private readonly OverlayManager _overlayManager;
-        private int EndSceneHook(IntPtr devicePtr)
+        private int EndSceneHook(nint devicePtr)
         {
             //logger.ZLogInformation($"EndScene called");
             var device = new Device(devicePtr); 
@@ -187,11 +187,11 @@ public class OverlayManager(SelfInformation self)
             return _originalEndScene?.Invoke(devicePtr) ?? 0;
         }
 
-        private delegate int PresentDelegate(IntPtr devicePtr, IntPtr srcRect, IntPtr destRect, IntPtr hDestWindowOverride, IntPtr dirtyRegion);
-        private int PresentHook(IntPtr devicePtr, IntPtr srcRect, IntPtr destRect, IntPtr hDestWindowOverride, IntPtr dirtyRegion)
+        private delegate int PresentDelegate(nint devicePtr, nint srcRect, nint destRect, nint hDestWindowOverride, nint dirtyRegion);
+        private int PresentHook(nint devicePtr, nint srcRect, nint destRect, nint hDestWindowOverride, nint dirtyRegion)
         {
             //logger.ZLogInformation($"Present called");
-            if(devicePtr != IntPtr.Zero)
+            if(devicePtr != nint.Zero)
             {
                 _devicePtr = devicePtr;
             }
@@ -210,7 +210,7 @@ public class OverlayManager(SelfInformation self)
 
         #endregion
 
-        private int ResetHook(IntPtr devicePtr, IntPtr presentationParameters)
+        private int ResetHook(nint devicePtr, nint presentationParameters)
         {
             logger.ZLogInformation($"Reset called");
 
@@ -227,7 +227,7 @@ public class OverlayManager(SelfInformation self)
 
             try
             {
-                var device = SharpDX.Direct3D9.Device.FromPointer<SharpDX.Direct3D9.Device>(devicePtr);
+                var device = CppObject.FromPointer<Device>(devicePtr);
                 overlayManager.Initialize(device); // Recreate font after reset
             }
             catch (Exception ex)
@@ -252,7 +252,7 @@ public class OverlayManager(SelfInformation self)
 
            // Hook EndScene
             _endSceneHookDelegate = new EndSceneDelegate(EndSceneHook);
-            IntPtr hookPtr = Marshal.GetFunctionPointerForDelegate(_endSceneHookDelegate);
+            nint hookPtr = Marshal.GetFunctionPointerForDelegate(_endSceneHookDelegate);
 
             _endSceneHook = JumpHook.Create(
                 id3dDeviceFunctionAddresses[(int)Direct3DDevice9FunctionOrdinals.EndScene], // vtable address for EndScene
@@ -265,7 +265,7 @@ public class OverlayManager(SelfInformation self)
             _originalEndScene = Marshal.GetDelegateForFunctionPointer<EndSceneDelegate>(_endSceneHook.OriginalFunction);
 
             _presentHookDelegate = new PresentDelegate(PresentHook);
-            IntPtr presentHookPtr = Marshal.GetFunctionPointerForDelegate(_presentHookDelegate);
+            nint presentHookPtr = Marshal.GetFunctionPointerForDelegate(_presentHookDelegate);
 
             _presentHook = JumpHook.Create(
                 id3dDeviceFunctionAddresses[(int)Direct3DDevice9FunctionOrdinals.Present], // vtable index for Present
@@ -276,7 +276,7 @@ public class OverlayManager(SelfInformation self)
             );
 
             _resetHookDelegate = new ResetDelegate(ResetHook);
-            IntPtr resetHookPtr = Marshal.GetFunctionPointerForDelegate(_resetHookDelegate);
+            nint resetHookPtr = Marshal.GetFunctionPointerForDelegate(_resetHookDelegate);
 
             _resetHook = JumpHook.Create(
                 id3dDeviceFunctionAddresses[(int)Direct3DDevice9FunctionOrdinals.Reset], // index 16
@@ -309,11 +309,11 @@ public class OverlayManager(SelfInformation self)
             {
                 logger.ZLogInformation($" Begin Get D3d9 Address");
                 Device device;
-                IntPtr renderPtr = CreateWindowEx(0, "STATIC", "DummyWindow", 0, 0, 0, 1, 1, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+                nint renderPtr = CreateWindowEx(0, "STATIC", "DummyWindow", 0, 0, 0, 1, 1, nint.Zero, nint.Zero, nint.Zero, nint.Zero);
                 logger.ZLogInformation($"Render Ptr : {renderPtr}");
                 using (Direct3D d3d = new Direct3D())
                 {
-                    using (device = new Device(d3d, 0, DeviceType.NullReference, IntPtr.Zero, CreateFlags.HardwareVertexProcessing, new PresentParameters() { BackBufferWidth = 1, BackBufferHeight = 1, DeviceWindowHandle = renderPtr }))
+                    using (device = new Device(d3d, 0, DeviceType.NullReference, nint.Zero, CreateFlags.HardwareVertexProcessing, new PresentParameters() { BackBufferWidth = 1, BackBufferHeight = 1, DeviceWindowHandle = renderPtr }))
                     {
                         id3dDeviceFunctionAddresses.AddRange(GetVTblAddresses(device.NativePointer, D3D9_DEVICE_METHOD_COUNT));
                         logger.ZLogInformation($"Devices Address Count : {id3dDeviceFunctionAddresses.Count}");
@@ -326,17 +326,17 @@ public class OverlayManager(SelfInformation self)
 
             }
         }
-        private IntPtr[] GetVTblAddresses(IntPtr pointer, int numberOfMethods)
+        private nint[] GetVTblAddresses(nint pointer, int numberOfMethods)
         {
             return GetVTblAddresses(pointer, 0, numberOfMethods);
         }
-        private IntPtr[] GetVTblAddresses(IntPtr pointer, int startIndex, int numberOfMethods)
+        private nint[] GetVTblAddresses(nint pointer, int startIndex, int numberOfMethods)
         {
-            List<IntPtr> vtblAddresses = new List<IntPtr>();
+            List<nint> vtblAddresses = new List<nint>();
 
-            IntPtr vTable = Marshal.ReadIntPtr(pointer);
+            nint vTable = Marshal.ReadIntPtr(pointer);
             for (int i = startIndex; i < startIndex + numberOfMethods; i++)
-                vtblAddresses.Add(Marshal.ReadIntPtr(vTable, i * IntPtr.Size)); // using IntPtr.Size allows us to support both 32 and 64-bit processes
+                vtblAddresses.Add(Marshal.ReadIntPtr(vTable, i * nint.Size)); // using IntPtr.Size allows us to support both 32 and 64-bit processes
 
             return vtblAddresses.ToArray();
         }
