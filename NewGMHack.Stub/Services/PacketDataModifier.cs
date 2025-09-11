@@ -58,8 +58,8 @@ public sealed class PacketDataModifier
                 attackBytes.CopyTo(modified.AsSpan(0, attackBytes.Length));
                 targetsBytes.CopyTo(modified.AsSpan(attackBytes.Length));
 
-                _logger?.ZLogInformation($"Modified 1335: {BitConverter.ToString(modified)}");
-                return modified;
+                    _logger?.ZLogInformation($"Modified 1335: {BitConverter.ToString(modified)}");
+                    return modified;
             }
 
             case 1486:
@@ -121,11 +121,11 @@ public sealed class PacketDataModifier
             _self.PersonInfo.X = (float)BitConverter.ToUInt16(new byte[] { data[20], data[19] }, 0)  ;
             _self.PersonInfo.Y = (float)BitConverter.ToUInt16(new byte[] { data[22], data[21] }, 0)  ;
             _self.PersonInfo.Z = (float)BitConverter.ToUInt16(new byte[] { data[24], data[23] }, 0)  ;
-            _logger.ZLogInformation(
-                $"x: 0x{data[20]:X2} 0x{data[19]:X2} | bits: {GetBitString(new byte[] { data[20], data[19] })}\n" +
-                $"y: 0x{data[22]:X2} 0x{data[21]:X2} | bits: {GetBitString(new byte[] { data[22], data[21] })}\n" +
-                $"z: 0x{data[24]:X2} 0x{data[23]:X2} | bits: {GetBitString(new byte[] { data[24], data[23] })}"
-            );
+            //_logger.ZLogInformation(
+            //    $"x: 0x{data[20]:X2} 0x{data[19]:X2} | bits: {GetBitString(new byte[] { data[20], data[19] })}\n" +
+            //    $"y: 0x{data[22]:X2} 0x{data[21]:X2} | bits: {GetBitString(new byte[] { data[22], data[21] })}\n" +
+            //    $"z: 0x{data[24]:X2} 0x{data[23]:X2} | bits: {GetBitString(new byte[] { data[24], data[23] })}"
+            //);
             if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsIllusion)) return null;
 
            // _logger?.ZLogInformation($"Update Location");

@@ -111,7 +111,7 @@ namespace NewGMHack.Stub
                                                                     handler.HandleAsync(msgId, payload.AsMemory()));
                                        });
                                        services.AddSingleton<DirectInputLogicProcessor>();
-                                       services.AddSingleton<WinsockHookManager>(); // this is no problem , only once
+                                       //services.AddSingleton<WinsockHookManager>(); // this is no problem , only once
                                        services.AddSingleton<IHookManager ,D3D9HookManager>();
                                        services.AddSingleton<IHookManager ,DirectInputHookManager>();
                                        services.AddSingleton<IHookManager,WinsockHookManager>();

@@ -19,14 +19,14 @@ namespace NewGMHack.Stub.Services
     internal sealed class BombServices(
         Channel<(nint, List<Reborn>)> bombChannel,
         ILogger<BombServices>   _logger,
-        WinsockHookManager            _hookManager,
+        IEnumerable<IHookManager> managers,
         SelfInformation               _selfInformation) : BackgroundService
     {
         /// <inheritdoc />
         // [DllImport("ws2_32.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Unicode,
         //            SetLastError = true)]
         // private static extern int send(nint socket, nint buffer, int length, int flags);
-
+        private readonly WinsockHookManager _hookManager = managers.OfType<WinsockHookManager>().First();
         public unsafe void SendPacket(nint socket, ReadOnlySpan<byte> data, int flags = 0)
         {
             try

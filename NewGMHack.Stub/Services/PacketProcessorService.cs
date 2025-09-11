@@ -31,10 +31,11 @@ public class PacketProcessorService : BackgroundService
     private readonly Channel<(nint, List<Reborn>)>   _bombChannel;
     private readonly WinsockHookManager              _winsockHookManager;
 
+
     /// <inheritdoc />
     public PacketProcessorService(Channel<PacketContext> packetChannel, ILogger<PacketProcessorService> logger,
                                   IBuffSplitter buffSplitter, GmMemory gm, SelfInformation selfInformation,
-                                  Channel<(nint, List<Reborn>)> bombChannel, WinsockHookManager winsockHookManager)
+                                  Channel<(nint, List<Reborn>)> bombChannel, IEnumerable<IHookManager> managers)
     {
         _packetChannel      = packetChannel;
         _logger             = logger;
@@ -42,7 +43,7 @@ public class PacketProcessorService : BackgroundService
         this.gm             = gm;
         _selfInformation    = selfInformation;
         _bombChannel        = bombChannel;
-        _winsockHookManager = winsockHookManager;
+        _winsockHookManager = managers.OfType<WinsockHookManager>().First();
     }
 
     /// <inheritdoc />
