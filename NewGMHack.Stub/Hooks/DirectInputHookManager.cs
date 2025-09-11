@@ -16,26 +16,23 @@ public class DirectInputHookManager : IHookManager
     private readonly DirectInputLogicProcessor _logicProcessor;
     private readonly List<INativeHook> _hooks = new();
     private readonly List<Delegate> _activeDelegates = new(); // Prevent GC
-
+    private readonly InputStateTracker _inputStateTracker;
     private GetDeviceStateDelegate? _originalKeyboardDelegate;
     private GetDeviceStateDelegate? _originalMouseDelegate;
 
     private delegate int GetDeviceStateDelegate(IntPtr devicePtr, int size, IntPtr dataPtr);
 
-    //private static bool leftWasDown = false;
-    //private static bool rightWasDown = false;
-    //private static bool isSwitching = false;
-    //private static int lastKeypad = 1;
-    //private static int switchStep = 0;
-    //private static DateTime lastTriggerTime = DateTime.MinValue;
-    //private static readonly TimeSpan triggerCooldown = TimeSpan.FromMilliseconds(100);
-    //private static readonly HashSet<int> injectedKeys = new();
+private Thread? _pollingThread;
+private bool _pollingActive;
+private Keyboard? _pollingKeyboard;
+private Mouse? _pollingMouse;
 
-    public DirectInputHookManager(ILogger<DirectInputHookManager> logger, SelfInformation self , DirectInputLogicProcessor directInputLogicProcessor)
+    public DirectInputHookManager(ILogger<DirectInputHookManager> logger, SelfInformation self , DirectInputLogicProcessor directInputLogicProcessor , InputStateTracker input)
     {
         _logger = logger;
         _self = self;
         _logicProcessor = directInputLogicProcessor;
+        _inputStateTracker = input;
     }
 
     public void HookAll()
@@ -92,7 +89,9 @@ public class DirectInputHookManager : IHookManager
         }
 
         _logger.ZLogInformation($"DirectInput hook setup completed");
+
     }
+
 
     public void UnHookAll()
     {
@@ -103,6 +102,10 @@ public class DirectInputHookManager : IHookManager
         }
         _hooks.Clear();
     }
+
+private bool _f5Down = false;
+private bool _escDown = false;
+private bool _rightMouseDown = false;
 private int HookedGetDeviceState(IntPtr devicePtr, int size, IntPtr dataPtr, DeviceType deviceType)
 {
     var original = deviceType switch
@@ -111,51 +114,61 @@ private int HookedGetDeviceState(IntPtr devicePtr, int size, IntPtr dataPtr, Dev
         DeviceType.Mouse => _originalMouseDelegate,
         _ => null
     };
-
+        //_logger.ZLogInformation($"{size} | {deviceType}");
     if (original == null)
     {
+            _logger.ZLogInformation($"Oh fuck original delegate lost");
         _logicProcessor.ZeroMemory(dataPtr, size);
         return 0;
     }
 
-    if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAimSupport) && !_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoReady))
-        return original(devicePtr, size, dataPtr);
+        //if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAimSupport) && !_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoReady))
+        //{
 
-    int result = original(devicePtr, size, dataPtr);
-    if (result != 0) return result;
+        //    _logger.ZLogInformation($"no features enabled");
+        //    return original(devicePtr, size, dataPtr);
+        //}
 
-    _logicProcessor.Process(deviceType, size, dataPtr);
-    return 0;
+        int result = original(devicePtr, size, dataPtr);
+        if (result != 0)
+        {
+            _logicProcessor.ZeroMemory(dataPtr, size);
+        }
+        bool isAutoReady = _self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoReady);
+
+    if (isAutoReady)
+    {
+if (deviceType == DeviceType.Keyboard && size == 256)
+{
+    byte[] keys = new byte[256];
+    Marshal.Copy(dataPtr, keys, 0, 256);
+
+    _f5Down = !_f5Down;
+    _escDown = !_escDown;
+
+    keys[63] = _f5Down ? (byte)0x80 : (byte)0x00;
+    keys[1] = _escDown ? (byte)0x80 : (byte)0x00;
+
+    Marshal.Copy(keys, 0, dataPtr, 256);
 }
-    //private void InjectKey(byte[] keys, int dikCode)
-    //{
-    //    if ((keys[dikCode] & 0x80) == 0)
-    //    {
-    //        keys[dikCode] = 0x80;
-    //        injectedKeys.Add(dikCode);
-    //    }
-    //}
+else if (deviceType == DeviceType.Mouse && size == Marshal.SizeOf<DIMOUSESTATE>())
+{
+    DIMOUSESTATE state = Marshal.PtrToStructure<DIMOUSESTATE>(dataPtr);
 
-    //private void ZeroMemory(IntPtr ptr, int size)
-    //{
-    //    if (ptr == IntPtr.Zero || size <= 0) return;
-    //    byte[] zero = new byte[size];
-    //    Marshal.Copy(zero, 0, ptr, size);
-    //}
+    _rightMouseDown = !_rightMouseDown;
+    state.rgbButtons1 = _rightMouseDown ? (byte)0x80 : (byte)0x00;
 
-    //[StructLayout(LayoutKind.Sequential)]
-    //private struct DIMOUSESTATE
-    //{
-    //    public int lX;
-    //    public int lY;
-    //    public int lZ;
-    //    public byte rgbButtons0;
-    //    public byte rgbButtons1;
-    //    public byte rgbButtons2;
-    //    public byte rgbButtons3;
-    //    public byte rgbButtons4;
-    //    public byte rgbButtons5;
-    //    public byte rgbButtons6;
-    //    public byte rgbButtons7;
-    //}
+    Marshal.StructureToPtr(state, dataPtr, false);
+}
+    }
+        //if (result != 0) // dont enable this fucker , if mouse or keyboard no update , this fucker may lost
+        //{
+
+        //    //_logger.ZLogInformation($"so strange , result not 0 : result:{result} | {deviceType} {size} {devicePtr}");
+        //    //return result;
+        //}
+        //_inputStateTracker.Update(deviceType, size, dataPtr);
+        //_logicProcessor.Process(deviceType, size, dataPtr);
+        return 0;
+    }
 }

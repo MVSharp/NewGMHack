@@ -381,6 +381,7 @@ public class PacketProcessorService : BackgroundService
     }
     private  void ChargeGundam(IntPtr socket  ,UInt32 slot)
     {
+        if (slot == 0) return;
         if (!_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoCharge)) return;
         ChargeRequest r = new();
         r.Version = 13;
