@@ -23,12 +23,13 @@ public class ClientConfig
     {
         new HackFeatures() { Name = FeatureName.IsMissionBomb, IsEnabled    = true },
         new HackFeatures() { Name = FeatureName.IsAutoReady, IsEnabled      = false },
-        new HackFeatures() { Name = FeatureName.IsRandomLocation, IsEnabled = false },
+        new HackFeatures() { Name = FeatureName.IsAutoCharge, IsEnabled = false },
         new HackFeatures() { Name = FeatureName.IsPlayerBomb, IsEnabled     = false },
         new HackFeatures() { Name = FeatureName.IsRebound, IsEnabled     = true },
         new HackFeatures() { Name = FeatureName.IsIllusion, IsEnabled     = true },
         new HackFeatures() { Name = FeatureName.IsAimSupport, IsEnabled     = false },
     };
+    public bool IsInGame { get; set; } = false;
 }
 
 [MessagePackObject]

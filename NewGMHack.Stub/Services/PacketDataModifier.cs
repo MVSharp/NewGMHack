@@ -1,4 +1,6 @@
 ﻿using System.Buffers;
+using System.Collections;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using NewGMHack.Stub;
@@ -98,20 +100,35 @@ public sealed class PacketDataModifier
                 return null;
         }
     }
+    public static string GetBitString(byte[] data)
+    {
+        BitArray bits = new BitArray(data);
+        char[] result = new char[bits.Length];
 
+        for (int i = 0; i < bits.Length; i++)
+        {
+            result[i] = bits[i] ? '1' : '0';
+        }
+
+        return new string(result);
+    }
     public byte[]? TryModifySendToData(ReadOnlySpan<byte> data)
     {
         if (data.Length <= 6) return null;
 
         if (data[4] == 0x6A && data[5] == 0x27)
         {
-            _self.PersonInfo.X = BitConverter.ToInt16(new byte[] { data[20], data[19] }, 0);
-            _self.PersonInfo.Y = BitConverter.ToInt16(new byte[] { data[22], data[21] }, 0);
-            _self.PersonInfo.Z = BitConverter.ToInt16(new byte[] { data[24], data[23] }, 0);
-
+            _self.PersonInfo.X = (float)BitConverter.ToUInt16(new byte[] { data[20], data[19] }, 0)  ;
+            _self.PersonInfo.Y = (float)BitConverter.ToUInt16(new byte[] { data[22], data[21] }, 0)  ;
+            _self.PersonInfo.Z = (float)BitConverter.ToUInt16(new byte[] { data[24], data[23] }, 0)  ;
+            _logger.ZLogInformation(
+                $"x: 0x{data[20]:X2} 0x{data[19]:X2} | bits: {GetBitString(new byte[] { data[20], data[19] })}\n" +
+                $"y: 0x{data[22]:X2} 0x{data[21]:X2} | bits: {GetBitString(new byte[] { data[22], data[21] })}\n" +
+                $"z: 0x{data[24]:X2} 0x{data[23]:X2} | bits: {GetBitString(new byte[] { data[24], data[23] })}"
+            );
             if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsIllusion)) return null;
 
-            _logger?.ZLogInformation($"Update Location");
+           // _logger?.ZLogInformation($"Update Location");
 
             var modified = data.ToArray();
             modified[19] = modified[20] = modified[21] = modified[22] = modified[23] = modified[24] = 0xFF;

@@ -103,6 +103,7 @@ public class PacketProcessorService : BackgroundService
             // case 1992 or 1338 or 2312 or 1525 or 1521 or 2103:
             //1342 player reborn in battle
             case 1992 or 1342: //or 1521 or 2312 or 1525 or 1518:
+                _selfInformation.ClientConfig.IsInGame = true;
                 if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
                     _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
                 {
@@ -122,7 +123,7 @@ public class PacketProcessorService : BackgroundService
             //     //damage recv
             //     break;
             case 1246:
-
+                _selfInformation.ClientConfig.IsInGame = false;
                 var changed   = reader.ReadChangedMachine();
                 var slot = changed.Slot;
                 _selfInformation.PersonInfo.Slot = slot;
@@ -134,15 +135,18 @@ public class PacketProcessorService : BackgroundService
             case 1244:
                 AssignPersonId(reader);
 
+                _selfInformation.ClientConfig.IsInGame = false;
                 break;
             case 1550: // 1691 or 2337 or 1550:
                 _selfInformation.BombHistory.Clear();
+
+                _selfInformation.ClientConfig.IsInGame = true;
                 SendSkipScreen(socket);
                 break;
             case 1858 or 1270:
                 _selfInformation.BombHistory.Clear();
+                _selfInformation.ClientConfig.IsInGame = false;
                 var mates = ReadRoommates(methodPacket.MethodBody.AsMemory());
-
                 _logger.LogInformation($"local Roomate:{string.Join("|", mates)}");
                 _selfInformation.Roommates.Clear();
                 foreach (var c in mates)
@@ -153,22 +157,30 @@ public class PacketProcessorService : BackgroundService
                 _logger.LogInformation($" global Roomate:{string.Join("|", _selfInformation.Roommates)}");
                 break;
             case 1847: // someone join 
+                _selfInformation.ClientConfig.IsInGame = false;
                 _selfInformation.BombHistory.Clear();
                 RequestRoomInfo(socket);
                 break;
             case 1851: //someone leave
+
+                _selfInformation.ClientConfig.IsInGame = false;
                 _selfInformation.BombHistory.Clear();
                 HandleRoommateLeave(socket, methodPacket.MethodBody.AsMemory());
                 break;
 
             case 1338: // hitted or got hitted recv
+
+                _selfInformation.ClientConfig.IsInGame = true;
                 ReadHitResponse1338(methodPacket.MethodBody.AsMemory(), reborns);
                 break;
             case 1525: // non direct hit 
 
+                _selfInformation.ClientConfig.IsInGame = true;
                 ReadHitResponse1525(methodPacket.MethodBody.AsMemory(), reborns);
                 break;
             case 1340:
+
+                _selfInformation.ClientConfig.IsInGame = true;
                 ReadDeads(methodPacket.MethodBody.AsMemory());
                 break;
             case 2042:
@@ -368,12 +380,13 @@ public class PacketProcessorService : BackgroundService
     }
     private  void ChargeGundam(IntPtr socket  ,UInt32 slot)
     {
-        //ChargeRequest r = new();
-        //r.Version = 13;
-        //r.Split = 1008;
-        //r.Method = 1668;
-        //r.Slot = slot;
-        //_winsockHookManager.SendPacket(socket,r.ToByteArray().AsSpan());
+        if (!_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoCharge)) return;
+        ChargeRequest r = new();
+        r.Version = 13;
+        r.Split = 1008;
+        r.Method = 1668;
+        r.Slot = slot;
+        _winsockHookManager.SendPacket(socket, r.ToByteArray().AsSpan());
     }
     private async Task ScanGundam(UInt32 machineId)
     {

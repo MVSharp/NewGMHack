@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
+using NewGMHack.Stub;
 using SharpDX.DirectInput;
 
-public class DirectInputLogicProcessor
+public class DirectInputLogicProcessor(SelfInformation self)
 {
     private const int DIK_1 = 0x02;
     private const int DIK_2 = 0x03;
@@ -15,17 +17,27 @@ public class DirectInputLogicProcessor
 
     private static int lastKeypad = 1;
     private static bool isSwitching = false;
-    private static readonly Queue<InjectedKey> switchQueue = new();
-    private static readonly List<InjectedKey> activeInjectedKeys = new();
-    // fine turn these two value for different behaviour too fast sometimes the game is not rendering it so we may casue "ghost key" or miss
-    private const int InjectHoldFrames = 12;
-    private const int InjectGapFrames = 20;
 
-    private class InjectedKey
+    private static readonly Stopwatch timer = Stopwatch.StartNew();
+    private static readonly List<ScheduledKeyEvent> scheduledEvents = new();
+
+    // Base durations
+    private const int KeyDownDurationMs = 10;
+    private const int KeyUpDurationMs = 10;
+
+    // Step-specific delays
+    private const int DelaySwitchToMs = 200;   // Delay before switch-back
+    private const int DelaySwitchBackMs = 100;  // Shorter delay for return
+
+// DirectInput key codes (partial list)
+private const int DIK_ESCAPE = 0x01;
+private const int DIK_F5 = 0x3F;
+    private class ScheduledKeyEvent
     {
         public int Code;
         public bool IsDown;
-        public int FramesLeft;
+        public long TriggerTimeMs;
+        public bool Fired;
     }
 
     public void Process(DeviceType deviceType, int size, IntPtr dataPtr)
@@ -63,99 +75,100 @@ public class DirectInputLogicProcessor
         Marshal.StructureToPtr(state, dataPtr, false);
     }
 
-    private void ProcessKeyboard(IntPtr dataPtr)
+private void ProcessKeyboard(IntPtr dataPtr)
+{
+    byte[] keys = new byte[256];
+    Marshal.Copy(dataPtr, keys, 0, 256);
+
+    if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAimSupport))
+        HandleAimSupport(keys);
+
+    if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoReady) && !self.ClientConfig.IsInGame && !isSwitching)
+        HandleAutoReady();
+
+    InjectScheduledKeys(keys);
+    Marshal.Copy(keys, 0, dataPtr, 256);
+}
+
+private void HandleAimSupport(byte[] keys)
+{
+    if (keys[DIK_1] == 0x80) lastKeypad = 1;
+    else if (keys[DIK_2] == 0x80) lastKeypad = 2;
+    else if (keys[DIK_3] == 0x80) lastKeypad = 3;
+
+    if (leftJustReleased && !isSwitching)
     {
-        byte[] keys = new byte[256];
-        Marshal.Copy(dataPtr, keys, 0, 256);
+        scheduledEvents.Clear();
+        long baseTime = timer.ElapsedMilliseconds;
 
-        // Detect key press to update lastKeypad
-        if (keys[DIK_1] == 0x80) lastKeypad = 1;
-        else if (keys[DIK_2] == 0x80) lastKeypad = 2;
-        else if (keys[DIK_3] == 0x80) lastKeypad = 3;
-
-        // Trigger switch sequence after left click release
-        if (leftJustReleased && !isSwitching)
+        switch (lastKeypad)
         {
-            switchQueue.Clear();
-            switch (lastKeypad)
-            {
-                case 1:
-                    EnqueueKey(DIK_2, true);
-                    EnqueueKey(DIK_2, false);
-                    EnqueueDelay();
-                    EnqueueKey(DIK_1, true);
-                    EnqueueKey(DIK_1, false);
-                    break;
-                case 2:
-                    EnqueueKey(DIK_1, true);
-                    EnqueueKey(DIK_1, false);
-                    EnqueueDelay();
-                    EnqueueKey(DIK_2, true);
-                    EnqueueKey(DIK_2, false);
-                    break;
-                case 3:
-                    EnqueueKey(DIK_2, true);
-                    EnqueueKey(DIK_2, false);
-                    EnqueueDelay();
-                    EnqueueKey(DIK_3, true);
-                    EnqueueKey(DIK_3, false);
-                    break;
-            }
-            isSwitching = true;
+            case 1:
+                ScheduleKeyPress(DIK_2, 0, DelaySwitchToMs);
+                ScheduleKeyPress(DIK_1, 0, DelaySwitchBackMs);
+                break;
+            case 2:
+                ScheduleKeyPress(DIK_1, 0, DelaySwitchToMs);
+                ScheduleKeyPress(DIK_2, 0, DelaySwitchBackMs);
+                break;
+            case 3:
+                ScheduleKeyPress(DIK_2, 0, DelaySwitchToMs);
+                ScheduleKeyPress(DIK_3, 0, DelaySwitchBackMs);
+                break;
         }
 
-        // Process switch queue
-        if (isSwitching && switchQueue.Count > 0)
-        {
-            var next = switchQueue.Dequeue();
-
-            if (next.Code >= 0)
-            {
-                activeInjectedKeys.Add(new InjectedKey
-                {
-                    Code = next.Code,
-                    IsDown = next.IsDown,
-                    FramesLeft = next.FramesLeft
-                });
-            }
-
-            if (switchQueue.Count == 0)
-                isSwitching = false;
-        }
-
-        // Apply injected keys
-        foreach (var key in activeInjectedKeys.ToArray())
-        {
-            keys[key.Code] = key.IsDown ? (byte)0x80 : (byte)0x00;
-            key.FramesLeft--;
-            if (key.FramesLeft <= 0)
-                activeInjectedKeys.Remove(key);
-        }
-
-        leftJustReleased = false;
-        Marshal.Copy(keys, 0, dataPtr, 256);
+        isSwitching = true;
     }
 
-    private void EnqueueKey(int dikCode, bool isDown)
+    leftJustReleased = false;
+}
+
+private void ScheduleKeyPress(int code, int downDelay, int upDelay)
+{
+    long baseTime = timer.ElapsedMilliseconds;
+
+    scheduledEvents.Add(new ScheduledKeyEvent
     {
-        switchQueue.Enqueue(new InjectedKey
-        {
-            Code = dikCode,
-            IsDown = isDown,
-            FramesLeft = InjectHoldFrames
-        });
-    }
-
-    private void EnqueueDelay()
+        Code = code,
+        IsDown = true,
+        TriggerTimeMs = baseTime + downDelay,
+        Fired = false
+    });
+    scheduledEvents.Add(new ScheduledKeyEvent
     {
-        switchQueue.Enqueue(new InjectedKey
+        Code = code,
+        IsDown = false,
+        TriggerTimeMs = baseTime + downDelay + KeyDownDurationMs + upDelay,
+        Fired = false
+    });
+}
+
+private void InjectScheduledKeys(byte[] keys)
+{
+    long now = timer.ElapsedMilliseconds;
+    foreach (var evt in scheduledEvents.ToArray())
+    {
+        if (!evt.Fired && now >= evt.TriggerTimeMs)
         {
-            Code = -1, // No key
-            IsDown = false,
-            FramesLeft = InjectGapFrames
-        });
+            keys[evt.Code] = evt.IsDown ? (byte)0x80 : (byte)0x00;
+            evt.Fired = true;
+        }
     }
 
+    scheduledEvents.RemoveAll(e => e.Fired);
+    if (scheduledEvents.Count == 0)
+        isSwitching = false;
+}
+private void HandleAutoReady()
+{
+    scheduledEvents.Clear();
+    long baseTime = timer.ElapsedMilliseconds;
+
+    ScheduleKeyPress(DIK_F5, 0, 50);
+    ScheduleKeyPress(DIK_ESCAPE, 100, 50);
+
+    isSwitching = true;
+}
     [StructLayout(LayoutKind.Sequential)]
     private struct DIMOUSESTATE
     {

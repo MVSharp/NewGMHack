@@ -118,7 +118,7 @@ private int HookedGetDeviceState(IntPtr devicePtr, int size, IntPtr dataPtr, Dev
         return 0;
     }
 
-    if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAimSupport))
+    if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAimSupport) && !_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoReady))
         return original(devicePtr, size, dataPtr);
 
     int result = original(devicePtr, size, dataPtr);

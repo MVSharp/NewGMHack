@@ -17,13 +17,13 @@ public class Info
     public uint Weapon3  { get; set; }
 
     [Key(5)]
-    public short X { get;      set; }
+    public float X { get;      set; }
 
     [Key(6)]
-    public short Y { get;      set; }
+    public float Y { get;      set; }
 
     [Key(7)]
-    public short Z { get;      set; }
+    public float Z { get;      set; }
 
     [Key(8)]
     public string GundamName { get; set; } = "";
