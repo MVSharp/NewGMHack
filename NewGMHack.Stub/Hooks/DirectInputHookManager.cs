@@ -161,14 +161,18 @@ else if (deviceType == DeviceType.Mouse && size == Marshal.SizeOf<DIMOUSESTATE>(
     Marshal.StructureToPtr(state, dataPtr, false);
 }
     }
-        //if (result != 0) // dont enable this fucker , if mouse or keyboard no update , this fucker may lost
-        //{
+    else
+        {
+            return result; // make the inner buffer work after hook
+        }
+            //if (result != 0) // dont enable this fucker , if mouse or keyboard no update , this fucker may lost
+            //{
 
-        //    //_logger.ZLogInformation($"so strange , result not 0 : result:{result} | {deviceType} {size} {devicePtr}");
-        //    //return result;
-        //}
-        //_inputStateTracker.Update(deviceType, size, dataPtr);
-        //_logicProcessor.Process(deviceType, size, dataPtr);
-        return 0;
+            //    //_logger.ZLogInformation($"so strange , result not 0 : result:{result} | {deviceType} {size} {devicePtr}");
+            //    //return result;
+            //}
+            //_inputStateTracker.Update(deviceType, size, dataPtr);
+            //_logicProcessor.Process(deviceType, size, dataPtr);
+            return 0;
     }
 }
