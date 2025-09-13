@@ -12,4 +12,5 @@ public enum FeatureName
     IsIllusion,
     IsAimSupport,
     IsAutoCharge,
+    SuckStarOverChina,
 }

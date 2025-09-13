@@ -164,30 +164,38 @@ private unsafe int SendToHook(nint socket, nint buffer, int length, int flags, n
     return _originalSendTo!(socket, buffer, length, flags, to, tolen);
 }
 
-    private unsafe int RecvFromHook(nint socket, nint buffer, int length, int flags, nint from, ref int fromlen)
+private unsafe int RecvFromHook(nint socket, nint buffer, int length, int flags, nint from, ref int fromlen)
+{
+    try
     {
-        try
+        int receivedLength = _originalRecvFrom!(socket, buffer, length, flags, from, ref fromlen);
+
+        if (receivedLength > 4)
         {
-            int receivedLength = _originalRecvFrom!(socket, buffer, length, flags, from, ref fromlen);
-            // if (receivedLength ==-1)
-            // {
-            //     logger.ZLogInformation($"recvfrom returned invalid length: {receivedLength}");
-            // }
-            if (receivedLength > 4)
+            Span<byte> data = new((void*)buffer, receivedLength);
+            var modified = modifier.TryModifyRecvFromData(data); // Use correct method
+
+            if (modified != null && modified.Length <= receivedLength)
             {
-                //Span<byte> data = new Span<byte>((void*)buffer, receivedLength);
-                //var        hex  = BitConverter.ToString(data.ToArray()).Replace("-", " ");
-                //    logger.ZLogInformation($"Recv from : {hex}");
+                fixed (byte* ptr = modified)
+                {
+                    for (int i = 0; i < modified.Length; i++)
+                    {
+                        ((byte*)buffer)[i] = ptr[i]; // Write back to original buffer
+                    }
+                }
             }
-
-            return receivedLength;
-        }
-        catch
-        {
         }
 
-        return _originalRecvFrom!(socket, buffer, length, flags, from, ref fromlen);
+        return receivedLength;
     }
+    catch
+    {
+        // Optional: log or handle error
+    }
+
+    return _originalRecvFrom!(socket, buffer, length, flags, from, ref fromlen);
+}
 
     public unsafe void SendPacket(nint socket, ReadOnlySpan<byte> data, int flags = 0)
     {

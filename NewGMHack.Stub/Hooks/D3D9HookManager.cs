@@ -87,7 +87,67 @@ public class OverlayManager(SelfInformation self)
         _initialized = true;
     }
 
-    public void Draw(Device device)
+    void DrawRect(Device device, Vector2 pos, int w, int h, System.Drawing.Color color)
+    {
+        var line = new Line(device);
+        line.Width = 1.0f;
+        line.Begin();
+
+        var sharpColor = new SharpDX.ColorBGRA(color.R, color.G, color.B, color.A);
+
+        line.Draw(new[] {
+            new Vector2(pos.X - w / 2, pos.Y - h / 2),
+            new Vector2(pos.X + w / 2, pos.Y - h / 2),
+            new Vector2(pos.X + w / 2, pos.Y + h / 2),
+            new Vector2(pos.X - w / 2, pos.Y + h / 2),
+            new Vector2(pos.X - w / 2, pos.Y - h / 2)
+        }, sharpColor);
+
+        line.End();
+        line.Dispose();
+    }
+    Vector2 WorldToScreen(Vector3 worldPos, Matrix view, Matrix proj, Viewport vp)
+    {
+        Vector4 worldPos4 = new Vector4(worldPos, 1.0f);
+        Vector4 clipSpace = Vector4.Transform(worldPos4, view * proj);
+
+        if (clipSpace.W < 0.1f) return Vector2.Zero;
+
+        Vector3 ndc = new Vector3(clipSpace.X, clipSpace.Y, clipSpace.Z) / clipSpace.W;
+
+        return new Vector2(
+            (ndc.X + 1.0f) * 0.5f * vp.Width,
+            (1.0f - ndc.Y) * 0.5f * vp.Height
+        );
+    }
+
+    public void DrawEntities(Device device) 
+    {
+        // Get matrices and viewport
+        var viewMatrix= device.GetTransform(TransformState.View);
+        var projectionMatrix =device.GetTransform(TransformState.Projection);
+        Viewport viewport = device.Viewport;
+
+        var line = new Line(device)
+        {
+            Width = 1.0f
+        };
+        line.Begin();
+
+        //foreach (var worldPos in worldPositions)
+        //{
+            Vector2 screenPos = WorldToScreen(new Vector3(self.PersonInfo.X , self.PersonInfo.Y ,self.PersonInfo.Z ), viewMatrix, projectionMatrix, viewport);
+
+            if (screenPos != Vector2.Zero)
+            {
+                DrawRect(device, screenPos, 50, 50, System.Drawing.Color.Red);
+            }
+        //}
+
+        line.End();
+        line.Dispose();
+    }
+    public void DrawUI(Device device)
     {
         if (!_initialized || _font == null || device == null)
             return;
@@ -177,7 +237,8 @@ public class OverlayManager(SelfInformation self)
             var device = new Device(devicePtr); 
             try
             {
-                overlayManager.Draw(device);
+                overlayManager.DrawUI(device);
+                overlayManager.DrawEntities(device);
             }
             catch (Exception ex)
             {

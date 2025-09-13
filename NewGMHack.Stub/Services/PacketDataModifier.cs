@@ -112,15 +112,70 @@ public sealed class PacketDataModifier
 
         return new string(result);
     }
+
+    public float DecodePackedPosition(byte low, byte high)
+    {
+        ushort raw = (ushort)((high << 8) | low); // Little-endian
+        short signed = unchecked((short)raw);     // Interpret as signed
+
+        return signed / 8.0f; // 2^3 = 8 → divide to get float
+    }
+
+    public static void WriteUShortToSpan(Span<byte> target, int offset, ushort value)
+    {
+        if (target.Length < offset + 2)
+            throw new ArgumentOutOfRangeException(nameof(offset), "Not enough space in target span to write ushort.");
+
+        byte[] bytes = BitConverter.GetBytes(value); // Little-endian by default
+        target[offset] = bytes[0];
+        target[offset + 1] = bytes[1];
+    }
+    public byte[]? TryModifyRecvFromData(ReadOnlySpan<byte> data)
+    {
+
+        if (data.Length <= 6) return null;
+
+        if (data[4] == 0x6A && data[5] == 0x27)
+        {
+            if (_self.ClientConfig.Features.IsFeatureEnable(FeatureName.SuckStarOverChina))
+            {
+                var modified = data.ToArray(); // make a writable copy
+
+                //WriteUShortToSpan(modified, 19, (ushort)_self.PersonInfo.X);
+                //WriteUShortToSpan(modified, 21, (ushort)_self.PersonInfo.Y);
+                //WriteUShortToSpan(modified, 23, (ushort)_self.PersonInfo.Z);
+                for(int i = 19; i <= 24; i ++)
+                {
+                    modified[i] = TempLocationBytes[i-19];
+                }
+                return modified;
+            }
+        }
+        return null;
+    }
+    private byte[] TempLocationBytes = new byte[6];
     public byte[]? TryModifySendToData(ReadOnlySpan<byte> data)
     {
         if (data.Length <= 6) return null;
 
         if (data[4] == 0x6A && data[5] == 0x27)
         {
-            _self.PersonInfo.X = (float)BitConverter.ToUInt16(new byte[] { data[20], data[19] }, 0)  ;
-            _self.PersonInfo.Y = (float)BitConverter.ToUInt16(new byte[] { data[22], data[21] }, 0)  ;
-            _self.PersonInfo.Z = (float)BitConverter.ToUInt16(new byte[] { data[24], data[23] }, 0)  ;
+            //_self.PersonInfo.X = DecodePackedPosition(data[19], data[20] ) /10;
+            //_self.PersonInfo.Y = DecodePackedPosition(data[21], data[22])  /10;
+            //_self.PersonInfo.Z = DecodePackedPosition(data[23], data[24] ) /10;
+            ushort rawX = BitConverter.ToUInt16(new byte[] { data[20], data[19] }, 0);
+            ushort rawY = BitConverter.ToUInt16(new byte[] { data[22], data[21] }, 0);
+            ushort rawZ = BitConverter.ToUInt16(new byte[] { data[24], data[23] }, 0);
+
+            _self.PersonInfo.X = ((float)rawX / 65535.0f) * 16384.0f - 8192.0f;
+            _self.PersonInfo.Y = ((float)rawY / 65535.0f) * 16384.0f - 8192.0f;
+            _self.PersonInfo.Z = ((float)rawZ / 65535.0f) * 16384.0f - 8192.0f;
+            TempLocationBytes[0] = data[19];
+            TempLocationBytes[1] = data[20];
+            TempLocationBytes[2] = data[21];
+            TempLocationBytes[3] = data[22];
+            TempLocationBytes[4] = data[23];
+            TempLocationBytes[5] = data[24];
             //_logger.ZLogInformation(
             //    $"x: 0x{data[20]:X2} 0x{data[19]:X2} | bits: {GetBitString(new byte[] { data[20], data[19] })}\n" +
             //    $"y: 0x{data[22]:X2} 0x{data[21]:X2} | bits: {GetBitString(new byte[] { data[22], data[21] })}\n" +
@@ -132,6 +187,7 @@ public sealed class PacketDataModifier
 
             var modified = data.ToArray();
             modified[19] = modified[20] = modified[21] = modified[22] = modified[23] = modified[24] = 0xFF;
+            
             return modified;
         }
         else if (data[4] == 0x55 && data[5] == 0x27)
