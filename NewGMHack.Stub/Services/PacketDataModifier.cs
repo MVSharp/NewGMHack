@@ -178,7 +178,7 @@ public static bool ContainsLocationBytesSeq(ReadOnlySpan<byte> span)
     {
         if (data.Length <= 6) return null;
 
-        if ( (data[4] == 0x6A && data[5] == 0x27) || (data[4] == 0x6D && data[5] == 0x27 && ContainsLocationBytesSeq(data)))
+        if ( (data[4] == 0x6A && data[5] == 0x27) )
         {
             //_self.PersonInfo.X = DecodePackedPosition(data[19], data[20] ) /10;
             //_self.PersonInfo.Y = DecodePackedPosition(data[21], data[22])  /10;
