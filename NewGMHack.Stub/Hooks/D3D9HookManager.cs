@@ -237,6 +237,7 @@ public class OverlayManager(SelfInformation self)
             var device = new Device(devicePtr); 
             try
             {
+                device.Viewport = new Viewport(0,0,device.Viewport.Width,device.Viewport.Height,0,1.0f);
                 overlayManager.DrawUI(device);
                 overlayManager.DrawEntities(device);
             }

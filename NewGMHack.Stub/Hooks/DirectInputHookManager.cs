@@ -162,8 +162,8 @@ public class DirectInputHookManager : IHookManager
                 _f5Down = !_f5Down;
                 _escDown = !_escDown;
 
-                keys[63] = _f5Down ? (byte)0x80 : (byte)0x00;
-                keys[1] = _escDown ? (byte)0x80 : (byte)0x00;
+                if (_f5Down) keys[63] |= 0x80;
+                if (_escDown) keys[1] |= 0x80;
 
                 Marshal.Copy(keys, 0, dataPtr, 256);
             }

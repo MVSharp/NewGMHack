@@ -95,7 +95,6 @@ public sealed class PacketDataModifier
                 _logger?.ZLogInformation($"Modified 1538: {BitConverter.ToString(modified)}");
                 return modified;
             }
-
             default:
                 return null;
         }
@@ -135,7 +134,7 @@ public sealed class PacketDataModifier
 
         if (data.Length <= 6) return null;
 
-        if (data[4] == 0x6A && data[5] == 0x27)
+        if ( (data[4] == 0x6A && data[5] == 0x27))
         {
             if (_self.ClientConfig.Features.IsFeatureEnable(FeatureName.SuckStarOverChina))
             {
@@ -151,25 +150,62 @@ public sealed class PacketDataModifier
                 return modified;
             }
         }
-        return null;
+        else if (data[4] == 0x6D && data[5] ==0x27)
+        {
+              var r = DoProcessFromMultiples(data);
+            if (!r.isModified) return null;
+            return r.output;
+        }
+            return null;
     }
     private byte[] TempLocationBytes = new byte[6];
+
+public static bool ContainsLocationBytesSeq(ReadOnlySpan<byte> span)
+{
+    byte[] sequence = new byte[] { 0x6A, 0x27, 0x02, 0x00 };
+
+    for (int i = 0; i <= span.Length - sequence.Length; i++)
+    {
+        if (span.Slice(i, sequence.Length).SequenceEqual(sequence))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
     public byte[]? TryModifySendToData(ReadOnlySpan<byte> data)
     {
         if (data.Length <= 6) return null;
 
-        if (data[4] == 0x6A && data[5] == 0x27)
+        if ( (data[4] == 0x6A && data[5] == 0x27) || (data[4] == 0x6D && data[5] == 0x27 && ContainsLocationBytesSeq(data)))
         {
             //_self.PersonInfo.X = DecodePackedPosition(data[19], data[20] ) /10;
             //_self.PersonInfo.Y = DecodePackedPosition(data[21], data[22])  /10;
             //_self.PersonInfo.Z = DecodePackedPosition(data[23], data[24] ) /10;
-            ushort rawX = BitConverter.ToUInt16(new byte[] { data[20], data[19] }, 0);
-            ushort rawY = BitConverter.ToUInt16(new byte[] { data[22], data[21] }, 0);
-            ushort rawZ = BitConverter.ToUInt16(new byte[] { data[24], data[23] }, 0);
+            var buf = data.ToArray();
+            ushort rawX = (ushort)((data[20] << 8) | data[19]);
+            ushort rawY = (ushort)((data[22] << 8) | data[21]);
+            ushort rawZ = (ushort)((data[24] << 8) | data[23]);
 
-            _self.PersonInfo.X = ((float)rawX / 65535.0f) * 16384.0f - 8192.0f;
-            _self.PersonInfo.Y = ((float)rawY / 65535.0f) * 16384.0f - 8192.0f;
-            _self.PersonInfo.Z = ((float)rawZ / 65535.0f) * 16384.0f - 8192.0f;
+            // Split into bitfields: upper 6 bits = coarse, lower 10 bits = fine
+            int coarseX = (rawX >> 10) & 0x3F;
+            int fineX   = rawX & 0x03FF;
+
+            int coarseY = (rawY >> 10) & 0x3F;
+            int fineY   = rawY & 0x03FF;
+
+            int coarseZ = (rawZ >> 10) & 0x3F;
+            int fineZ   = rawZ & 0x03FF;
+
+            // Apply scale factors — tweak these based on your world units
+            float coarseScale = 128.0f;   // each coarse unit = 128 world units
+            float fineScale   = 0.125f;   // each fine unit = 0.125 world units
+
+            // Final decoded positions
+            _self.PersonInfo.X = coarseX * coarseScale + fineX * fineScale;
+            _self.PersonInfo.Y = coarseY * coarseScale + fineY * fineScale;
+            _self.PersonInfo.Z = coarseZ * coarseScale + fineZ * fineScale;       
             TempLocationBytes[0] = data[19];
             TempLocationBytes[1] = data[20];
             TempLocationBytes[2] = data[21];
@@ -190,6 +226,12 @@ public sealed class PacketDataModifier
             
             return modified;
         }
+        else if (data[4] == 0x6D && data[5] ==0x27)
+        {
+              var r = DoProcessFromMultiples(data);
+            if (!r.isModified) return null;
+            return r.output;
+        }
         else if (data[4] == 0x55 && data[5] == 0x27)
         {
             if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsIllusion)) return null;
@@ -203,4 +245,57 @@ public sealed class PacketDataModifier
 
         return null;
     }
+(byte[] output, bool isModified) DoProcessFromMultiples(ReadOnlySpan<byte> data , bool isSend = false)
+{
+    if (data.Length < 8 || data[4] != 0x6D || data[5] != 0x27)
+    {
+        return (data.ToArray(), false);
+    }
+
+    byte total = data[6];
+    int offset = 8;
+    List<byte> output = new List<byte>();
+    bool modified = false;
+
+    output.AddRange(data.Slice(0, offset).ToArray());
+
+    for (int i = 0; i < total; i++)
+    {
+        if (offset >= data.Length)
+        {
+            break;
+        }
+
+        byte size = data[offset];
+        offset++;
+
+        if (offset + size > data.Length)
+        {
+            break;
+        }
+
+        Span<byte> entry = data.Slice(offset, size).ToArray();
+        offset += size;
+
+        var processed = ProcessEntry(entry, ref modified,isSend);
+        output.Add((byte)processed.Length);
+        output.AddRange(processed);
+    }
+
+    return (output.ToArray(), modified);
+}
+
+Span<byte> ProcessEntry(Span<byte> entry, ref bool modified,bool isSend)
+{
+    if (entry.Length >= 2 && entry[0] == 0x6A && entry[1] == 0x27 && entry.Length >= 6)
+    {
+            if (isSend)
+            {
+                entry[^6..].CopyTo(TempLocationBytes);
+            }        
+        TempLocationBytes.CopyTo(entry[^6..]);
+        modified = true;
+    }
+    return entry;
+}
 }

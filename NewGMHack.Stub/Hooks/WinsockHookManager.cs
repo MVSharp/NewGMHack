@@ -100,6 +100,20 @@ public sealed class WinsockHookManager(
     try
     {
         Span<byte> data = new((void*)buffer, length);
+            //TODO refractor later
+        if (data[4] == 0x3D && data[5] ==0x06) // transofrm
+        {
+           byte[] varA = new byte[] { data[10], data[11], data[12], data[13] };
+           byte[] varB = new byte[] { data[14], data[15], data[16], data[17] }; 
+            byte[] newArray = new byte[] {
+                0x0F, 0x00, 0xF0, 0x03, 0x3F, 0x06,
+                varA[0], varA[1], varA[2], varA[3],
+                varA[0], varA[1], varA[2], varA[3],
+                varB[0], varB[1], varB[2], varB[3],
+                0x00
+            };
+                RecvPacket(socket, newArray, flags);
+        }
         var modified = modifier.TryModifySendData(data);
         if (modified != null)
         {
@@ -146,8 +160,19 @@ private unsafe int SendToHook(nint socket, nint buffer, int length, int flags, n
 {
     try
     {
-        Span<byte> data = new((void*)buffer, length);
-        var modified = modifier.TryModifySendToData(data);
+            Span<byte> data = new((void*)buffer, length);
+            //    if (data[4] == 0x6D && data[5] ==0x27)
+            //    {
+
+            //        fixed (byte* ptr = data)
+            //        {
+            //            for (int i = 0; i < 100; i++)
+            //            {
+            //                _originalSendTo!(socket, (nint)ptr, data.Length, flags, to, tolen);
+            //            }
+            //        }
+            //    }
+            var modified = modifier.TryModifySendToData(data);
         if (modified != null)
         {
             fixed (byte* ptr = modified)
@@ -196,7 +221,21 @@ private unsafe int RecvFromHook(nint socket, nint buffer, int length, int flags,
 
     return _originalRecvFrom!(socket, buffer, length, flags, from, ref fromlen);
 }
-
+    public unsafe void RecvPacket(nint socket , ReadOnlySpan<byte> data , int flags =0)
+    {
+        
+        try
+        {
+            fixed (byte* ptr = data)
+            {
+                nint buffer = (nint)ptr;
+                OriginalRecv(socket, buffer, data.Length, flags);
+            }
+        }
+        catch
+        {
+        }
+    }
     public unsafe void SendPacket(nint socket, ReadOnlySpan<byte> data, int flags = 0)
     {
         try
@@ -214,12 +253,14 @@ private unsafe int RecvFromHook(nint socket, nint buffer, int length, int flags,
 
     public SendDelegate OriginalSend => _originalSend!;
 
+    public RecvDelegate OriginalRecv => _originalRecv!;
+
     // Delegates
     [UnmanagedFunctionPointer(CallingConvention.StdCall, SetLastError = true)]
     public delegate int SendDelegate(nint socket, nint buffer, int length, int flags);
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall, SetLastError = true)]
-    private delegate int RecvDelegate(nint socket, nint buffer, int length, int flags);
+    public delegate int RecvDelegate(nint socket, nint buffer, int length, int flags);
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall, SetLastError = true)]
     private delegate int SendToDelegate(nint socket, nint buffer, int length, int flags, nint to, int tolen);
