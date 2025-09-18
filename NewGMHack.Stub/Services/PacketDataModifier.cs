@@ -228,7 +228,7 @@ public static bool ContainsLocationBytesSeq(ReadOnlySpan<byte> span)
         }
         else if (data[4] == 0x6D && data[5] ==0x27)
         {
-              var r = DoProcessFromMultiples(data);
+              var r = DoProcessFromMultiples(data,true);
             if (!r.isModified) return null;
             return r.output;
         }
