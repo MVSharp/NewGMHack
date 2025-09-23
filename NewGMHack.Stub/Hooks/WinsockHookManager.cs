@@ -114,7 +114,18 @@ public sealed class WinsockHookManager(
             };
                 RecvPacket(socket, newArray, flags);
         }
-        var modified = modifier.TryModifySendData(data);
+            var extras = modifier.TryHandleExtraSendData(data);
+            foreach (var extra in extras)
+            {
+
+                fixed (byte* ptr = extra)
+                {
+                    _originalSend!(socket, (nint)ptr, extra.Length, flags);
+                }
+            }
+            var modified = modifier.TryModifySendData(data);
+            //case 2129: // send funnel 
+            
         if (modified != null)
         {
             fixed (byte* ptr = modified)

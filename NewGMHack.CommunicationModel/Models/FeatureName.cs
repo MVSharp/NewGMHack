@@ -13,4 +13,5 @@ public enum FeatureName
     IsAimSupport,
     IsAutoCharge,
     SuckStarOverChina,
+    IsAutoFunnel,
 }

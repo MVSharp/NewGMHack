@@ -128,6 +128,7 @@ public class DirectInputHookManager : IHookManager
     private int HookedGetDeviceState(IntPtr devicePtr, int size, IntPtr dataPtr,
                                      DeviceType deviceType)
     {
+        
         var original =
             deviceType switch
             {
@@ -143,7 +144,7 @@ public class DirectInputHookManager : IHookManager
             _logicProcessor.ZeroMemory(dataPtr, size);
             return 0;
         }
-
+        
         int result = original(devicePtr, size, dataPtr);
         if (result != 0)
         {

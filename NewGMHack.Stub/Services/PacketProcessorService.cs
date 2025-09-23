@@ -12,6 +12,7 @@ using NewGMHack.Stub.MemoryScanner;
 using NewGMHack.Stub.PacketStructs;
 using NewGMHack.Stub.PacketStructs.Recv;
 using Reloaded.Memory.Extensions;
+using SharpDX.Direct3D9;
 using ZLinq;
 using ZLogger;
 
@@ -190,11 +191,27 @@ public class PacketProcessorService : BackgroundService
             case 2080:
                 // No-op
                 break;
+            //case 2132 : //funnel recv
+            //    _selfInformation.ClientConfig.IsInGame = true;
+            //    ReadAndSendFunnel(methodPacket.MethodBody.AsMemory());
+            //    break;
             default:
                 break;
         }
     }
-
+    //private void ReadAndSendFunnel(ReadOnlyMemory<byte> buffer)
+    //{
+    //    var funnelRecv = buffer.Span.ReadStruct<FunnelPacketRecv>();
+    //    if (funnelRecv.FromId != _selfInformation.PersonInfo.PersonId) return;
+    //    SendFunnel2129 sendFunnel2129 = new SendFunnel2129();
+    //sendFunnel2129.Version = 20 ;
+    //sendFunnel2129.Count = (byte)(funnelRecv.Count + 1);
+    //sendFunnel2129.Method = 2129 ;
+    //sendFunnel2129.PlayerId = funnelRecv.PlayerId;
+    //sendFunnel2129.Split = funnelRecv.Split;
+    //sendFunnel2129.WeaponId = funnelRecv.WeaponId;
+    //sendFunnel2129.TargetId = sendFunnel.TargetId;
+    //}
     private void ReadDeads(ReadOnlyMemory<byte> buffer)
     {
          var deadStruct = buffer.Span.ReadStruct<DeadStruct>();

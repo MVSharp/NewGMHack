@@ -3,6 +3,7 @@ using System.Collections;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
+using NewGMHack.CommunicationModel.PacketStructs.Send;
 using NewGMHack.Stub;
 using NewGMHack.Stub.PacketStructs;
 using NewGMHack.Stub.PacketStructs.Send;
@@ -23,16 +24,64 @@ public sealed class PacketDataModifier
         _splitter = splitter;
         _logger = logger;
     }
+    public List<byte[]> TryHandleExtraSendData(ReadOnlySpan<byte> data)
+    {
+        try
+        {
 
+            if (data.Length >= 6 && data[4] == 0x51 && data[5] == 0x08)
+
+            {
+                var sendFunnel = data.ReadStruct<SendFunnel2129>();
+
+                _logger.ZLogInformation($" raw funnel struct:{sendFunnel.PlayerId} {sendFunnel.TargetId} {sendFunnel.Count}");
+                if (_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoFunnel) && _self.PersonInfo.PersonId == sendFunnel.PlayerId)
+                {
+                    if (sendFunnel.Count >= 9) return [];
+                    List<byte[]> result = new();
+                    for (int i = sendFunnel.Count + 1; i <= 8; i++)
+                    {
+                        unsafe
+                        {
+                            SendFunnel2129 structs = new();
+                            structs.Version = sendFunnel.Version;
+                            structs.Count = (byte)i;
+                            structs.Method = sendFunnel.Method;
+                            structs.PlayerId = sendFunnel.PlayerId;
+                            structs.Split = sendFunnel.Split;
+                            structs.WeaponId = sendFunnel.WeaponId;
+                            structs.TargetId = sendFunnel.TargetId;
+
+                            // Copy Unknown manually
+                            Span<byte> source = new Span<byte>(sendFunnel.Unknown, 4);
+                            Span<byte> destination = new Span<byte>(structs.Unknown, 4);
+                            source.CopyTo(destination);
+                            var b = structs.ToByteArray();
+                            _logger.ZLogInformation($"funnel:{Convert.ToHexString(b)}");
+                            result.Add(b);
+                        }
+
+
+                    }
+                    return result;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogInformation($"{ex.Message} {ex.StackTrace}");
+        }
+        return [];
+    }
     public byte[]? TryModifySendData(ReadOnlySpan<byte> data)
     {
         if (data.Length <= 6) return null;
 
-        if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) &&
-            !_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
-        {
-            return null;
-        }
+        //if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) &&
+        //    !_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+        //{
+        //    return null;
+        //}
 
         var result = _splitter.Split(data).AsValueEnumerable().FirstOrDefault();
         if (result == null) return null;
@@ -44,7 +93,13 @@ public sealed class PacketDataModifier
         {
             case 1335:
             {
-                var attack = raw.ReadStruct<Attack1335>();
+                    if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) &&
+                        !_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+                    {
+                        return null;
+                    }
+
+                    var attack = raw.ReadStruct<Attack1335>();
                 var targets = raw.SliceAfter<Attack1335>().CastTo<TargetData>();
                 if (attack.PlayerId != _self.PersonInfo.PersonId) return null;
 
@@ -64,7 +119,14 @@ public sealed class PacketDataModifier
 
             case 1486:
             {
-                var attack = raw.ReadStruct<Attack1486>();
+
+                    if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) &&
+                        !_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+                    {
+                        return null;
+                    }
+
+                    var attack = raw.ReadStruct<Attack1486>();
                 var targets = raw.SliceAfter<Attack1486>().CastTo<TargetData>();
                 if (attack.PlayerId != _self.PersonInfo.PersonId) return null;
 
@@ -84,7 +146,14 @@ public sealed class PacketDataModifier
 
             case 1538:
             {
-                var buf = result.MethodBody.ToArray();
+
+                    if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) &&
+                        !_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+                    {
+                        return null;
+                    }
+
+                    var buf = result.MethodBody.ToArray();
                 buf[46] = 0xFF;
                 buf[47] = 0xFF;
 
@@ -150,11 +219,15 @@ public sealed class PacketDataModifier
                 return modified;
             }
         }
-        else if (data[4] == 0x6D && data[5] ==0x27)
+        else if (data[4] == 0x6D && data[5] ==0x27 )
         {
+            //if(_self.ClientConfig.Features.IsFeatureEnable(FeatureName.SuckStarOverChina))
+            //{
+
               var r = DoProcessFromMultiples(data);
             if (!r.isModified) return null;
             return r.output;
+            //}
         }
             return null;
     }
@@ -228,6 +301,7 @@ public static bool ContainsLocationBytesSeq(ReadOnlySpan<byte> span)
         }
         else if (data[4] == 0x6D && data[5] ==0x27)
         {
+
               var r = DoProcessFromMultiples(data,true);
             if (!r.isModified) return null;
             return r.output;
@@ -293,6 +367,9 @@ Span<byte> ProcessEntry(Span<byte> entry, ref bool modified,bool isSend)
             {
                 entry[^6..].CopyTo(TempLocationBytes);
             }        
+
+            if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsIllusion)) return null;
+            if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.SuckStarOverChina)) return null;
         TempLocationBytes.CopyTo(entry[^6..]);
         modified = true;
     }
