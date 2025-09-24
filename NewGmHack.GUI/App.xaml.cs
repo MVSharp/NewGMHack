@@ -29,6 +29,10 @@ namespace NewGmHack.GUI
                                                        services.AddSingleton<PersonInfoUserControlsViewModel>();
                                                        services.AddSingleton<IHealthCheckHandler>(sp => sp
                                                                                                      .GetRequiredService<MainViewModel>());
+                                                       services.AddSingleton<FeaturesView>();
+                                                       services.AddSingleton<FeaturesViewModel>();
+                                                       services.AddSingleton<IFeatureHandler>(sp => sp
+                                                                                                     .GetRequiredService<FeaturesViewModel>());
                                                        services.AddSingleton<IPersonInfoHandler>(sp => sp.GetRequiredService<PersonInfoUserControlsViewModel>());
                                                        //i do this for non blocking
                                                        services.AddSingleton< IHostedService,HealthCheckServices>();

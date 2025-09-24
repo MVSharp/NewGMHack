@@ -20,25 +20,24 @@ namespace NewGmHack.GUI.ViewModels
     public partial class MainViewModel : ObservableObject, IHealthCheckHandler
     {
         [ObservableProperty] private bool _isConnected = false;
-        private                      ObservableList<GMHackFeatures> featuresList;
-        [ObservableProperty] private NotifyCollectionChangedSynchronizedViewList<GMHackFeatures> _features;
         [ObservableProperty] private bool _isRandomLocation = false;
         ObservableList<TabItem> tabslist;
         [ObservableProperty] private NotifyCollectionChangedSynchronizedViewList<TabItem> _tabs;
         private readonly             RemoteHandler _handler;
         private readonly             IDialogCoordinator _dialogCoordinator;
-
+        private readonly IFeatureHandler _featureHandler;
         public MainViewModel( RemoteHandler master,
+                              IFeatureHandler featureHandler,
                              IDialogCoordinator              dialogCoordinator)
         {
-            featuresList = [];
-            _features = featuresList.ToNotifyCollectionChanged(SynchronizationContextCollectionEventDispatcher.Current);
             tabslist = [];
             Tabs = tabslist.ToNotifyCollectionChanged(SynchronizationContextCollectionEventDispatcher.Current);
             AddTab<PersonInfoView, PersonInfoUserControlsViewModel>("Person Info");
             AddTab<RoommatesView, RoommatesViewModel>("RoommatesView");
+            AddTab<FeaturesView, FeaturesViewModel>("Features");
             _handler           = master;
             _dialogCoordinator = dialogCoordinator;
+            _featureHandler = featureHandler;
         }
 
         [RelayCommand]
@@ -82,29 +81,8 @@ namespace NewGmHack.GUI.ViewModels
                 {
                     await Task.Delay(1000);
                 }
-
-                featuresList.Clear();
-
-                var features = await _handler.GetFeatures();
-                featuresList.AddRange(features.AsValueEnumerable().Select(c => new GMHackFeatures(c.Name, c.IsEnabled,
-                                                                              async (gmHackFeatures) =>
-                                                                              {
-                                                                                  if (featuresList
-                                                                                  .Contains(gmHackFeatures))
-                                                                                  {
-                                                                                      await _handler
-                                                                                         .SetFeatureEnable(new
-                                                                                              FeatureChangeRequests
-                                                                                              {
-                                                                                                  FeatureName =
-                                                                                                      gmHackFeatures
-                                                                                                         .Name,
-                                                                                                  IsEnabled =
-                                                                                                      gmHackFeatures
-                                                                                                         .IsEnabled
-                                                                                              });
-                                                                                  }
-                                                                              })).ToArray());
+                await _featureHandler.Refresh();
+                //await _featureHandler.BeginFetch().ConfigureAwait(false);
                 await _dialogCoordinator.ShowMessageAsync(this, "Injected", "Injected");
             }
 
@@ -120,7 +98,7 @@ namespace NewGmHack.GUI.ViewModels
         {
             if (!isConnected)
             {
-                featuresList.Clear();
+                _featureHandler.Clear();
             }
 
             IsConnected = isConnected;

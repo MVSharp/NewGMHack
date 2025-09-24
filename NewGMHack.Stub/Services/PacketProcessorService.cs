@@ -133,7 +133,12 @@ public class PacketProcessorService : BackgroundService
                 ChargeGundam(socket, slot);
 
                 break;
+            case 1259: // get room list
 
+                AssignPersonId(reader);
+
+                _selfInformation.ClientConfig.IsInGame = false;
+                break;
             case 1244:
                 AssignPersonId(reader);
 
