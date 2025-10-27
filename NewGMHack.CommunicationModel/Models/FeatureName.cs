@@ -14,4 +14,5 @@ public enum FeatureName
     IsAutoCharge,
     SuckStarOverChina,
     IsAutoFunnel,
+    CollectGift,
 }

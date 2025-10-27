@@ -264,7 +264,7 @@ logger.ZLogInformation($"scan range : 0x{(ulong)minAddress:X} - 0x{(ulong)maxAdd
             public Task GetAddress(uint id)
             {
                 var b = 1;
-                var proc = Process.GetProcessesByName("GOnline");
+                var proc = Process.GetProcessesByName("xx");
                 if (!proc.Any()) return Task.CompletedTask;
                 var gid = proc[0];
 

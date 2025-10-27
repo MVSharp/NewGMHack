@@ -49,6 +49,11 @@
 		<PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
 		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.0" />
 		<PackageReference Include="ZLogger" Version="2.5.10" />
+
+	  <PackageReference Include="Squalr.Engine" Version="2.3.0.1" />
+	  <PackageReference Include="Squalr.Engine.Architecture" Version="2.3.0.1" />
+	  <PackageReference Include="Squalr.Engine.Memory" Version="2.3.0.1" />
+	  <PackageReference Include="Squalr.Engine.Scanning" Version="2.3.0.1" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -25,7 +25,7 @@ public sealed class WinsockHookManager(
     private RecvDelegate?     _originalRecv;
     private SendToDelegate?   _originalSendTo;
     private RecvFromDelegate? _originalRecvFrom;
-
+    private IntPtr _lastSocket;
     private INativeHook?      _sendHook;
     private INativeHook?      _recvHook;
     private INativeHook?      _sendToHook;
@@ -97,6 +97,7 @@ public sealed class WinsockHookManager(
 
    private unsafe int SendHook(nint socket, nint buffer, int length, int flags)
 {
+        _lastSocket = socket;
     try
     {
         Span<byte> data = new((void*)buffer, length);
@@ -115,13 +116,18 @@ public sealed class WinsockHookManager(
                 RecvPacket(socket, newArray, flags);
         }
             var extras = modifier.TryHandleExtraSendData(data);
-            foreach (var extra in extras)
-            {
+            if(extras.Count > 0)
 
-                fixed (byte* ptr = extra)
+            {
+                foreach (var extra in extras)
                 {
-                    _originalSend!(socket, (nint)ptr, extra.Length, flags);
+
+                    fixed (byte* ptr = extra)
+                    {
+                        _originalSend!(socket, (nint)ptr, extra.Length, flags);
+                    }
                 }
+                return length;
             }
             var modified = modifier.TryModifySendData(data);
             //case 2129: // send funnel 
@@ -251,6 +257,10 @@ private unsafe int RecvFromHook(nint socket, nint buffer, int length, int flags,
     {
         try
         {
+            if(socket == 0)
+            {
+                socket = _lastSocket;
+            }
             fixed (byte* ptr = data)
             {
                 nint buffer = (nint)ptr;

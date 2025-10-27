@@ -11,7 +11,10 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\InjectDotnet\InjectDotnet.csproj" />
+	  <PackageReference Include="Squalr.Engine" Version="2.3.0.1" />
+	  <PackageReference Include="Squalr.Engine.Architecture" Version="2.3.0.1" />
+	  <PackageReference Include="Squalr.Engine.Memory" Version="2.3.0.1" />
+	  <PackageReference Include="Squalr.Engine.Scanning" Version="2.3.0.1" />
 	</ItemGroup>
 
 </Project>

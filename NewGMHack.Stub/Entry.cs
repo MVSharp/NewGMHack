@@ -86,6 +86,7 @@ namespace NewGMHack.Stub
                                        //services.AddSingleton<FullAoBScanner>();
                                        services.AddTransient<IBuffSplitter, BuffSplitter>();
                                        services.AddSingleton<IHostedService, MainHookService>();
+                                       services.AddSingleton<IHostedService, EntityScannerService>();
                                        //services.AddHostedService<MainHookService>();
                                        services.AddSingleton(Channel.CreateUnbounded<PacketContext>(
                                                               new UnboundedChannelOptions
@@ -111,10 +112,14 @@ namespace NewGMHack.Stub
                                                                     handler.HandleAsync(msgId, payload.AsMemory()));
                                        });
                                        services.AddSingleton<DirectInputLogicProcessor>();
+var packetChannel = Channel.CreateUnbounded<ReadOnlyMemory<byte>>();
 
+services.AddSingleton(packetChannel);
+services.AddHostedService<PacketDispatcher>();
                                        services.AddSingleton<InputStateTracker>();
                                        //services.AddSingleton<WinsockHookManager>(); // this is no problem , only once
                                        //services.AddSingleton<WinsockHookManager>(); // this is no problem , only once
+                                       services.AddSingleton<IHookManager, ZoaGraphicsHookManager>();
                                        services.AddSingleton<IHookManager ,D3D9HookManager>();
                                        services.AddSingleton<IHookManager ,DirectInputHookManager>();
                                        services.AddSingleton<IHookManager,WinsockHookManager>();

@@ -30,7 +30,8 @@ public class ClientConfig
         new HackFeatures() { Name = FeatureName.SuckStarOverChina, IsEnabled     = true },
         new HackFeatures() { Name = FeatureName.IsAimSupport, IsEnabled     = false },
 
-        new HackFeatures() { Name = FeatureName.IsAutoFunnel, IsEnabled     = false },
+        new HackFeatures() { Name = FeatureName.IsAutoFunnel, IsEnabled     = true },
+        new HackFeatures() { Name = FeatureName.CollectGift, IsEnabled     = false },
     };
     public bool IsInGame { get; set; } = false;
 }

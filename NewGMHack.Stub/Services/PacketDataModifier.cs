@@ -24,6 +24,22 @@ public sealed class PacketDataModifier
         _splitter = splitter;
         _logger = logger;
     }
+
+public static float DecodePosition(byte high, byte low)
+{
+  ushort raw = (ushort)((high << 8) | low);
+
+    // Mask to extract lower 14 bits
+    short value = (short)(raw & 0x3FFF);
+
+    // If sign bit (bit 13) is set, convert to negative
+    if ((value & 0x2000) != 0)
+    {
+        value -= 0x4000;
+    }
+
+    return value;
+ }
     public List<byte[]> TryHandleExtraSendData(ReadOnlySpan<byte> data)
     {
         try
@@ -39,23 +55,25 @@ public sealed class PacketDataModifier
                 {
                     if (sendFunnel.Count >= 9) return [];
                     List<byte[]> result = new();
-                    for (int i = sendFunnel.Count + 1; i <= 8; i++)
+                    //for (int i = sendFunnel.Count + 1; i <= 8; i++)
+
+                    for (int i = 0; i <= 9; i++)
                     {
                         unsafe
                         {
                             SendFunnel2129 structs = new();
                             structs.Version = sendFunnel.Version;
-                            structs.Count = (byte)i;
-                            structs.Method = sendFunnel.Method;
-                            structs.PlayerId = sendFunnel.PlayerId;
                             structs.Split = sendFunnel.Split;
+                            structs.Method = sendFunnel.Method;
+                            structs.Count = (byte)i;
+                            structs.PlayerId = sendFunnel.PlayerId;
                             structs.WeaponId = sendFunnel.WeaponId;
                             structs.TargetId = sendFunnel.TargetId;
 
                             // Copy Unknown manually
-                            Span<byte> source = new Span<byte>(sendFunnel.Unknown, 4);
-                            Span<byte> destination = new Span<byte>(structs.Unknown, 4);
-                            source.CopyTo(destination);
+                            //Span<byte> source = new Span<byte>(sendFunnel.Unknown, 4);
+                            //Span<byte> destination = new Span<byte>(structs.Unknown, 4);
+                            //source.CopyTo(destination);
                             var b = structs.ToByteArray();
                             _logger.ZLogInformation($"funnel:{Convert.ToHexString(b)}");
                             result.Add(b);
@@ -256,29 +274,32 @@ public static bool ContainsLocationBytesSeq(ReadOnlySpan<byte> span)
             //_self.PersonInfo.X = DecodePackedPosition(data[19], data[20] ) /10;
             //_self.PersonInfo.Y = DecodePackedPosition(data[21], data[22])  /10;
             //_self.PersonInfo.Z = DecodePackedPosition(data[23], data[24] ) /10;
-            var buf = data.ToArray();
-            ushort rawX = (ushort)((data[20] << 8) | data[19]);
-            ushort rawY = (ushort)((data[22] << 8) | data[21]);
-            ushort rawZ = (ushort)((data[24] << 8) | data[23]);
+            //var buf = data.ToArray();
+            //ushort rawX = (ushort)((data[20] << 8) | data[19]);
+            //ushort rawY = (ushort)((data[22] << 8) | data[21]);
+            //ushort rawZ = (ushort)((data[24] << 8) | data[23]);
 
-            // Split into bitfields: upper 6 bits = coarse, lower 10 bits = fine
-            int coarseX = (rawX >> 10) & 0x3F;
-            int fineX   = rawX & 0x03FF;
+            //// Split into bitfields: upper 6 bits = coarse, lower 10 bits = fine
+            //int coarseX = (rawX >> 10) & 0x3F;
+            //int fineX = rawX & 0x03FF;
 
-            int coarseY = (rawY >> 10) & 0x3F;
-            int fineY   = rawY & 0x03FF;
+            //int coarseY = (rawY >> 10) & 0x3F;
+            //int fineY = rawY & 0x03FF;
 
-            int coarseZ = (rawZ >> 10) & 0x3F;
-            int fineZ   = rawZ & 0x03FF;
+            //int coarseZ = (rawZ >> 10) & 0x3F;
+            //int fineZ = rawZ & 0x03FF;
 
-            // Apply scale factors — tweak these based on your world units
-            float coarseScale = 128.0f;   // each coarse unit = 128 world units
-            float fineScale   = 0.125f;   // each fine unit = 0.125 world units
+            //// Apply scale factors — tweak these based on your world units
+            //float coarseScale = 128.0f;   // each coarse unit = 128 world units
+            //float fineScale = 0.125f;   // each fine unit = 0.125 world units
 
-            // Final decoded positions
-            _self.PersonInfo.X = coarseX * coarseScale + fineX * fineScale;
-            _self.PersonInfo.Y = coarseY * coarseScale + fineY * fineScale;
-            _self.PersonInfo.Z = coarseZ * coarseScale + fineZ * fineScale;       
+            //// Final decoded positions
+            //_self.PersonInfo.X = coarseX * coarseScale + fineX * fineScale;
+            //_self.PersonInfo.Y = coarseY * coarseScale + fineY * fineScale;
+            //_self.PersonInfo.Z = coarseZ * coarseScale + fineZ * fineScale;
+            //_self.PersonInfo.X = BitConverter.ToInt16(new byte[] { data[20], data[19] }) * 0.49f;
+            //_self.PersonInfo.Y = BitConverter.ToInt16(new byte[] { data[22], data[21] })* -0.065f;
+            //_self.PersonInfo.Z = BitConverter.ToInt16(new byte[] { data[24], data[23] })* -0.567f; 
             TempLocationBytes[0] = data[19];
             TempLocationBytes[1] = data[20];
             TempLocationBytes[2] = data[21];

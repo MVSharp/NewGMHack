@@ -196,6 +196,9 @@ public class PacketProcessorService : BackgroundService
             case 2080:
                 // No-op
                 break;
+            case 2070: // gift recv 16 08
+                await ReadGifts(socket,methodPacket.MethodBody.AsMemory());
+                break;
             //case 2132 : //funnel recv
             //    _selfInformation.ClientConfig.IsInGame = true;
             //    ReadAndSendFunnel(methodPacket.MethodBody.AsMemory());
@@ -217,6 +220,41 @@ public class PacketProcessorService : BackgroundService
     //sendFunnel2129.WeaponId = funnelRecv.WeaponId;
     //sendFunnel2129.TargetId = sendFunnel.TargetId;
     //}
+
+public async Task ReadGifts(IntPtr socket,ReadOnlyMemory<byte> buffer)
+{
+_logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select(b => b.ToString("X2")))}");
+       if (!_selfInformation.ClientConfig.Features.GetFeature(FeatureName.CollectGift).IsEnabled) return;
+    var personId = BitConverter.ToUInt32(buffer.Span.Slice(0, 4)); // EB 02 00 00 → 0x000002EB
+    _selfInformation.PersonInfo.PersonId = personId;
+
+    var giftStructs = buffer.Slice(4).Span.CastTo<GiftStruct>().ToArray();
+
+        _logger.ZLogInformation($"gifts count : {giftStructs.Length}");
+    foreach (var gift in giftStructs.Where(x=>x.ItemType != 301 ))
+    {
+
+        //_logger.ZLogInformation($"accepting gift:{gift.GiftId}");
+            AcceptGiftPacket acceptGiftPacket = new AcceptGiftPacket()
+            {
+                Version = 14 ,
+                Splitter = 1008,
+                Method = 2071,
+                GiftId = gift.GiftId
+            };
+
+            AcceptGiftPacket acceptGiftPacket2 = new AcceptGiftPacket()
+            {
+                Version = 14 ,
+                Splitter = 1008,
+                Method = 2074,
+                GiftId = gift.GiftId
+            };
+             _winsockHookManager.SendPacket(socket,acceptGiftPacket.ToByteArray().AsSpan());
+             _winsockHookManager.SendPacket(socket,acceptGiftPacket2.ToByteArray().AsSpan());
+
+    }
+}
     private void ReadDeads(ReadOnlyMemory<byte> buffer)
     {
          var deadStruct = buffer.Span.ReadStruct<DeadStruct>();

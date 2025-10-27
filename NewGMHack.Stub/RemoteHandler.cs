@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using MessagePack;
 using MessagePack.Resolvers;
@@ -11,12 +12,13 @@ using NewGMHack.CommunicationModel.IPC;
 using NewGMHack.CommunicationModel.IPC.Requests;
 using NewGMHack.CommunicationModel.IPC.Responses;
 using NewGMHack.CommunicationModel.Models;
+using NewGMHack.Stub.Hooks;
 using ZLinq;
 using ZLogger;
 
 namespace NewGMHack.Stub
 {
-    internal class RemoteHandler(SelfInformation self, ILogger<RemoteHandler> logger)
+    internal class RemoteHandler(SelfInformation self, ILogger<RemoteHandler> logger , Channel<ReadOnlyMemory<byte>> packetChannel)
     {
         private readonly RecyclableMemoryStreamManager recyclableMemoryStreamManager = new();
 
@@ -91,14 +93,28 @@ namespace NewGMHack.Stub
                         {
                             var feature = self.ClientConfig.Features.GetFeature(data.FeatureName);
 
-                            logger.LogInformation($"find featres : {data.FeatureName} value:{data.IsEnabled}");
+                            logger.ZLogInformation($"find featres : {data.FeatureName} value:{data.IsEnabled}");
                             if (feature == null) continue;
-                            logger.LogInformation($"set featres : {data.FeatureName} value:{data.IsEnabled}");
+                            logger.ZLogInformation($"set featres : {data.FeatureName} value:{data.IsEnabled}");
                             var original = feature.IsEnabled;
                             feature.IsEnabled = data.IsEnabled;
+                                                response.Success = true;
+                                if (data.FeatureName == FeatureName.CollectGift && data.IsEnabled)
+                                {
+                                    logger.ZLogInformation($"sending gift");
+                                    for (byte page = 1; page <= 255; page++)
+                                    {
+                                        var packet = new byte[]
+                                        {
+                                0x07, 0x00, 0xF0, 0x03, 0x14, 0x08,
+                                0x00, 0x00, 0x00, 0x00, page
+                                        };
 
-                            response.Success = true;
-                            response.Result = new ConfigPropertyIPCResponse
+                                        await packetChannel.Writer.WriteAsync(packet);
+                                        await Task.Delay(100);
+                                    }
+                                }
+                                response.Result = new ConfigPropertyIPCResponse
                             {
                                 Original = original,
                                 New      = data.IsEnabled
