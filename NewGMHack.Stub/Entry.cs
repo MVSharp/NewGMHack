@@ -119,7 +119,7 @@ services.AddHostedService<PacketDispatcher>();
                                        services.AddSingleton<InputStateTracker>();
                                        //services.AddSingleton<WinsockHookManager>(); // this is no problem , only once
                                        //services.AddSingleton<WinsockHookManager>(); // this is no problem , only once
-                                       services.AddSingleton<IHookManager, ZoaGraphicsHookManager>();
+                                       //services.AddSingleton<IHookManager, ZoaGraphicsHookManager>();
                                        services.AddSingleton<IHookManager ,D3D9HookManager>();
                                        services.AddSingleton<IHookManager ,DirectInputHookManager>();
                                        services.AddSingleton<IHookManager,WinsockHookManager>();

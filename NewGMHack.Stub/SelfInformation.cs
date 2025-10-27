@@ -23,7 +23,7 @@ namespace NewGMHack.Stub
         public ClientConfig            ClientConfig { get; set; } = new();
         public ConcurrentBag<Roommate> Roommates    { get; set; } = [];
         public CMap<uint, int>         BombHistory  { get; set; } = new CMap<uint, int>(12);
-        public List<Entity> Targets { get; set; } = new List<Entity>();
+        public List<Entity> Targets { get; set; } = Enumerable.Repeat( new Entity(),12).ToList();
         public SelfInformation()
         {
         }
