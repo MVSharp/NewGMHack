@@ -23,7 +23,7 @@ namespace EntityDumper
         {
             // Subscribe to Squalr logs for error output
 
-            string ModuleName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ=="));
+            string ModuleName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ==")) + ".exe";
             Logger.Subscribe(new EngineLogEvents());
 
             // Attach to process
@@ -38,6 +38,28 @@ namespace EntityDumper
 
             // Get module base address
             uint moduleBase = GetModuleBaseAddress(ModuleName);
+
+
+            uint managerAddr = checked(moduleBase + (uint)0x5C1FE4);
+            if (!TryReadUInt(managerAddr, out uint manager) || manager == 0) 
+            {
+                Debugger.Break();
+            }
+
+Console.WriteLine($"managerAddr = 0x{managerAddr:X8}, manager = 0x{manager:X8}");
+if (!TryReadUInt(managerAddr + 0x08, out uint entityHandle) || entityHandle == 0)
+            {
+                Debugger.Break();
+            }
+Console.WriteLine($"rawHandle = 0x{entityHandle:X8}");
+if (!TryReadUInt(entityHandle + 0x70, out uint entityStruct) || entityStruct == 0)
+            {
+                Debugger.Break();
+            }
+            if (!TryReadInt(entityStruct + 0x34, out int myhp) || myhp < 0 || myhp > 30000)
+            {
+                Debugger.Break();
+            }
             if (moduleBase == 0)
             {
                 Console.WriteLine($"Error: Could not find module {ModuleName}");
@@ -234,7 +256,19 @@ namespace EntityDumper
                 return 0;
             }
         }
+private static bool TryReadInt(uint address, out int value)
+{
+    bool success;
+    value = Reader.Default.Read<int>((ulong)address, out success);
+    return success;
+}
 
+private static bool TryReadUInt(uint address, out uint value)
+{
+    bool success;
+    value = Reader.Default.Read<uint>((ulong)address, out success);
+    return success;
+}
         private static uint ReadPointerChain(uint baseAddr, int[] offsets)
         {
             uint addr = baseAddr;

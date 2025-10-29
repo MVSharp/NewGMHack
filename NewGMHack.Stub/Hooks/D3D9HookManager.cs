@@ -63,6 +63,8 @@ namespace NewGMHack.Stub.Hooks
 public class OverlayManager(SelfInformation self)
 {
     private SharpDX.Direct3D9.Font _font;
+    private Line _line;                    // Reused Line object
+    private Texture _backgroundTexture;    // Cached 1x1 texture
     private bool _initialized;
 
     private readonly int RightMargin = 20;
@@ -71,8 +73,7 @@ public class OverlayManager(SelfInformation self)
 
     public void Initialize(Device device)
     {
-        if (_initialized || device == null)
-            return;
+        if (_initialized || device == null) return;
 
         var fontDesc = new FontDescription
         {
@@ -84,271 +85,526 @@ public class OverlayManager(SelfInformation self)
         };
 
         _font = new SharpDX.Direct3D9.Font(device, fontDesc);
+        _line = new Line(device) 
+        { 
+            Width = 1.5f,           // ← was 1.0f
+            Antialias = true,       // ← critical for visibility
+        };
+
+        //CreateBackgroundTexture(device);
+
         _initialized = true;
     }
 
-private void Draw3DBox(Device device, Matrix viewMatrix, Matrix projMatrix, Viewport viewport, Vector3 center, Vector3 size, int currentHp, int maxHp)
-{
-    using (var line = new Line(device) { Width = 1.0f })
-    {
-        line.Begin();
+    // === 1. CACHED 1x1 TEXTURE ===
+    //private void CreateBackgroundTexture(Device device)
+    //{
+    //    if (_backgroundTexture != null && !_backgroundTexture.Disposed) return;
 
-        // Calculate HP ratio
+    //    _backgroundTexture = new Texture(device, 1, 1, 1, Usage.Dynamic, Format.A8R8G8B8, Pool.Default);
+    //    var surface = _backgroundTexture.GetSurfaceLevel(0);
+    //    var stream = surface.LockRectangle(LockFlags.None);
+    //    stream.WriteByte(0);   // B
+    //    stream.WriteByte(0);   // G
+    //    stream.WriteByte(0);   // R
+    //    stream.WriteByte(100); // A (semi-transparent black)
+    //    surface.UnlockRectangle();
+    //}
+
+    //private void DrawBackgroundBox(Device device, Rectangle area, ColorBGRA color)
+    //{
+    //    if (_backgroundTexture == null || _backgroundTexture.Disposed)
+    //        CreateBackgroundTexture(device);
+
+    //    using (var sprite = new Sprite(device))
+    //    {
+    //        sprite.Begin(SpriteFlags.AlphaBlend);
+    //        var tint = new ColorBGRA(color.R, color.G, color.B, color.A);
+    //        sprite.Draw(_backgroundTexture, tint, null, null, new Vector3(area.X, area.Y, 0));
+    //        sprite.End();
+    //    }
+    //}
+
+    // === 3. REFACTORED: Use shared _line ===
+    private void Draw3DBox(Matrix viewMatrix, Matrix projMatrix, Viewport viewport, Vector3 center, Vector3 size, int currentHp, int maxHp)
+    {
+        if (_line == null || _line.IsDisposed) return;
+
         currentHp = Math.Max(currentHp, 1);
         maxHp = Math.Max(maxHp, 1);
         float hpRatio = Math.Clamp((float)currentHp / maxHp, 0.0f, 1.0f);
 
-        // Animate glow using sine wave
-        float pulse = (float)(Math.Sin(Environment.TickCount / 300.0f) * 0.5f + 0.5f); // 0–1
-        byte glowAlpha = (byte)(160 + pulse * 95); // 160–255
-
-        // Get HP-based color
+        float pulse = (float)(Math.Sin(Environment.TickCount / 300.0f) * 0.5f + 0.5f);
+        byte glowAlpha = (byte)(160 + pulse * 95);
         ColorBGRA boxColor = GetHpGradientColor(hpRatio);
         boxColor.A = glowAlpha;
 
-        // Define 8 corners
         Vector3[] corners = new Vector3[8];
-        float halfX = size.X / 2;
-        float halfY = size.Y / 2;
-        float halfZ = size.Z / 2;
+        float hx = size.X / 2, hy = size.Y / 2, hz = size.Z / 2;
+        corners[0] = center + new Vector3(-hx, -hy, -hz);
+        corners[1] = center + new Vector3( hx, -hy, -hz);
+        corners[2] = center + new Vector3( hx, -hy,  hz);
+        corners[3] = center + new Vector3(-hx, -hy,  hz);
+        corners[4] = center + new Vector3(-hx,  hy, -hz);
+        corners[5] = center + new Vector3( hx,  hy, -hz);
+        corners[6] = center + new Vector3( hx,  hy,  hz);
+        corners[7] = center + new Vector3(-hx,  hy,  hz);
 
-        corners[0] = center + new Vector3(-halfX, -halfY, -halfZ);
-        corners[1] = center + new Vector3(halfX, -halfY, -halfZ);
-        corners[2] = center + new Vector3(halfX, -halfY, halfZ);
-        corners[3] = center + new Vector3(-halfX, -halfY, halfZ);
-        corners[4] = center + new Vector3(-halfX, halfY, -halfZ);
-        corners[5] = center + new Vector3(halfX, halfY, -halfZ);
-        corners[6] = center + new Vector3(halfX, halfY, halfZ);
-        corners[7] = center + new Vector3(-halfX, halfY, halfZ);
+        Vector2[] screen = new Vector2[8];
+        bool anyVisible = false;
+        for (int i = 0; i < 8; i++)
+        {
+            Vector4 clip = Vector4.Transform(new Vector4(corners[i], 1.0f), viewMatrix * projMatrix);
+            if (clip.W <= 0.0f) return;
+            screen[i] = WorldToScreen(corners[i], viewMatrix, projMatrix, viewport);
+            if (screen[i].X >= 0 && screen[i].X <= viewport.Width &&
+                screen[i].Y >= 0 && screen[i].Y <= viewport.Height)
+                anyVisible = true;
+        }
+        if (!anyVisible) return;
 
-        // Project to screen
-        Vector2[] screenCorners = corners.Select(c => WorldToScreen(c, viewMatrix, projMatrix, viewport)).ToArray();
+        // Draw all edges using shared _line
+        DrawLine(screen[0], screen[1], boxColor, viewport);
+        DrawLine(screen[1], screen[2], boxColor, viewport);
+        DrawLine(screen[2], screen[3], boxColor, viewport);
+        DrawLine(screen[3], screen[0], boxColor, viewport);
 
-        // Draw bottom
-        line.Draw(new[] { screenCorners[0], screenCorners[1] }, boxColor);
-        line.Draw(new[] { screenCorners[1], screenCorners[2] }, boxColor);
-        line.Draw(new[] { screenCorners[2], screenCorners[3] }, boxColor);
-        line.Draw(new[] { screenCorners[3], screenCorners[0] }, boxColor);
+        DrawLine(screen[4], screen[5], boxColor, viewport);
+        DrawLine(screen[5], screen[6], boxColor, viewport);
+        DrawLine(screen[6], screen[7], boxColor, viewport);
+        DrawLine(screen[7], screen[4], boxColor, viewport);
 
-        // Draw top
-        line.Draw(new[] { screenCorners[4], screenCorners[5] }, boxColor);
-        line.Draw(new[] { screenCorners[5], screenCorners[6] }, boxColor);
-        line.Draw(new[] { screenCorners[6], screenCorners[7] }, boxColor);
-        line.Draw(new[] { screenCorners[7], screenCorners[4] }, boxColor);
-
-        // Connect top and bottom
         for (int i = 0; i < 4; i++)
+            DrawLine(screen[i], screen[i + 4], boxColor, viewport);
+    }
+
+    private void DrawRect(Vector2 pos, int w, int h, int currentHp, int maxHp, float distance = 0)
+    {
+        if (_line == null || _line.IsDisposed) return;
+
+        currentHp = Math.Max(currentHp, 1);
+        maxHp = Math.Max(maxHp, 1);
+        float hpRatio = Math.Clamp((float)currentHp / maxHp, 0.0f, 1.0f);
+
+        float width = 100, height = 100;
+        float halfW = width / 2, halfH = height / 2;
+
+        string hpText = $"{currentHp}/{maxHp}";
+        int textX = (int)(pos.X + halfW - 40);
+        int textY = (int)(pos.Y - halfH + 5);
+        var textRect = new Rectangle(textX, textY, 100, 20);
+        _font.DrawText(null, hpText, textRect, FontDrawFlags.NoClip, SharpDX.Color.White);
+
+        Vector2 tl = new(pos.X - halfW, pos.Y - halfH);
+        Vector2 tr = new(pos.X + halfW, pos.Y - halfH);
+        Vector2 bl = new(pos.X - halfW, pos.Y + halfH);
+        Vector2 br = new(pos.X + halfW, pos.Y + halfH);
+
+        var outerColor = new ColorBGRA(255, 255, 255, 255);
+        DrawLine(tl, tr, outerColor);
+        DrawLine(tr, br, outerColor);
+        DrawLine(br, bl, outerColor);
+        DrawLine(bl, tl, outerColor);
+
+        float offset = 3.0f;
+        Vector2 itl = new(pos.X - halfW + offset, pos.Y - halfH + offset);
+        Vector2 itr = new(pos.X + halfW - offset, pos.Y - halfH + offset);
+        Vector2 ibl = new(pos.X - halfW + offset, pos.Y + halfH - offset);
+        Vector2 ibr = new(pos.X + halfW - offset, pos.Y + halfH - offset);
+
+        var hpColor = InterpolateColor(new ColorBGRA(0, 255, 0, 255), new ColorBGRA(255, 0, 0, 255), 1.0f - hpRatio);
+        DrawLine(itl, itr, hpColor);
+        DrawLine(itr, ibr, hpColor);
+        DrawLine(ibr, ibl, hpColor);
+        DrawLine(ibl, itl, hpColor);
+
+        // Health bar (left side)
+        float barW = 5.0f;
+        float barH = (height - 2 * offset) * hpRatio;
+        Vector2 btl = new(pos.X - halfW - barW - 2, pos.Y - halfH + offset);
+        Vector2 bbl = new(pos.X - halfW - barW - 2, pos.Y - halfH + offset + barH);
+        Vector2 btr = new(pos.X - halfW - 2, pos.Y - halfH + offset);
+        Vector2 bbr = new(pos.X - halfW - 2, pos.Y - halfH + offset + barH);
+
+        DrawLine(btl, bbl, hpColor);
+        DrawLine(bbl, bbr, hpColor);
+        DrawLine(bbr, btr, hpColor);
+        DrawLine(btr, btl, hpColor);
+    }
+
+    // Helper: Draw line using shared _line
+    private void DrawLine(Vector2 p1, Vector2 p2, ColorBGRA color, Viewport? vp = null)
+    {
+        if (_line == null || float.IsNaN(p1.X) || float.IsNaN(p2.X) || p1 == p2) return;
+        if (vp.HasValue && ((p1.X < 0 && p2.X < 0) || (p1.X > vp.Value.Width && p2.X > vp.Value.Width) ||
+                            (p1.Y < 0 && p2.Y < 0) || (p1.Y > vp.Value.Height && p2.Y > vp.Value.Height)))
+            return;
+
+        _line.Draw(new[] { p1, p2 }, color);
+    }
+
+    private ColorBGRA GetHpGradientColor(float hpRatio)
+    {
+        if (hpRatio > 0.5f)
         {
-            line.Draw(new[] { screenCorners[i], screenCorners[i + 4] }, boxColor);
+            float t = (hpRatio - 0.5f) * 2;
+            return InterpolateColor(new ColorBGRA(255, 255, 0, 255), new ColorBGRA(0, 255, 0, 255), t);
         }
-
-        line.End();
-    }
-}
-private ColorBGRA GetHpGradientColor(float hpRatio)
-{
-    if (hpRatio > 0.5f)
-    {
-        float t = (hpRatio - 0.5f) * 2;
-        return InterpolateColor(new ColorBGRA(255, 255, 0, 255), new ColorBGRA(0, 255, 0, 255), t);
-    }
-    else
-    {
-        float t = hpRatio * 2;
-        return InterpolateColor(new ColorBGRA(255, 0, 0, 255), new ColorBGRA(255, 255, 0, 255), t);
-    }
-}
-        private void DrawRect(Device device, Vector2 pos, int w, int h, Color color, int currentHp, int maxHp, float distance=0)
+        else
         {
-            using (var line = new Line(device) { Width = 1.0f })
-            {
-                line.Begin();
-                if (currentHp <= 0) currentHp = 1;
-                if (maxHp <= 0) maxHp = 1;
-                // Calculate HP ratio (fallback if maxHp is 0)
-                float hpRatio = maxHp > 0 ? (float)currentHp / maxHp : 1;
-                hpRatio = Math.Clamp(hpRatio, 0.0f, 1.0f);
-
-                // Dynamic size based on distance
-                float scaleFactor = 100.0f; // Adjusts how distance affects size
-                //float sizeScale = Math.Max(20.0f, Math.Min(100.0f, (float)w / (distance / scaleFactor)));
-                //float width = sizeScale;
-                //float height = sizeScale;
-                float width = 100;
-                float height = 100;
-                // Outer rectangle (fixed color, e.g., White)
-                float halfWidth = width / 2.0f;
-                float halfHeight = height / 2.0f;
-
-                string hpText = $"{currentHp}/{maxHp}";
-                int textX = (int)(pos.X + halfWidth - 40); // Adjust offset as needed
-                int textY = (int)(pos.Y - halfHeight + 5);
-                var textRect = new Rectangle(textX, textY, textX + 100, textY + 20);
-                _font.DrawText(null, hpText, textRect, FontDrawFlags.NoClip, SharpDX.Color.White);
-
-                Vector2 topLeft = new Vector2(pos.X - halfWidth, pos.Y - halfHeight);
-                Vector2 topRight = new Vector2(pos.X + halfWidth, pos.Y - halfHeight);
-                Vector2 bottomLeft = new Vector2(pos.X - halfWidth, pos.Y + halfHeight);
-                Vector2 bottomRight = new Vector2(pos.X + halfWidth, pos.Y + halfHeight);
-
-                var outerColor = new SharpDX.ColorBGRA(Color.White.R, Color.White.G, Color.White.B, Color.White.A);
-                line.Draw(new[] { topLeft, topRight }, outerColor);
-                line.Draw(new[] { topRight, bottomRight }, outerColor);
-                line.Draw(new[] { bottomRight, bottomLeft }, outerColor);
-                line.Draw(new[] { bottomLeft, topLeft }, outerColor);
-
-                // Inner rectangle (slightly smaller, HP-based color)
-                float innerOffset = 3.0f;
-                Vector2 innerTopLeft = new Vector2(pos.X - halfWidth + innerOffset, pos.Y - halfHeight + innerOffset);
-                Vector2 innerTopRight = new Vector2(pos.X + halfWidth - innerOffset, pos.Y - halfHeight + innerOffset);
-                Vector2 innerBottomLeft = new Vector2(pos.X - halfWidth + innerOffset, pos.Y + halfHeight - innerOffset);
-                Vector2 innerBottomRight = new Vector2(pos.X + halfWidth - innerOffset, pos.Y + halfHeight - innerOffset);
-
-                // Interpolate color from Green (full HP) to Red (low HP)
-                var hpColor = InterpolateColor(new ColorBGRA(0, 255, 0, 255), new ColorBGRA(255, 0, 0, 255), 1.0f - hpRatio);
-                var innerColor = new SharpDX.ColorBGRA(hpColor.R, hpColor.G, hpColor.B, hpColor.A);
-                line.Draw(new[] { innerTopLeft, innerTopRight }, innerColor);
-                line.Draw(new[] { innerTopRight, innerBottomRight }, innerColor);
-                line.Draw(new[] { innerBottomRight, innerBottomLeft }, innerColor);
-                line.Draw(new[] { innerBottomLeft, innerTopLeft }, innerColor);
-
-                // Health bar (vertical, on the left side of the rectangle)
-                float barWidth = 5.0f;
-                float barHeight = (height - 2 * innerOffset) * hpRatio;
-                Vector2 barTopLeft = new Vector2(pos.X - halfWidth - barWidth - 2.0f, pos.Y - halfHeight + innerOffset);
-                Vector2 barBottomLeft = new Vector2(pos.X - halfWidth - barWidth - 2.0f, pos.Y - halfHeight + innerOffset + barHeight);
-                Vector2 barTopRight = new Vector2(pos.X - halfWidth - 2.0f, pos.Y - halfHeight + innerOffset);
-                Vector2 barBottomRight = new Vector2(pos.X - halfWidth - 2.0f, pos.Y - halfHeight + innerOffset + barHeight);
-
-                line.Draw(new[] { barTopLeft, barBottomLeft }, innerColor);
-                line.Draw(new[] { barBottomLeft, barBottomRight }, innerColor);
-                line.Draw(new[] { barBottomRight, barTopRight }, innerColor);
-                line.Draw(new[] { barTopRight, barTopLeft }, innerColor);
-
-                line.End();
-            }
+            float t = hpRatio * 2;
+            return InterpolateColor(new ColorBGRA(255, 0, 0, 255), new ColorBGRA(255, 255, 0, 255), t);
         }
+    }
 
-private SharpDX.ColorBGRA InterpolateColor(SharpDX.ColorBGRA start, SharpDX.ColorBGRA end, float t)
-{
-    byte r = (byte)(start.R + (end.R - start.R) * t);
-    byte g = (byte)(start.G + (end.G - start.G) * t);
-    byte b = (byte)(start.B + (end.B - start.B) * t);
-    byte a = 255;
-    return new SharpDX.ColorBGRA(r, g, b, a);
-}
-
-    Vector2 WorldToScreen(Vector3 worldPos, Matrix view, Matrix proj, Viewport vp)
+    private ColorBGRA InterpolateColor(ColorBGRA a, ColorBGRA bc, float t)
     {
-        Vector4 clipSpace = Vector4.Transform(new Vector4(worldPos, 1.0f), view * proj);
+        byte r = (byte)(a.R + (bc.R - a.R) * t);
+        byte g = (byte)(a.G + (bc.G - a.G) * t);
+        byte b = (byte)(a.B + (bc.B - a.B) * t);
+        return new ColorBGRA(r, g, b, 255);
+    }
 
-        if (clipSpace.W < 0.1f) return Vector2.Zero;
+    Vector2 WorldToScreen(Vector3 world, Matrix view, Matrix proj, Viewport vp)
+    {
+        Vector4 clip = Vector4.Transform(new Vector4(world, 1.0f), view * proj);
+        if (clip.W < 0.1f) return Vector2.Zero;
 
-        Vector3 ndc = new Vector3(clipSpace.X, clipSpace.Y, clipSpace.Z) / clipSpace.W;
-
+        Vector3 ndc = new Vector3(clip.X, clip.Y, clip.Z) / clip.W;
         return new Vector2(
             (ndc.X + 1.0f) * 0.5f * vp.Width + vp.X,
             (1.0f - ndc.Y) * 0.5f * vp.Height + vp.Y
         );
     }
-    public void DrawEntities(Device device)
+
+    // === 2. REUSE SINGLE LINE OBJECT ===
+private bool _isDrawing = false;
+public void DrawEntities(Device device)
+{
+    if (device == null || _line == null || _line.IsDisposed || !_initialized)
     {
-        if (self.Targets == null || self.Targets.Count == 0)
-            return;
+        Initialize(device);
+        return;
+    }
 
-        // Get matrices and viewport
+    if (self.Targets == null || self.Targets.Count == 0) return;
+
+    try
+    {
         var viewMatrix = device.GetTransform(TransformState.View);
-        var projectionMatrix = device.GetTransform(TransformState.Projection);
-        Viewport viewport = device.Viewport;
+        var projMatrix = device.GetTransform(TransformState.Projection);
+        var viewport = device.Viewport;
 
-        // Create Line object for drawing
-        using (var line = new Line(device) { Width = 1.0f })
+if (_isDrawing)
         {
-            line.Begin();
+            try { _line.End(); } catch { }
+            _isDrawing = false;
+        }
 
-            foreach (var entity in self.Targets)
-            {
-                    if (entity.CurrentHp <= 0) continue;
-                    // Convert world position to screen position
-                    Vector2 screenPos = WorldToScreen(
-                    new Vector3(entity.Position.X, entity.Position.Y, entity.Position.Z),
-                    viewMatrix,
-                    projectionMatrix,
-                    viewport
-                );
+        _line.Begin();
+        _isDrawing = true;
 
-                if (screenPos != Vector2.Zero)
-                {
-float hpRatio = Math.Clamp((float)entity.CurrentHp / entity.MaxHp, 0.0f, 1.0f);
+        var playerPos = new Vector3(self.PersonInfo.X, self.PersonInfo.Y, self.PersonInfo.Z);
+        Vector3 playerFeetWorld = playerPos - new Vector3(0, self.PersonInfo.Y, 0);
+        Vector2 playerScreen = new Vector2(viewport.Width / 2f, viewport.Height / 2f);
+        Vector2 feetScreen = WorldToScreen(playerFeetWorld, viewMatrix, projMatrix, viewport);
+            if (feetScreen == Vector2.Zero) 
+                feetScreen = new Vector2(viewport.Width / 2f, viewport.Height - 50f); // fallback
+        foreach (var entity in self.Targets)
+        {
+            if (entity.CurrentHp <= 0 || entity.MaxHp <= 0) continue;
+            float distance = Vector3.Distance( playerPos,entity.Position);
+            Vector2 screenPos = WorldToScreen(entity.Position, viewMatrix, projMatrix, viewport);
+            bool isBehind;
+            Vector2 dirFromCenter = GetScreenDirection(entity.Position, viewMatrix, projMatrix, viewport, out isBehind);
+            bool onScreen = (screenPos != Vector2.Zero) && 
+                            screenPos.X >= 0 && screenPos.X <= viewport.Width && 
+                            screenPos.Y >= 0 && screenPos.Y <= viewport.Height;
 
-// Animate glow using sine wave
-float pulse = (float)(Math.Sin(Environment.TickCount / 300.0f) * 0.5f + 0.5f); // 0–1
-byte glowAlpha = (byte)(160 + pulse * 95); // 160–255
+            float hpRatio = Math.Clamp((float)entity.CurrentHp / entity.MaxHp, 0.0f, 1.0f);
+            float pulse = (float)(Math.Sin(Environment.TickCount / 300.0f) * 0.5f + 0.5f);
+            byte alpha = (byte)(160 + pulse * 95);
+            ColorBGRA lineColor = GetHpGradientColor(hpRatio);
+            lineColor.A = alpha;
+                    if (onScreen && !isBehind)
+                    {
+                        // 3D Box
+                        Draw3DBox(viewMatrix, projMatrix, viewport, entity.Position, new Vector3(100, 100, 100), entity.CurrentHp, entity.MaxHp);
 
-// Get HP-based color
-ColorBGRA lineColor = GetHpGradientColor(hpRatio);
-lineColor.A = glowAlpha;
-                    // Draw red rectangle (50x50) around entity
-                    //DrawRect(device, screenPos, 50, 50, SharpDX.Color.Red,entity.CurrentHp,entity.MaxHp);
-                    Draw3DBox(device, viewMatrix, projectionMatrix, viewport, entity.Position, new Vector3(100,100,100)  , entity.CurrentHp,entity.MaxHp);
-                    // Draw line from screen top-center (viewport.Width / 2, 0) to top-center of rectangle
-                    Vector2 lineStart = new Vector2(viewport.Width / 2.0f, 0);
-                    Vector2 lineEnd = new Vector2(screenPos.X, screenPos.Y); // Top-center of rectangle
-                    line.Draw(new[] { lineStart, lineEnd }, lineColor);
-                }
-            }
+                        // Line from center-top to entity — USE HELPER!
+                        Vector2 centerTop = new(viewport.Width / 2.0f, 10);
+                        DrawLine(centerTop, screenPos, lineColor, viewport);  // ← FIXED
+                    }
+                    else
+                    {
+//DrawOffScreenArrow(
+//        line: _line,
+//        playerPos: playerPos,
+//        enemyPos: entity.Position,
+//        currentHp: entity.CurrentHp,
+//        maxHp: entity.MaxHp,
+//        viewMatrix: viewMatrix,
+//        projMatrix: projMatrix,
+//        viewport: viewport,
+//        maxRange: 4800f
+//    );
+                    }
+                         }
 
-            line.End();
+if (_isDrawing)
+        {
+            _line.End();
+            _isDrawing = false;
         }
     }
+    catch (Exception ex)
+    {
+    }
+}
+private void DrawOffScreenArrow(
+    Line line,
+    Vector3 playerPos,
+    Vector3 enemyPos,
+    float currentHp,
+    float maxHp,
+    Matrix viewMatrix,
+    Matrix projMatrix,
+    Viewport viewport,
+    float maxRange = 800f)
+{
+    float distance = Vector3.Distance(playerPos, enemyPos);
+    if (distance > maxRange) return;
+
+    // 1. Start: YOUR exact player position
+    Vector3 start3D = playerPos;
+
+    // 2. Direction toward enemy
+    Vector3 dir3D = Vector3.Normalize(enemyPos - playerPos);
+
+    // 3. Arrow world length: FAR = LONG, CLOSE = SHORT
+    //     50 m  → 20 units
+    //     500 m → 120 units
+    float worldArrowLen = MathUtil.Lerp(20f, 120f, distance / 500f);
+    worldArrowLen = Math.Min(worldArrowLen, 120f);
+
+    Vector3 end3D = start3D + dir3D * worldArrowLen;
+
+    // 4. Project to screen
+    Vector2 start2D = WorldToScreen(start3D, viewMatrix, projMatrix, viewport);
+    Vector2 end2D   = WorldToScreen(end3D,   viewMatrix, projMatrix, viewport);
+
+    //if (start2D == Vector2.Zero && end2D == Vector2.Zero) return;
+
+    Vector2 base2D = start2D != Vector2.Zero ? start2D : end2D;
+    Vector2 tip2D  = end2D   != Vector2.Zero ? end2D  : start2D;
+
+    Vector2 screenDir = tip2D - base2D;
+    float screenLen = screenDir.Length();
+    //if (screenLen < 8f) return;
+
+    // 5. Arrow thickness: CLOSE = THICK, FAR = THIN
+    float thickness = MathUtil.Lerp(6f, 1.5f, distance / 400f); // 6px close, 1.5px far
+    line.Width = thickness;
+
+    // 6. Final arrow screen length (keep proportional)
+    float finalLen = screenLen;
+    Vector2 arrowEnd = base2D + Vector2.Normalize(screenDir) * finalLen;
+
+    // 7. HP color + pulse
+    float hpRatio = Math.Clamp(currentHp / maxHp, 0f, 1f);
+    float pulse = (float)(Math.Sin(Environment.TickCount / 300.0) * 0.5 + 0.5);
+    byte alpha = (byte)(200 + pulse * 55);
+    ColorBGRA col = GetHpGradientColor(hpRatio);
+    col.A = alpha;
+
+    // 8. DRAW ARROW
+    DrawArrow(line, base2D, arrowEnd, finalLen, thickness * 1.8f, col);
+
+    // 9. DRAW DISTANCE TEXT (meters)
+    //if (_font != null && distance < 600f)
+    //{
+    //    string distText = $"{distance:F0}m";
+    //    int x = (int)(arrowEnd.X + 8);
+    //    int y = (int)(arrowEnd.Y - 8);
+
+    //    // Optional: shadow for readability
+    //    //_font.DrawText(null, distText, x + 1, y + 1,col);
+    //    _font.DrawText(null, distText, x, y, col);
+    //}
+}
+private static void DrawArrow(
+    Line line,
+    Vector2 from,          // start point (player screen centre)
+    Vector2 to,            // end point (projected enemy position)
+    float length,          // length of the arrow shaft (in pixels)
+    float headSize,        // size of the arrow head (in pixels)
+    ColorBGRA color)
+{
+    // shaft
+    Vector2 dir = Vector2.Normalize(to - from);
+    Vector2 shaftEnd = from + dir * length;
+
+    line.Draw(new[] { from, shaftEnd }, color);
+
+    // arrow head (two short lines)
+    Vector2 perp = new Vector2(-dir.Y, dir.X) * headSize;   // perpendicular vector
+    line.Draw(new[] { shaftEnd, shaftEnd - dir * headSize + perp }, color);
+    line.Draw(new[] { shaftEnd, shaftEnd - dir * headSize - perp }, color);
+}
+private static float GetArrowLength(float distance)
+{
+    // 0 m  → 0 px
+    // 50 m → 60 px (max size)
+    // 500 m → 10 px (tiny)
+    const float maxDist = 500f;
+    const float maxLen  = 60f;
+    const float minLen  = 10f;
+
+    float t = MathUtil.Clamp(1f - (distance / maxDist), 0f, 1f);
+    return MathUtil.Lerp(minLen, maxLen, t);
+}
+private static Vector2 GetScreenDirection(Vector3 worldPos, Matrix view, Matrix proj, Viewport viewport, out bool isBehind)
+{
+    Vector4 clipPos = Vector4.Transform(new Vector4(worldPos, 1f), view * proj);
+    float w = clipPos.W;
+    isBehind = (w < 0.0001f);
+
+    if (Math.Abs(w) < 0.0001f)  // Degenerate (on camera plane)
+    {
+        isBehind = true;
+        return Vector2.Zero;  // Or handle as behind
+    }
+
+    float invW = 1f / w;
+    // NDC coords (-1 to 1)
+    float ndcX = clipPos.X * invW;
+    float ndcY = clipPos.Y * invW;
+
+    // Direction from screen center in pixel space
+    Vector2 center = new Vector2(viewport.Width * 0.5f, viewport.Height * 0.5f);
+    Vector2 dirFromCenter = new Vector2(
+        ndcX * (viewport.Width * 0.5f),
+        ndcY * (viewport.Height * 0.5f)
+    );
+
+    return dirFromCenter;  // Raw direction vec (can be negative/large for behind/off)
+}
+private void DrawEdgeIndicator(Vector2 dirFromCenter, ColorBGRA color, Viewport viewport, float indicatorSize = 10f)
+{
+    Vector2 center = new Vector2(viewport.Width * 0.5f, viewport.Height * 0.5f);
+    if (dirFromCenter.Length() < 0.001f) return;  // Invalid dir
+
+    Vector2 dir = Vector2.Normalize(dirFromCenter);
+    // Find scale to hit nearest edge (ray from center in dir)
+    float scaleX = float.MaxValue;
+    if (dir.X != 0)
+        scaleX = dir.X > 0 ? (viewport.Width * 0.5f) / dir.X : (viewport.Width * -0.5f) / dir.X;
+    float scaleY = float.MaxValue;
+    if (dir.Y != 0)
+        scaleY = dir.Y > 0 ? (viewport.Height * 0.5f) / dir.Y : (viewport.Height * -0.5f) / dir.Y;
+    float scale = Math.Min(scaleX, scaleY);
+
+    Vector2 edgePos = center + (dir * scale);
+
+    // Clamp to exact edge (float precision)
+    edgePos.X = Math.Max(0, Math.Min(viewport.Width, edgePos.X));
+    edgePos.Y = Math.Max(0, Math.Min(viewport.Height, edgePos.Y));
+
+    // Draw simple arrow: short line toward entity + head
+    Vector2 arrowTip = edgePos + (dir * indicatorSize * 0.5f);  // Extend slightly off-edge if wanted
+    _line.Draw(new[] { edgePos, arrowTip }, color);  // Main arrow shaft
+
+    // Arrow head (two short lines)
+    Vector2 perp = new Vector2(-dir.Y, dir.X) * (indicatorSize * 0.3f);  // Perp vector
+    _line.Draw(new[] { arrowTip, arrowTip - perp }, color);
+    _line.Draw(new[] { arrowTip, arrowTip + perp }, color);
+}
     public void DrawUI(Device device)
     {
-        if (!_initialized || _font == null || device == null)
-            return;
+        if (!_initialized || _font == null || device == null) return;
 
         int screenWidth = device.Viewport.Width;
-        int x = screenWidth - 300; // right side
-        int y = 50;
+        int x = screenWidth - 300;
+        int y = 40;
+        int uiWidth = 200;
+        int totalHeight = 220;
 
-        // Draw Features Table
-        _font.DrawText(null, "== Hack Features ==(By MichaelVan", new Rectangle(x, y, 300, LineHeight), FontDrawFlags.NoClip, Color.White);
+        var bgColor = new ColorBGRA(0, 0, 0, 100);
+        //DrawBackgroundBox(device, new Rectangle(x - 10, y - 10, uiWidth + 20, totalHeight), bgColor);
+
+        _font.DrawText(null, "== Hack Features == (By MichaelVan)", new Rectangle(x, y, uiWidth, LineHeight), FontDrawFlags.NoClip, new ColorBGRA(255, 255, 255, 180));
         y += LineHeight + SectionSpacing;
 
         foreach (var feature in self.ClientConfig.Features)
         {
-            string status = feature.IsEnabled ? "🟢 Enabled" : "🔴 Disabled";
-            string line = $"{feature.Name,-20} {status}";
-            _font.DrawText(null, line, new Rectangle(x, y, 300, LineHeight), FontDrawFlags.NoClip, feature.IsEnabled ? Color.Lime : Color.Red);
+            string status = feature.IsEnabled ? "Enabled" : "Disabled";
+            string line = $"{feature.Name,-18} {status}";
+            var color = feature.IsEnabled ? new ColorBGRA(0, 255, 0, 180) : new ColorBGRA(255, 0, 0, 180);
+            _font.DrawText(null, line, new Rectangle(x, y, uiWidth, LineHeight), FontDrawFlags.NoClip, color);
             y += LineHeight;
         }
 
         y += SectionSpacing * 2;
-
-        // Draw Info Table
-        _font.DrawText(null, "== Player Info ==", new Rectangle(x, y, 300, LineHeight), FontDrawFlags.NoClip, Color.White);
+        _font.DrawText(null, "== Player Info ==", new Rectangle(x, y, uiWidth, LineHeight), FontDrawFlags.NoClip, new ColorBGRA(255, 255, 255, 180));
         y += LineHeight + SectionSpacing;
 
         DrawInfoRow(device, x, ref y, "PersonId", self.PersonInfo.PersonId.ToString());
         DrawInfoRow(device, x, ref y, "GundamId", self.PersonInfo.GundamId.ToString());
         DrawInfoRow(device, x, ref y, "Weapons", $"{self.PersonInfo.Weapon1}, {self.PersonInfo.Weapon2}, {self.PersonInfo.Weapon3}");
-        DrawInfoRow(device, x, ref y, "Position", $"X:{self.PersonInfo.X} Y:{self.PersonInfo.Y} Z:{self.PersonInfo.Z}");
+        DrawInfoRow(device, x, ref y, "Position", $"X:{self.PersonInfo.X:F1} Y:{self.PersonInfo.Y:F1} Z:{self.PersonInfo.Z:F1}");
         DrawInfoRow(device, x, ref y, "GundamName", self.PersonInfo.GundamName);
         DrawInfoRow(device, x, ref y, "Slot", self.PersonInfo.Slot.ToString());
+            int i = 1; 
+        foreach(var entity in self.Targets)
+        {
+                if (entity.MaxHp <= 0 || entity.MaxHp >= 30000) continue;
+             DrawInfoRow(device, x, ref y ,$"{i}.|", $"{entity.CurrentHp}/{entity.MaxHp}-{entity.Position.X}:{entity.Position.Y}:{entity.Position.Z}");
+                i++;
+        }
     }
 
     private void DrawInfoRow(Device device, int x, ref int y, string label, string value)
     {
-        string line = $"{label,-12}: {value}";
-        _font.DrawText(null, line, new Rectangle(x, y, 300, LineHeight), FontDrawFlags.NoClip, Color.LightBlue);
+        string line = $"{label,-10}: {value}";
+        var color = new ColorBGRA(173, 216, 230, 160);
+        _font.DrawText(null, line, new Rectangle(x, y, 200, LineHeight), FontDrawFlags.NoClip, color);
         y += LineHeight;
     }
 
-    public void Reset()
+    // === 7. FULL DISPOSAL ===
+public void Reset()
+{
+    try { if (_isDrawing) _line?.End(); } catch { }
+    _isDrawing = false;
+
+    _font?.Dispose();
+    _line?.Dispose();
+    _backgroundTexture?.Dispose();
+
+    _font = null;
+    _line = null;
+    _backgroundTexture = null;
+    _initialized = false;
+}
+public void OnLostDevice()
+{
+    try
     {
-        _font?.Dispose();
-        _font = null;
-        _initialized = false;
+        _font?.OnLostDevice();
+        _line?.OnLostDevice();
     }
+    catch { }
+}
+
+public void OnResetDevice()
+{
+    try
+    {
+        _font?.OnResetDevice();
+        _line?.OnResetDevice();
+    }
+    catch { }
+}
 }
     //https://github.com/justinstenning/Direct3DHook/blob/master/Capture/Hook/DXHookD3D9.cs
     public class D3D9HookManager(ILogger<D3D9HookManager> logger , OverlayManager overlayManager) : IHookManager
@@ -385,74 +641,107 @@ lineColor.A = glowAlpha;
         private delegate int EndSceneDelegate(nint devicePtr);
         //DI later , now for test 
         //private readonly OverlayManager _overlayManager;
-        private int EndSceneHook(nint devicePtr)
+
+private DateTime _lastFrameTime = DateTime.Now;
+private int _frameCount = 0;
+private double _measuredFps = 60.0;
+private DateTime _lastFpsUpdate = DateTime.Now;
+private DateTime _lastOverlayDraw = DateTime.MinValue;
+private Device _device;           // Cached device
+private bool _deviceInitialized = false;
+private int EndSceneHook(nint devicePtr)
+{
+    if (devicePtr == 0) return 0;
+
+    try
+    {
+        // Lazily get or create the Device wrapper
+        if (_device == null || _device.NativePointer != devicePtr)
         {
-            //logger.ZLogInformation($"EndScene called");
-            var device = new Device(devicePtr); 
-            try
-            {
-                device.Viewport = new Viewport(0,0,device.Viewport.Width,device.Viewport.Height,0,1.0f);
-                overlayManager.DrawUI(device);
-                overlayManager.DrawEntities(device);
-            }
-            catch (Exception ex)
-            {
-                logger.ZLogError($"OverlayManager.Draw failed: {ex.GetType().Name} - {ex.Message}");
-            }
-            
+            _device?.Dispose();
+            _device = new Device(devicePtr);
+            _deviceInitialized = false; // Force reinitialize
+            overlayManager.Reset(); // Full reset
+        }
+        var coopLevel = _device.TestCooperativeLevel();
+        if (coopLevel == ResultCode.DeviceLost || coopLevel == ResultCode.DeviceNotReset)
+        {
+            //logger.ZLogInformation("Device lost detected. Skipping frame.");
+            _deviceInitialized = false;
+                    overlayManager.Reset();
             return _originalEndScene?.Invoke(devicePtr) ?? 0;
         }
+        // Initialize only once (or after reset)
+        if (!_deviceInitialized)
+        {
+            overlayManager.Initialize(_device);
+            _deviceInitialized = true;
+        }
+// At top of DrawEntities, after Begin()
+        // Now safe to draw
+        overlayManager.DrawEntities(_device);
+        overlayManager.DrawUI(_device);
+    }
+    catch (Exception ex)
+    {
+        logger.ZLogError($"OverlayManager.Draw failed: {ex}");
+    }
+
+    return _originalEndScene?.Invoke(devicePtr) ?? 0;
+}
 
         private delegate int PresentDelegate(nint devicePtr, nint srcRect, nint destRect, nint hDestWindowOverride, nint dirtyRegion);
-        private int PresentHook(nint devicePtr, nint srcRect, nint destRect, nint hDestWindowOverride, nint dirtyRegion)
-        {
-            //logger.ZLogInformation($"Present called");
-            if(devicePtr != nint.Zero)
-            {
-                _devicePtr = devicePtr;
-            }
-            var device = new Device(devicePtr); 
+private int PresentHook(nint devicePtr, nint srcRect, nint destRect, nint hDestWindowOverride, nint dirtyRegion)
+{
+    if (devicePtr != nint.Zero)
+    {
+        _devicePtr = devicePtr; // Keep for Reset hook
+    }
 
-            try
-            {
-                overlayManager.Initialize(device);
-            }
-            catch (Exception ex)
-            {
-                logger.ZLogError($"OverlayManager.Initialize failed: {ex.GetType().Name} - {ex.Message}");
-            }
-            return _originalPresent?.Invoke(devicePtr, srcRect, destRect, hDestWindowOverride, dirtyRegion) ?? 0;
-        }
-
+    // DO NOT INITIALIZE HERE — moved to EndScene
+    return _originalPresent?.Invoke(devicePtr, srcRect, destRect, hDestWindowOverride, dirtyRegion) ?? 0;
+}
         #endregion
 
-        private int ResetHook(nint devicePtr, nint presentationParameters)
-        {
-            logger.ZLogInformation($"Reset called");
+private int ResetHook(nint devicePtr, nint presentationParameters)
+{
+    //logger.ZLogInformation("Device Reset called");
 
-            try
-            {
-                overlayManager.Reset(); // Dispose font and other resources
-            }
-            catch (Exception ex)
-            {
-                logger.ZLogError($"OverlayManager.Reset failed: {ex.GetType().Name} - {ex.Message}");
-            }
+    try
+    {
+        // 1. Tell overlay to release D3D9 pool resources
+        overlayManager.OnLostDevice();
 
-            int result = _originalReset?.Invoke(devicePtr, presentationParameters) ?? 0;
+        // 2. Dispose our cached device wrapper
+        _device?.Dispose();
+        _device = null;
+        _deviceInitialized = false;
+    }
+    catch (Exception ex)
+    {
+        logger.ZLogError($"Pre-reset cleanup failed: {ex}");
+    }
 
-            try
-            {
-                var device = CppObject.FromPointer<Device>(devicePtr);
-                overlayManager.Initialize(device); // Recreate font after reset
-            }
-            catch (Exception ex)
-            {
-                logger.ZLogError($"OverlayManager.Initialize after Reset failed: {ex.GetType().Name} - {ex.Message}");
-            }
+    // 3. Let the real D3D reset happen
+    int result = _originalReset?.Invoke(devicePtr, presentationParameters) ?? 0;
 
-            return result;
-        }
+    try
+    {
+        // 4. Recreate device wrapper
+        _device = new Device(devicePtr);
+
+        // 5. Recreate overlay resources
+        overlayManager.OnResetDevice();     // Recreates internal font/line surfaces
+        overlayManager.Initialize(_device); // Recreates font, line, texture
+        _deviceInitialized = true;
+    }
+    catch (Exception ex)
+    {
+        logger.ZLogError($"Post-reset init failed: {ex}");
+    }
+
+    return result;
+}
         public void HookAll()
         {
             logger.ZLogInformation($"Starting D3D9 hook setup");

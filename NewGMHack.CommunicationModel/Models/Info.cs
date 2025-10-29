@@ -30,4 +30,10 @@ public class Info
 
     [Key(9)]
     public uint Slot { get; set; } = 0;
+
+    [Key(10)]
+    public int CurrentHp { get; set; }
+
+    [Key(11)]
+    public int MaxHp { get; set; }
 }
