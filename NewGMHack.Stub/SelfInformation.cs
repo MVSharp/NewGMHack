@@ -15,6 +15,8 @@ namespace NewGMHack.Stub
          public int CurrentHp { get; set; }
          public int MaxHp { get; set; }
          public Vector3  Position { get; set; }     
+         public float ScreenX { get; set; }
+         public float ScreenY { get; set; }
     }
     
     public class SelfInformation
@@ -23,6 +25,11 @@ namespace NewGMHack.Stub
         public ClientConfig            ClientConfig { get; set; } = new();
         public ConcurrentBag<Roommate> Roommates    { get; set; } = [];
         public CMap<uint, int>         BombHistory  { get; set; } = new CMap<uint, int>(12);
+        public int ScreenWidth { get; set; }
+        public int ScreenHeight { get; set; }
+        public int CrossHairX { get; set; }
+        public int CrossHairY { get; set; }
+        public float AimRadius { get; set; }
         public List<Entity> Targets { get; set; } = Enumerable.Repeat( new Entity(),12).ToList();
         public SelfInformation()
         {

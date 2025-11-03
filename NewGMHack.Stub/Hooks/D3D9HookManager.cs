@@ -74,8 +74,7 @@ public class OverlayManager(SelfInformation self)
     public void Initialize(Device device)
     {
         if (_initialized || device == null) return;
-
-        var fontDesc = new FontDescription
+                  var fontDesc = new FontDescription
         {
             Height = 16,
             FaceName = "Consolas",
@@ -242,7 +241,6 @@ public class OverlayManager(SelfInformation self)
 
         _line.Draw(new[] { p1, p2 }, color);
     }
-
     private ColorBGRA GetHpGradientColor(float hpRatio)
     {
         if (hpRatio > 0.5f)
@@ -256,7 +254,6 @@ public class OverlayManager(SelfInformation self)
             return InterpolateColor(new ColorBGRA(255, 0, 0, 255), new ColorBGRA(255, 255, 0, 255), t);
         }
     }
-
     private ColorBGRA InterpolateColor(ColorBGRA a, ColorBGRA bc, float t)
     {
         byte r = (byte)(a.R + (bc.R - a.R) * t);
@@ -279,14 +276,44 @@ public class OverlayManager(SelfInformation self)
 
     // === 2. REUSE SINGLE LINE OBJECT ===
 private bool _isDrawing = false;
+
+void DrawEllipse(Device device, int segments =40)
+{
+            var centerX = self.CrossHairX;
+            var centerY = self.CrossHairY;
+            var radiusX = self.AimRadius;
+            var radiusY = self.AimRadius;
+  Vector2[] ellipsePoints = new Vector2[segments + 1];
+float angleStep = (float)(2 * Math.PI / segments);
+
+for (int i = 0; i <= segments; i++)
+{
+    float theta = i * angleStep;
+    ellipsePoints[i] = new Vector2(
+        centerX + radiusX * (float)Math.Cos(theta),
+        centerY + radiusY * (float)Math.Sin(theta)
+    );
+}
+//_line.Antialias = true;
+
+_line.Draw(ellipsePoints, Color.Red);
+
+//_line.Antialias = false;
+}
 public void DrawEntities(Device device)
 {
+
     if (device == null || _line == null || _line.IsDisposed || !_initialized)
     {
         Initialize(device);
         return;
     }
 
+            self.ScreenHeight = device.Viewport.Height;
+            self.ScreenWidth = device.Viewport.Width;
+            self.CrossHairX = device.Viewport.Width / 2;
+            self.CrossHairY = device.Viewport.Height / 2;
+            self.AimRadius =  Math.Min(self.ScreenWidth, self.ScreenHeight) * 0.5f * 0.9f;
     if (self.Targets == null || self.Targets.Count == 0) return;
 
     try
@@ -303,19 +330,29 @@ if (_isDrawing)
 
         _line.Begin();
         _isDrawing = true;
+                DrawCrosshair(device);
 
+                DrawEllipse(device);
         var playerPos = new Vector3(self.PersonInfo.X, self.PersonInfo.Y, self.PersonInfo.Z);
-        Vector3 playerFeetWorld = playerPos - new Vector3(0, self.PersonInfo.Y, 0);
-        Vector2 playerScreen = new Vector2(viewport.Width / 2f, viewport.Height / 2f);
-        Vector2 feetScreen = WorldToScreen(playerFeetWorld, viewMatrix, projMatrix, viewport);
-            if (feetScreen == Vector2.Zero) 
-                feetScreen = new Vector2(viewport.Width / 2f, viewport.Height - 50f); // fallback
-        foreach (var entity in self.Targets)
+                //Vector3 playerFeetWorld = playerPos - new Vector3(0, self.PersonInfo.Y, 0);
+                //Vector2 playerScreen = new Vector2(viewport.Width / 2f, viewport.Height / 2f);
+                //Vector2 feetScreen = WorldToScreen(playerFeetWorld, viewMatrix, projMatrix, viewport);
+                //    if (feetScreen == Vector2.Zero) 
+                //        feetScreen = new Vector2(viewport.Width / 2f, viewport.Height - 50f); // fallback
+                for (int i = 0; i < self.Targets.Count; i++)
+                {
+                    var entity = self.Targets[i]; 
+                    if (entity.CurrentHp <= 0 || entity.MaxHp <= 0) continue;
+                    Vector2 screenPos = WorldToScreen(entity.Position, viewMatrix, projMatrix, viewport);
+                    entity.ScreenX = screenPos.X;
+                    entity.ScreenY = screenPos.Y;
+                }
+        foreach (var entity in self.Targets.ToList())
         {
             if (entity.CurrentHp <= 0 || entity.MaxHp <= 0) continue;
             float distance = Vector3.Distance( playerPos,entity.Position);
-            Vector2 screenPos = WorldToScreen(entity.Position, viewMatrix, projMatrix, viewport);
             bool isBehind;
+            var screenPos = new Vector2(entity.ScreenX,entity.ScreenY);
             Vector2 dirFromCenter = GetScreenDirection(entity.Position, viewMatrix, projMatrix, viewport, out isBehind);
             bool onScreen = (screenPos != Vector2.Zero) && 
                             screenPos.X >= 0 && screenPos.X <= viewport.Width && 
@@ -328,6 +365,7 @@ if (_isDrawing)
             lineColor.A = alpha;
                     if (onScreen && !isBehind)
                     {
+
                         // 3D Box
                         Draw3DBox(viewMatrix, projMatrix, viewport, entity.Position, new Vector3(100, 100, 100), entity.CurrentHp, entity.MaxHp);
 
@@ -337,17 +375,17 @@ if (_isDrawing)
                     }
                     else
                     {
-//DrawOffScreenArrow(
-//        line: _line,
-//        playerPos: playerPos,
-//        enemyPos: entity.Position,
-//        currentHp: entity.CurrentHp,
-//        maxHp: entity.MaxHp,
-//        viewMatrix: viewMatrix,
-//        projMatrix: projMatrix,
-//        viewport: viewport,
-//        maxRange: 4800f
-//    );
+                        //DrawOffScreenArrow(
+                        //        line: _line,
+                        //        playerPos: playerPos,
+                        //        enemyPos: entity.Position,
+                        //        currentHp: entity.CurrentHp,
+                        //        maxHp: entity.MaxHp,
+                        //        viewMatrix: viewMatrix,
+                        //        projMatrix: projMatrix,
+                        //        viewport: viewport,
+                        //        maxRange: 4800f
+                        //    );
                     }
                          }
 
@@ -360,6 +398,26 @@ if (_isDrawing)
     catch (Exception ex)
     {
     }
+}
+private void DrawCrosshair(Device device)
+{
+if (_line == null || _line.IsDisposed) return;
+var viewport = device.Viewport;
+Vector2 center = new Vector2(viewport.Width / 2f, viewport.Height / 2f);
+ColorBGRA color = new ColorBGRA(255, 0, 0, 255); // Red crosshair
+const float size = 12f; // Half-length of arms
+// Horizontal line
+_line.Draw(new[]
+{
+center + new Vector2(-size, 0),
+center + new Vector2(size, 0)
+}, color);
+// Vertical line
+_line.Draw(new[]
+{
+center + new Vector2(0, -size),
+center + new Vector2(0, size)
+}, color);
 }
 private void DrawOffScreenArrow(
     Line line,
@@ -375,64 +433,68 @@ private void DrawOffScreenArrow(
     float distance = Vector3.Distance(playerPos, enemyPos);
     if (distance > maxRange) return;
 
-    // 1. Start: YOUR exact player position
-    Vector3 start3D = playerPos;
+    // -------------------------------------------------
+    // 1. Get direction in **NDC space** (-1..1) – works even behind camera
+    // -------------------------------------------------
+    Vector4 enemyClip = Vector4.Transform(new Vector4(enemyPos, 1f), viewMatrix * projMatrix);
+    if (Math.Abs(enemyClip.W) < 0.0001f) return; // degenerate
 
-    // 2. Direction toward enemy
-    Vector3 dir3D = Vector3.Normalize(enemyPos - playerPos);
+    float invW = 1f / enemyClip.W;
+    float ndcX = enemyClip.X * invW;
+    float ndcY = enemyClip.Y * invW;
 
-    // 3. Arrow world length: FAR = LONG, CLOSE = SHORT
-    //     50 m  → 20 units
-    //     500 m → 120 units
-    float worldArrowLen = MathUtil.Lerp(20f, 120f, distance / 500f);
-    worldArrowLen = Math.Min(worldArrowLen, 120f);
+    // -------------------------------------------------
+    // 2. Convert to screen pixels from centre
+    // -------------------------------------------------
+    Vector2 screenCenter = new Vector2(viewport.Width * 0.5f, viewport.Height * 0.5f);
+    Vector2 dirScreen = new Vector2(
+        ndcX * viewport.Width * 0.5f,
+        ndcY * viewport.Height * 0.5f
+    );
 
-    Vector3 end3D = start3D + dir3D * worldArrowLen;
+    // If enemy is in front and on-screen → skip (handled by normal ESP)
+    bool onScreen = Math.Abs(ndcX) <= 1f && Math.Abs(ndcY) <= 1f && enemyClip.W > 0f;
+    if (onScreen) return;
 
-    // 4. Project to screen
-    Vector2 start2D = WorldToScreen(start3D, viewMatrix, projMatrix, viewport);
-    Vector2 end2D   = WorldToScreen(end3D,   viewMatrix, projMatrix, viewport);
-
-    //if (start2D == Vector2.Zero && end2D == Vector2.Zero) return;
-
-    Vector2 base2D = start2D != Vector2.Zero ? start2D : end2D;
-    Vector2 tip2D  = end2D   != Vector2.Zero ? end2D  : start2D;
-
-    Vector2 screenDir = tip2D - base2D;
-    float screenLen = screenDir.Length();
-    //if (screenLen < 8f) return;
-
-    // 5. Arrow thickness: CLOSE = THICK, FAR = THIN
-    float thickness = MathUtil.Lerp(6f, 1.5f, distance / 400f); // 6px close, 1.5px far
+    // -------------------------------------------------
+    // 3. Arrow length & thickness by distance
+    //     FAR  = LONG + THIN
+    //     CLOSE = SHORT + THICK
+    // -------------------------------------------------
+    float arrowLen = MathUtil.Lerp(30f, 150f, Math.Min(distance / 500f, 1f)); // pixels
+    float thickness = MathUtil.Lerp(7f, 1.5f, Math.Min(distance / 400f, 1f));
     line.Width = thickness;
 
-    // 6. Final arrow screen length (keep proportional)
-    float finalLen = screenLen;
-    Vector2 arrowEnd = base2D + Vector2.Normalize(screenDir) * finalLen;
+    // Clamp arrow to screen edge
+    Vector2 arrowDir = Vector2.Normalize(dirScreen);
+    Vector2 arrowEnd = screenCenter + arrowDir * arrowLen;
 
-    // 7. HP color + pulse
+    // -------------------------------------------------
+    // 4. HP color + pulse
+    // -------------------------------------------------
     float hpRatio = Math.Clamp(currentHp / maxHp, 0f, 1f);
     float pulse = (float)(Math.Sin(Environment.TickCount / 300.0) * 0.5 + 0.5);
     byte alpha = (byte)(200 + pulse * 55);
     ColorBGRA col = GetHpGradientColor(hpRatio);
     col.A = alpha;
 
-    // 8. DRAW ARROW
-    DrawArrow(line, base2D, arrowEnd, finalLen, thickness * 1.8f, col);
+    // -------------------------------------------------
+    // 5. DRAW ARROW
+    // -------------------------------------------------
+    DrawArrow(line, screenCenter, arrowEnd, arrowLen, thickness * 2f, col);
 
-    // 9. DRAW DISTANCE TEXT (meters)
-    //if (_font != null && distance < 600f)
-    //{
-    //    string distText = $"{distance:F0}m";
-    //    int x = (int)(arrowEnd.X + 8);
-    //    int y = (int)(arrowEnd.Y - 8);
+    // -------------------------------------------------
+    // 6. DISTANCE TEXT (meters)
+    // -------------------------------------------------
+    if (_font != null && distance < 600f)
+    {
+        string txt = $"{distance:F0}m";
+        int x = (int)(arrowEnd.X + 6);
+        int y = (int)(arrowEnd.Y - 8);
 
-    //    // Optional: shadow for readability
-    //    //_font.DrawText(null, distText, x + 1, y + 1,col);
-    //    _font.DrawText(null, distText, x, y, col);
-    //}
-}
-private static void DrawArrow(
+        _font.DrawText(null, txt, x, y, col);
+    }
+}private static void DrawArrow(
     Line line,
     Vector2 from,          // start point (player screen centre)
     Vector2 to,            // end point (projected enemy position)
@@ -521,7 +583,11 @@ private void DrawEdgeIndicator(Vector2 dirFromCenter, ColorBGRA color, Viewport 
 }
     public void DrawUI(Device device)
     {
-        if (!_initialized || _font == null || device == null) return;
+if (device == null || _line == null || _line.IsDisposed || !_initialized)
+{
+    Initialize(device);
+    return;
+}
 
         int screenWidth = device.Viewport.Width;
         int x = screenWidth - 300;
@@ -555,7 +621,7 @@ private void DrawEdgeIndicator(Vector2 dirFromCenter, ColorBGRA color, Viewport 
         DrawInfoRow(device, x, ref y, "GundamName", self.PersonInfo.GundamName);
         DrawInfoRow(device, x, ref y, "Slot", self.PersonInfo.Slot.ToString());
             int i = 1; 
-        foreach(var entity in self.Targets)
+        foreach(var entity in self.Targets.ToList())
         {
                 if (entity.MaxHp <= 0 || entity.MaxHp >= 30000) continue;
              DrawInfoRow(device, x, ref y ,$"{i}.|", $"{entity.CurrentHp}/{entity.MaxHp}-{entity.Position.X}:{entity.Position.Y}:{entity.Position.Z}");
@@ -671,16 +737,19 @@ private int EndSceneHook(nint devicePtr)
                     overlayManager.Reset();
             return _originalEndScene?.Invoke(devicePtr) ?? 0;
         }
+        
         // Initialize only once (or after reset)
         if (!_deviceInitialized)
         {
             overlayManager.Initialize(_device);
             _deviceInitialized = true;
         }
-// At top of DrawEntities, after Begin()
-        // Now safe to draw
+
+                // At top of DrawEntities, after Begin()
+                // Now safe to draw
         overlayManager.DrawEntities(_device);
         overlayManager.DrawUI(_device);
+                //overlayManager.DrawAimCircle(_device);
     }
     catch (Exception ex)
     {

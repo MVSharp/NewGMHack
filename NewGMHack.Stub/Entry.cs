@@ -116,6 +116,7 @@ var packetChannel = Channel.CreateUnbounded<ReadOnlyMemory<byte>>();
 
 services.AddSingleton(packetChannel);
 services.AddHostedService<PacketDispatcher>();
+                                       services.AddHostedService<AimBotServices>();
                                        services.AddSingleton<InputStateTracker>();
                                        //services.AddSingleton<WinsockHookManager>(); // this is no problem , only once
                                        //services.AddSingleton<WinsockHookManager>(); // this is no problem , only once
