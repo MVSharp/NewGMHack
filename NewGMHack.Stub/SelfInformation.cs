@@ -12,11 +12,13 @@ namespace NewGMHack.Stub
 {
     public class Entity
     {
+        public int Id { get; set; }
          public int CurrentHp { get; set; }
          public int MaxHp { get; set; }
          public Vector3  Position { get; set; }     
          public float ScreenX { get; set; }
          public float ScreenY { get; set; }
+        public bool IsBest { get; set; }
     }
     
     public class SelfInformation

@@ -272,7 +272,6 @@ namespace InjectDotnet.NativeHelper
 
             nint memoryBlock = NativeMemory.AllocateMemoryNearBase(nativeFunctionEntryPoint);
             if (memoryBlock == IntPtr.Zero) return null;
-
             var hook = new JumpHook(nativeFunctionEntryPoint, hookFunction, memoryBlock, moduleName, functionName);
 
             return !installAfterCreate || hook.InstallHook() ? hook : null;

@@ -8,7 +8,6 @@ using NewGMHack.Stub;
 using NewGMHack.Stub.PacketStructs;
 using NewGMHack.Stub.PacketStructs.Send;
 using NewGMHack.Stub.Services;
-using Reloaded.Memory.Extensions;
 using ZLinq;
 using ZLogger;
 

@@ -127,11 +127,23 @@ namespace NewGMHack.Stub.Services
             var targets = ValueEnumerable.Repeat(1, 12)
                                          .Select(_ => new TargetData() { Damage = ushort.MaxValue - 1 })
                                          .ToArray(); // new TargetData1335[12>
+            //var attack = new Attack1335
+            //{
+            //    Version = 166,
+            //    Split   = 1008,
+            //    Method  = 1335,
+            //    //     TargetCount = 12,
+            //    PlayerId = _selfInformation.PersonInfo.PersonId,
+            //    //PlayerId2 = _selfInformation.PlayerId,
+            //    WeaponId   = _selfInformation.PersonInfo.Weapon2,
+            //    WeaponSlot = 1
+            //};
+
             var attack = new Attack1335
             {
-                Version = 166,
+                Version = 167,
                 Split   = 1008,
-                Method  = 1335,
+                Method  = 1868,
                 //     TargetCount = 12,
                 PlayerId = _selfInformation.PersonInfo.PersonId,
                 //PlayerId2 = _selfInformation.PlayerId,

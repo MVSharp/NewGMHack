@@ -11,7 +11,6 @@ using NewGMHack.Stub.Hooks;
 using NewGMHack.Stub.MemoryScanner;
 using NewGMHack.Stub.PacketStructs;
 using NewGMHack.Stub.PacketStructs.Recv;
-using Reloaded.Memory.Extensions;
 using SharpDX.Direct3D9;
 using ZLinq;
 using ZLogger;
@@ -104,7 +103,7 @@ public class PacketProcessorService : BackgroundService
         {
             // case 1992 or 1338 or 2312 or 1525 or 1521 or 2103:
             //1342 player reborn in battle
-            case 1992 or 1342: //or 1521 or 2312 or 1525 or 1518:
+            case 1992 or 1342 or 2065: //or 1521 or 2312 or 1525 or 1518:
                 _selfInformation.ClientConfig.IsInGame = true;
                 if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
                     _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
@@ -124,7 +123,7 @@ public class PacketProcessorService : BackgroundService
             //     }
             //     //damage recv
             //     break;
-            case 1246:
+            case 1246 or :
                 _selfInformation.ClientConfig.IsInGame = false;
                 var changed   = reader.ReadChangedMachine();
                 var slot = changed.Slot;
@@ -387,7 +386,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         //normally , the first mother fucker is the room leader once join room (of cuz reassign when room leader fucked off)
         foreach (var roommateByte in roommateBytes)
         {
-            var roommate = roommateByte.AsSpanFast().ReadStruct<RoommateHeader>();
+            var roommate = roommateByte.AsSpan().ReadStruct<RoommateHeader>();
             roomates.Add(new Roommate
             {
                 PlayerId = roommate.PlayerId,
