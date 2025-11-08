@@ -123,7 +123,7 @@ public class PacketProcessorService : BackgroundService
             //     }
             //     //damage recv
             //     break;
-            case 1246 or :
+            case 1246:
                 _selfInformation.ClientConfig.IsInGame = false;
                 var changed   = reader.ReadChangedMachine();
                 var slot = changed.Slot;
