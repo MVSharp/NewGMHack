@@ -123,9 +123,10 @@ public class PacketProcessorService : BackgroundService
             //     }
             //     //damage recv
             //     break;
-            case 1246:
+            case 1246 or 2535:
                 _selfInformation.ClientConfig.IsInGame = false;
                 var changed   = reader.ReadChangedMachine();
+                _logger.ZLogInformation($"change gundam detected:{changed.MachineId}");
                 var slot = changed.Slot;
                 _selfInformation.PersonInfo.Slot = slot;
                 await ScanGundam(changed.MachineId);
@@ -138,12 +139,12 @@ public class PacketProcessorService : BackgroundService
 
                 _selfInformation.ClientConfig.IsInGame = false;
                 break;
-            case 1244:
+            case 1244 or 2109 or 1885 or 1565:
                 AssignPersonId(reader);
 
                 _selfInformation.ClientConfig.IsInGame = false;
                 break;
-            case 1550: // 1691 or 2337 or 1550:
+            case 1550 or 1282: // 1691 or 2337 or 1550:
                 _selfInformation.BombHistory.Clear();
 
                 _selfInformation.ClientConfig.IsInGame = true;
@@ -440,6 +441,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
     }
     private  void ChargeGundam(IntPtr socket  ,UInt32 slot)
     {
+        return;//TODO fix
         if (slot == 0) return;
         if (!_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoCharge)) return;
         ChargeRequest r = new();
@@ -484,12 +486,18 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
 
     private void SendSkipScreen(IntPtr socket)
     {
-        byte[] escBuffer =
-        [
-            0x0E, 0x00, 0xF0, 0x03, 0x23, 0x08,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-        ];
+        //byte[] escBuffer =
+        //[
+        //    0x0E, 0x00, 0xF0, 0x03, 0x23, 0x08,
+        //    0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        //    0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        //];
+
+byte[] escBuffer = {
+    0x0E, 0x00, 0xF0, 0x03, 0x39, 0x09, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00
+};
         _winsockHookManager.SendPacket(socket, escBuffer);
     }
 }

@@ -101,55 +101,73 @@ public class EntityScannerService : BackgroundService
         catch { return false; }
     }
 
-    private async Task<bool> ScanEntities()
+private async Task<bool> ScanEntities()
+{
+    try
     {
-        try
+        uint moduleBase = GetModuleBaseAddress(ProcessName);
+        if (moduleBase == 0) return false;
+
+        uint baseAddr = moduleBase + (uint)BaseOffset;
+        uint entityAddr = ReadPointerChain(baseAddr, Offsets);
+        if (entityAddr == 0) return false;
+
+        if (!TryReadUInt(entityAddr - 0x8, out uint listHead) || listHead == 0) return false;
+
+        var visited = new HashSet<uint>();
+        int currentIndex = 0;
+        int scannedCount = 0;
+        uint current = listHead;
+        const int scanLimit = 100;
+
+        while (current != 0 && !visited.Contains(current) && scannedCount < scanLimit)
         {
-            uint moduleBase = GetModuleBaseAddress(ProcessName);
-            if (moduleBase == 0) return false;
+            visited.Add(current);
+            scannedCount++;
 
-            uint baseAddr = moduleBase + (uint)BaseOffset;
-            uint entityAddr = ReadPointerChain(baseAddr, Offsets);
-            if (entityAddr == 0) return false;
-
-            if (!TryReadUInt(entityAddr - 0x8, out uint listHead) || listHead == 0) return false;
-
-            var visited = new HashSet<uint>();
-            int currentIndex = 0;
-            uint current = listHead;
-
-            while (current != 0 && !visited.Contains(current) && currentIndex < MaxEntities)
+            if (!TryReadUInt(current + 0x8, out uint dataAddr) || dataAddr == 0)
             {
-                visited.Add(current);
+                current = TryReadUInt(current, out var next) ? next : 0;
+                continue;
+            }
 
-                if (!TryReadUInt(current + 0x8, out uint dataAddr) || dataAddr == 0)
+            if (!TryReadInt(dataAddr + EntityIdOffset, out var eid))
+            {
+                current = TryReadUInt(current, out var next) ? next : 0;
+                continue;
+            }
+
+            if (TryReadEntityData(dataAddr, out var entity))
+            {
+                entity.Id = eid;
+
+                if (currentIndex < MaxEntities)
                 {
-                    current = TryReadUInt(current, out var next) ? next : 0;
-                    continue;
-                }
-
-                if (!TryReadInt(dataAddr + EntityIdOffset, out var eid)) { current = TryReadUInt(current, out var next) ? next : 0; continue; }
-
-                if (TryReadEntityData(dataAddr, out var entity))
-                {
-                    entity.Id = eid;
                     _selfInfo.Targets[currentIndex++] = entity;
                 }
-
-                current = TryReadUInt(current, out var nextNode) ? nextNode : 0;
             }
 
-            for (int i = currentIndex; i < MaxEntities; i++)
-            {
-                _selfInfo.Targets[i].CurrentHp = 0;
-                _selfInfo.Targets[i].MaxHp = 0;
-            }
-
-            return currentIndex > 0;
+            current = TryReadUInt(current, out var nextNode) ? nextNode : 0;
         }
-        catch { return false; }
-    }
 
+        // Clear remaining slots
+        for (int i = currentIndex; i < MaxEntities; i++)
+        {
+            _selfInfo.Targets[i].CurrentHp = 0;
+            _selfInfo.Targets[i].MaxHp = 0;
+        }
+
+        // Optional debug log
+        _logger.LogDebug($"Scanned {scannedCount} nodes, stored {currentIndex} entities.");
+
+        return currentIndex > 0;
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "ScanEntities failed.");
+        return false;
+    }
+}
     private bool TryReadEntityData(uint entityStruct, out Entity entity)
     {
         entity = new Entity();
@@ -167,7 +185,7 @@ public class EntityScannerService : BackgroundService
             return false;
 
         var pos = new Vector3(x, y + 50, z);
-        if (!IsValidPosition(pos)) return false;
+        //if (!IsValidPosition(pos)) return false;
 
         entity.CurrentHp = hp;
         entity.MaxHp = maxHp;
