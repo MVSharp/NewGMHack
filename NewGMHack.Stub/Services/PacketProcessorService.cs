@@ -93,7 +93,13 @@ public class PacketProcessorService : BackgroundService
             await SendToBombServices(packet, reborns);
         }
     }
-
+       /// <summary>
+       /// TODO large amount of hacks lost in this switch , need fix for new packet
+       /// </summary>
+       /// <param name="socket"></param>
+       /// <param name="methodPacket"></param>
+       /// <param name="reborns"></param>
+       /// <returns></returns>
     private async Task DoParseWork(IntPtr socket, PacketSegment methodPacket, ConcurrentBag<Reborn> reborns)
     {
         var method = methodPacket.Method;
@@ -144,52 +150,52 @@ public class PacketProcessorService : BackgroundService
 
                 _selfInformation.ClientConfig.IsInGame = false;
                 break;
-            case 1550 or 1282: // 1691 or 2337 or 1550:
+            case 1550 or 1282 or 1490 or 2253 : // 1691 or 2337 or 1550:
                 _selfInformation.BombHistory.Clear();
 
                 _selfInformation.ClientConfig.IsInGame = true;
                 SendSkipScreen(socket);
                 break;
-            case 1858 or 1270:
-                _selfInformation.BombHistory.Clear();
-                _selfInformation.ClientConfig.IsInGame = false;
-                var mates = ReadRoommates(methodPacket.MethodBody.AsMemory());
-                _logger.LogInformation($"local Roomate:{string.Join("|", mates)}");
-                _selfInformation.Roommates.Clear();
-                foreach (var c in mates)
-                {
-                    _selfInformation.Roommates.Add(c);
-                }
+            //case 1858 or 1270:
+            //    _selfInformation.BombHistory.Clear();
+            //    _selfInformation.ClientConfig.IsInGame = false;
+            //    var mates = ReadRoommates(methodPacket.MethodBody.AsMemory());
+            //    _logger.LogInformation($"local Roomate:{string.Join("|", mates)}");
+            //    _selfInformation.Roommates.Clear();
+            //    foreach (var c in mates)
+            //    {
+            //        _selfInformation.Roommates.Add(c);
+            //    }
 
-                _logger.LogInformation($" global Roomate:{string.Join("|", _selfInformation.Roommates)}");
-                break;
-            case 1847: // someone join 
-                _selfInformation.ClientConfig.IsInGame = false;
-                _selfInformation.BombHistory.Clear();
-                RequestRoomInfo(socket);
-                break;
-            case 1851: //someone leave
+            //    _logger.LogInformation($" global Roomate:{string.Join("|", _selfInformation.Roommates)}");
+            //    break;
+            //case 1847: // someone join 
+            //    _selfInformation.ClientConfig.IsInGame = false;
+            //    _selfInformation.BombHistory.Clear();
+            //    RequestRoomInfo(socket);
+            //    break;
+            //case 1851: //someone leave
 
-                _selfInformation.ClientConfig.IsInGame = false;
-                _selfInformation.BombHistory.Clear();
-                HandleRoommateLeave(socket, methodPacket.MethodBody.AsMemory());
-                break;
+            //    _selfInformation.ClientConfig.IsInGame = false;
+            //    _selfInformation.BombHistory.Clear();
+            //    HandleRoommateLeave(socket, methodPacket.MethodBody.AsMemory());
+                //break;
 
-            case 1338: // hitted or got hitted recv
+            //case 1338: // hitted or got hitted recv
 
-                _selfInformation.ClientConfig.IsInGame = true;
-                ReadHitResponse1338(methodPacket.MethodBody.AsMemory(), reborns);
-                break;
-            case 1525: // non direct hit 
+            //    _selfInformation.ClientConfig.IsInGame = true;
+            //    ReadHitResponse1338(methodPacket.MethodBody.AsMemory(), reborns);
+            //    break;
+            //case 1525: // non direct hit 
 
-                _selfInformation.ClientConfig.IsInGame = true;
-                ReadHitResponse1525(methodPacket.MethodBody.AsMemory(), reborns);
-                break;
-            case 1340:
+            //    _selfInformation.ClientConfig.IsInGame = true;
+            //    ReadHitResponse1525(methodPacket.MethodBody.AsMemory(), reborns);
+            //    break;
+            //case 1340:
 
-                _selfInformation.ClientConfig.IsInGame = true;
-                ReadDeads(methodPacket.MethodBody.AsMemory());
-                break;
+            //    _selfInformation.ClientConfig.IsInGame = true;
+            //    ReadDeads(methodPacket.MethodBody.AsMemory());
+            //    break;
             case 2042:
 //1E 00 F0 03 FA 07 46 EF 00 00 (personId[the guy changeit]) 4F 14 00 00 00 00 00 00 04 00 45 C7 00 00 30 75 45 24 14 00
                 break;
@@ -445,9 +451,9 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         if (slot == 0) return;
         if (!_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoCharge)) return;
         ChargeRequest r = new();
-        r.Version = 13;
+        r.Version = 15;
         r.Split = 1008;
-        r.Method = 1668;
+        r.Method = 1437;
         r.Slot = slot;
         _winsockHookManager.SendPacket(socket, r.ToByteArray().AsSpan());
     }
@@ -477,7 +483,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
     {
         var s = reader.ReadPersonId();
 
-        _logger.ZLogInformation($"personid :{s.PersionId}");
+        //_logger.ZLogInformation($"personid :{s.PersionId}");
         lock (_lock)
         {
             _selfInformation.PersonInfo.PersonId = s.PersionId;
@@ -496,8 +502,8 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
 byte[] escBuffer = {
     0x0E, 0x00, 0xF0, 0x03, 0x39, 0x09, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00
-};
+    0x00 , 0x00
+        };
         _winsockHookManager.SendPacket(socket, escBuffer);
     }
 }

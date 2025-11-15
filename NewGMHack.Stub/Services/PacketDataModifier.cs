@@ -108,8 +108,20 @@ public static float DecodePosition(byte high, byte low)
 
         switch (method)
         {
-            case 1335:
+            case 1335://or 1869:// todo ,now has problem since they added some rubblsih header bytes
             {
+
+                    //var attack = new Attack1335
+                    //{
+                    //    Version = 167,
+                    //    Split   = 1008,
+                    //    Method  = 1868,
+                    //    //     TargetCount = 12,
+                    //    PlayerId = _selfInformation.PersonInfo.PersonId,
+                    //    //PlayerId2 = _selfInformation.PlayerId,
+                    //    WeaponId   = _selfInformation.PersonInfo.Weapon2,
+                    //    WeaponSlot = 65281,
+                    //};
                     if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) &&
                         !_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
                     {
@@ -124,7 +136,7 @@ public static float DecodePosition(byte high, byte low)
                     targets[i].Damage = ushort.MaxValue;
 
                 var attackBytes = attack.ToByteArray();
-                var targetsBytes = targets.AsByteSpan();
+                var targetsBytes = targets.AsByteSpan().CombineWith([0x00]);
                 var modified = new byte[attackBytes.Length + targetsBytes.Length];
 
                 attackBytes.CopyTo(modified.AsSpan(0, attackBytes.Length));

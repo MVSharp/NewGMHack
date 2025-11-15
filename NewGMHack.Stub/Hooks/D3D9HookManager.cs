@@ -642,7 +642,7 @@ center + new Vector2(0, size)
             int i = 1;
             foreach (var entity in self.Targets.ToList())
             {
-                if (entity.MaxHp <= 0 || entity.MaxHp >= 30000) continue;
+                if (entity.MaxHp <= 0 ) continue;
                 DrawInfoRow(device, x, ref y, $"{entity.Id}|", $"{entity.CurrentHp}/{entity.MaxHp}-{entity.Position.X}:{entity.Position.Y}:{entity.Position.Z}");
                 i++;
             }

@@ -372,47 +372,47 @@ private void HookFunction<T>(string dllName, string functionName, T hookDelegate
     {
 
         _lastSocket = socket;
-        try
-        {
-            Span<byte> data = new((void*)buffer, length);
+        //try
+        //{
+        //    Span<byte> data = new((void*)buffer, length);
 
-            if (data[4] == 0x3D && data[5] == 0x06)
-            {
-                byte[] varA = data.Slice(10, 4).ToArray();
-                byte[] varB = data.Slice(14, 4).ToArray();
-                byte[] newArray = [
-                    0x0F, 0x00, 0xF0, 0x03, 0x3F, 0x06,
-                    ..varA, ..varA, ..varB, 0x00
-                ];
-                RecvPacket(socket, newArray, flags);
-            }
+        //    if (data[4] == 0x3D && data[5] == 0x06)
+        //    {
+        //        byte[] varA = data.Slice(10, 4).ToArray();
+        //        byte[] varB = data.Slice(14, 4).ToArray();
+        //        byte[] newArray = [
+        //            0x0F, 0x00, 0xF0, 0x03, 0x3F, 0x06,
+        //            ..varA, ..varA, ..varB, 0x00
+        //        ];
+        //        RecvPacket(socket, newArray, flags);
+        //    }
 
-            var extras = modifier.TryHandleExtraSendData(data);
-            if (extras.Count > 0)
-            {
-                foreach (var extra in extras)
-                {
-                    fixed (byte* ptr = extra)
-                    {
-                        _originalSend!(socket, (nint)ptr, extra.Length, flags);
-                    }
-                }
-                return length;
-            }
+        //    var extras = modifier.TryHandleExtraSendData(data);
+        //    if (extras.Count > 0)
+        //    {
+        //        foreach (var extra in extras)
+        //        {
+        //            fixed (byte* ptr = extra)
+        //            {
+        //                _originalSend!(socket, (nint)ptr, extra.Length, flags);
+        //            }
+        //        }
+        //        return length;
+        //    }
 
-            var modified = modifier.TryModifySendData(data);
-            if (modified != null)
-            {
-                fixed (byte* ptr = modified)
-                {
-                    return _originalSend!(socket, (nint)ptr, modified.Length, flags);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError($"SendHook error: {ex}");
-        }
+        //    var modified = modifier.TryModifySendData(data);
+        //    if (modified != null)
+        //    {
+        //        fixed (byte* ptr = modified)
+        //        {
+        //            return _originalSend!(socket, (nint)ptr, modified.Length, flags);
+        //        }
+        //    }
+        //}
+        //catch (Exception ex)
+        //{
+        //    logger.LogError($"SendHook error: {ex}");
+        //}
 
         return _originalSend!(socket, buffer, length, flags);
     }
@@ -438,22 +438,22 @@ private void HookFunction<T>(string dllName, string functionName, T hookDelegate
 
     private unsafe int SendToHook(nint socket, nint buffer, int length, int flags, nint to, int tolen)
     {
-        try
-        {
-            Span<byte> data = new((void*)buffer, length);
-            var modified = modifier.TryModifySendToData(data);
-            if (modified != null)
-            {
-                fixed (byte* ptr = modified)
-                {
-                    return _originalSendTo!(socket, (nint)ptr, modified.Length, flags, to, tolen);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError($"SendToHook error: {ex}");
-        }
+        //try
+        //{
+        //    Span<byte> data = new((void*)buffer, length);
+        //    var modified = modifier.TryModifySendToData(data);
+        //    if (modified != null)
+        //    {
+        //        fixed (byte* ptr = modified)
+        //        {
+        //            return _originalSendTo!(socket, (nint)ptr, modified.Length, flags, to, tolen);
+        //        }
+        //    }
+        //}
+        //catch (Exception ex)
+        //{
+        //    logger.LogError($"SendToHook error: {ex}");
+        //}
 
         return _originalSendTo!(socket, buffer, length, flags, to, tolen);
     }

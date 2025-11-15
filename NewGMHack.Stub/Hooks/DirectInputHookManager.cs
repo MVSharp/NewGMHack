@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Reloaded.Hooks.Definitions;
 using NewGMHack.Stub.Services;
 using SharpDX.DirectInput;
+using Reloaded.Hooks.Definitions.X86;
 
 namespace NewGMHack.Stub.Hooks;
 
@@ -18,9 +19,11 @@ public class DirectInputHookManager(
     private readonly List<IHook<GetDeviceStateDelegate>> _hooks = [];
     private readonly List<Delegate> _activeDelegates = []; // Prevent GC
 
+
     private GetDeviceStateDelegate? _originalKeyboardDelegate;
     private GetDeviceStateDelegate? _originalMouseDelegate;
 
+        [Function(CallingConventions.Stdcall)]
     private delegate int GetDeviceStateDelegate(IntPtr devicePtr, int size, IntPtr dataPtr);
 
     private bool _f5Down = false;
