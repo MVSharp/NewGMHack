@@ -119,6 +119,9 @@ public class PacketProcessorService : BackgroundService
 
                 // _logger.ZLogInformation($"found reborn  : {reborn.TargetId}");
                 break;
+            case 2722 or 2670 or 2361: 
+                ChargeGundam(socket, _selfInformation.PersonInfo.Slot);
+                break;
             // case 1338:
             //     //need add ignore teammale
             //     var damaged = reader.ReadDamaged();
@@ -447,11 +450,12 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
     }
     private  void ChargeGundam(IntPtr socket  ,UInt32 slot)
     {
-        return;//TODO fix
+        //return;//TODO fix
+        _logger.ZLogInformation($"charging gundam: {slot} ");
         if (slot == 0) return;
         if (!_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoCharge)) return;
         ChargeRequest r = new();
-        r.Version = 15;
+        r.Version = 14;
         r.Split = 1008;
         r.Method = 1437;
         r.Slot = slot;

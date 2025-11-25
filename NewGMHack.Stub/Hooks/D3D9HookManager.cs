@@ -346,26 +346,30 @@ namespace NewGMHack.Stub.Hooks
                 //Vector2 feetScreen = WorldToScreen(playerFeetWorld, viewMatrix, projMatrix, viewport);
                 //    if (feetScreen == Vector2.Zero) 
                 //        feetScreen = new Vector2(viewport.Width / 2f, viewport.Height - 50f); // fallback
-                for (int i = 0; i < self.Targets.Count; i++)
+                //for (int i = 0; i < self.Targets.Count; i++)
+                //{
+                //    var entity = self.Targets[i];
+                //    if (entity.EntityPosPtrAddress == 0 || entity.EntityPtrAddress == 0) continue;
+                //    if (entity.CurrentHp <= 0 || entity.MaxHp <= 0)
+                //    {
+
+                //        entity.ScreenX = -1;
+                //        entity.ScreenY = -1;
+                //        continue;
+                //    }
+                //                  }
+                for(int i = 0; i < self.Targets.Count;i++)
                 {
                     var entity = self.Targets[i];
-                    if (entity.CurrentHp <= 0 || entity.MaxHp <= 0)
-                    {
-
-                        entity.ScreenX = -1;
-                        entity.ScreenY = -1;
-                        continue;
-                    }
+                    if (entity.CurrentHp <= 0 || entity.MaxHp <= 0) continue;
+                    if (entity.CurrentHp > 2_000_000 || entity.MaxHp > 2_000_000) continue;
+                    if (entity.EntityPosPtrAddress == 0 || entity.EntityPtrAddress == 0) continue;
                     Vector2 screenPos = WorldToScreen(entity.Position, viewMatrix, projMatrix, viewport);
                     entity.ScreenX = screenPos.X;
                     entity.ScreenY = screenPos.Y;
-                }
-                foreach (var entity in self.Targets.ToList())
-                {
-                    if (entity.CurrentHp <= 0 || entity.MaxHp <= 0) continue;
+
                     float distance = Vector3.Distance(playerPos, entity.Position);
                     bool isBehind;
-                    var screenPos = new Vector2(entity.ScreenX, entity.ScreenY);
                     Vector2 dirFromCenter = GetScreenDirection(entity.Position, viewMatrix, projMatrix, viewport, out isBehind);
                     bool onScreen = (screenPos != Vector2.Zero) &&
                                     screenPos.X >= 0 && screenPos.X <= viewport.Width &&

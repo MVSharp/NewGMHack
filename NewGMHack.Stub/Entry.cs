@@ -34,7 +34,6 @@ namespace NewGMHack.Stub
             //AllocConsole();
             //Console.WriteLine("hi");
 
-            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
             var hostBuilder = Host.CreateDefaultBuilder()
                                   .ConfigureLogging(c =>
                                    {

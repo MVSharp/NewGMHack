@@ -19,6 +19,8 @@ namespace NewGMHack.Stub
          public float ScreenX { get; set; }
          public float ScreenY { get; set; }
         public bool IsBest { get; set; }
+        public uint EntityPtrAddress { get; set; }
+        public uint EntityPosPtrAddress { get; set; }
     }
     
     public class SelfInformation
@@ -32,7 +34,7 @@ namespace NewGMHack.Stub
         public int CrossHairX { get; set; }
         public int CrossHairY { get; set; }
         public float AimRadius { get; set; }
-        public List<Entity> Targets { get; set; } = Enumerable.Repeat( new Entity(),12).ToList();
+        public List<Entity> Targets { get; set; } = Enumerable.Repeat(new Entity(), 12).ToList();
         public SelfInformation()
         {
         }

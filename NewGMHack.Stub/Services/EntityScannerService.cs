@@ -16,7 +16,7 @@ public class EntityScannerService : BackgroundService
 
     // Offsets from Lua (all uint for x86)
     //private const uint BaseOffset = 0x013100EC;
-    private const uint BaseOffset = 0x013A10EC;
+    private const uint BaseOffset = 0x013A70EC;
     private static readonly uint[] Offsets = { 0x40, 0x0, 0x8 };
     private const uint HpOffset = 0x34;
     private const uint MaxHpOffset = 0x38;
@@ -66,6 +66,8 @@ public class EntityScannerService : BackgroundService
                     {
                         _selfInfo.Targets[i].CurrentHp = 0;
                         _selfInfo.Targets[i].MaxHp = 0;
+                        _selfInfo.Targets[i].EntityPtrAddress = 0;
+                        _selfInfo.Targets[i].EntityPosPtrAddress = 0;
                     }
                 }
 
@@ -98,14 +100,13 @@ public class EntityScannerService : BackgroundService
             if (!TryReadUInt(checked(firstPtr + MySelfOffset), out var entityStruct) || entityStruct == 0) return false;
             if (!TryReadEntityData(entityStruct, out var entity)) return false;
 
-            if (entity.CurrentHp > 30_000 || entity.MaxHp > 30_000) return false;
-
+            if (entity.CurrentHp > 300_000 || entity.MaxHp > 300_000) return false;
+            if (entity.CurrentHp <  0 || entity.MaxHp < 0) return false;
             _selfInfo.PersonInfo.CurrentHp = entity.CurrentHp;
             _selfInfo.PersonInfo.MaxHp = entity.MaxHp;
             _selfInfo.PersonInfo.X = entity.Position.X;
             _selfInfo.PersonInfo.Y = entity.Position.Y;
             _selfInfo.PersonInfo.Z = entity.Position.Z;
-
             // Mission Bomb Teleport Feature
             if (_selfInfo.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb))
             {
@@ -118,6 +119,31 @@ public class EntityScannerService : BackgroundService
                 }
             }
 
+
+           
+if (_selfInfo.ClientConfig.Features.IsFeatureEnable(FeatureName.SuckStarOverChina))
+{
+    var targets = _selfInfo.Targets.Where(x => x.EntityPtrAddress != 0 && x.EntityPosPtrAddress != 0).ToList();
+    int count = targets.Count;
+    float radius = 100.0f;
+
+    for (int i = 0; i < count; i++)
+    {
+        var e = targets[i];
+
+        // distribute using spherical coordinates
+        double theta = 2 * Math.PI * i / count;       // azimuth angle
+        double phi = Math.Acos(2.0 * i / count - 1);  // polar angle
+
+        float offsetX = (float)(radius * Math.Sin(phi) * Math.Cos(theta));
+        float offsetY = (float)(radius * Math.Sin(phi) * Math.Sin(theta));
+        float offsetZ = (float)(radius * Math.Cos(phi));
+
+        WriteFloat(checked(e.EntityPosPtrAddress + XyzOffsets[0]), _selfInfo.PersonInfo.X + offsetX);
+        WriteFloat(checked(e.EntityPosPtrAddress + XyzOffsets[1]), _selfInfo.PersonInfo.Y + offsetY);
+        WriteFloat(checked(e.EntityPosPtrAddress + XyzOffsets[2]), _selfInfo.PersonInfo.Z + offsetZ);
+    }
+}
             return true;
         }
         catch
@@ -214,13 +240,16 @@ public class EntityScannerService : BackgroundService
             !TryReadFloat(checked(posPtr + XyzOffsets[1]), out float y) ||
             !TryReadFloat(checked(posPtr + XyzOffsets[2]), out float z))
             return false;
-
+        if (hp > 600_000 || maxHp > 600_000) return false; 
+        if (hp < 0|| maxHp < 0) return false; 
         var pos = new Vector3(x, checked(y + 50), z);
         // if (!IsValidPosition(pos)) return false;
 
         entity.CurrentHp = hp;
         entity.MaxHp = maxHp;
         entity.Position = pos;
+        entity.EntityPtrAddress = entityStruct;
+        entity.EntityPosPtrAddress = posPtr;
         return true;
     }
 
