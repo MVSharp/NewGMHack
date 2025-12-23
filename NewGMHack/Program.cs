@@ -11,8 +11,10 @@ namespace EntityDumper
 {
     class Program
     {
-        private static readonly int BaseOffset = 0x5C1FEC;
-        private static readonly int[] Offsets = { 0x50, 0x4, 0x8 };
+        //private static readonly int BaseOffset = 0x5C1FEC;
+        private static readonly int BaseOffset = 0x012CAFAC;
+        //private static readonly int[] Offsets = { 0x50, 0x4, 0x8 };
+        private static readonly int[] Offsets = { 0x40, 0x0, 0x8 };
         private static readonly int HpOffset = 0x34;
         private static readonly int PosPtrOffset = 0x30;
         private static readonly int[] XyzOffsets = { 0x88, 0x8C, 0x90 };
@@ -22,7 +24,6 @@ namespace EntityDumper
         static void Main(string[] args)
         {
             // Subscribe to Squalr logs for error output
-
             string ModuleName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ==")) + ".exe";
             Logger.Subscribe(new EngineLogEvents());
 
@@ -40,26 +41,26 @@ namespace EntityDumper
             uint moduleBase = GetModuleBaseAddress(ModuleName);
 
 
-            uint managerAddr = checked(moduleBase + (uint)0x5C1FE4);
-            if (!TryReadUInt(managerAddr, out uint manager) || manager == 0) 
-            {
-                Debugger.Break();
-            }
+            //uint managerAddr = checked(moduleBase + (uint)0x5C1FE4);
+            //if (!TryReadUInt(managerAddr, out uint manager) || manager == 0) 
+            //{
+            //    //Debugger.Break();
+            //}
 
-Console.WriteLine($"managerAddr = 0x{managerAddr:X8}, manager = 0x{manager:X8}");
-if (!TryReadUInt(managerAddr + 0x08, out uint entityHandle) || entityHandle == 0)
-            {
-                Debugger.Break();
-            }
-Console.WriteLine($"rawHandle = 0x{entityHandle:X8}");
-if (!TryReadUInt(entityHandle + 0x70, out uint entityStruct) || entityStruct == 0)
-            {
-                Debugger.Break();
-            }
-            if (!TryReadInt(entityStruct + 0x34, out int myhp) || myhp < 0 || myhp > 30000)
-            {
-                Debugger.Break();
-            }
+//Console.WriteLine($"managerAddr = 0x{managerAddr:X8}, manager = 0x{manager:X8}");
+//if (!TryReadUInt(managerAddr + 0x08, out uint entityHandle) || entityHandle == 0)
+//            {
+//                //Debugger.Break();
+//            }
+//Console.WriteLine($"rawHandle = 0x{entityHandle:X8}");
+//if (!TryReadUInt(entityHandle + 0x70, out uint entityStruct) || entityStruct == 0)
+//            {
+//                //Debugger.Break();
+//            }
+//            if (!TryReadInt(entityStruct + 0x34, out int myhp) || myhp < 0 || myhp > 30000)
+//            {
+//                //Debugger.Break();
+//            }
             if (moduleBase == 0)
             {
                 Console.WriteLine($"Error: Could not find module {ModuleName}");

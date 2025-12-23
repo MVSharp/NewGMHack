@@ -49,8 +49,9 @@ namespace NewGmHack.GUI.ViewModels
         [RelayCommand]
         private async Task Inject()
         {
-
-            string processName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ=="));
+            try
+            {
+  string processName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ=="));
             var target = Process.GetProcessesByName(processName).FirstOrDefault();
             while (target == null)
             {
@@ -91,7 +92,14 @@ namespace NewGmHack.GUI.ViewModels
                 Console.WriteLine("fucked , it failed,we r fucked up");
                 await _dialogCoordinator.ShowMessageAsync(this, "failed to inject", "failed to inject");
             }
-        }
+
+            }
+            catch(Exception ex)
+            {
+
+                await _dialogCoordinator.ShowMessageAsync(this, "failed to inject", $"{ex.Message}|{ex.StackTrace}");
+            }
+   }
 
         /// <inheritdoc />
         public void SetHealthStatus(bool isConnected)

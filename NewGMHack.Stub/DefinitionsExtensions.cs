@@ -148,12 +148,13 @@ public static Span<T> ToSpan<T>(this ReadOnlySpan<T> readOnlySpan)
             return reborns;
         }
 
-        public static Reborn ReadReborn(ref this ByteReader reader)
+        public static Reborn ReadReborn(ref this ByteReader reader , bool isReadLocation= true )
         {
             try
             {
                 var personId = reader.Read<uint>();
                 var targetId = reader.Read<uint>();
+                if(!isReadLocation) return new Reborn(personId, targetId , 0);
                 reader.SkipBytes(18);
                 var location = reader.Read<ushort>();
                 return new Reborn(personId, targetId, location);

@@ -127,16 +127,28 @@ namespace NewGMHack.Stub.Services
             var targets = ValueEnumerable.Repeat(1, 12)
                                          .Select(_ => new TargetData() { Damage = ushort.MaxValue - 1 })
                                          .ToArray(); // new TargetData1335[12>
+            //var attack = new Attack1335
+            //{
+            //    Version = 166,
+            //    Split   = 1008,
+            //    Method  = 1335,
+            //    //     TargetCount = 12,
+            //    PlayerId = _selfInformation.PersonInfo.PersonId,
+            //    //PlayerId2 = _selfInformation.PlayerId,
+            //    WeaponId   = _selfInformation.PersonInfo.Weapon2,
+            //    WeaponSlot = 1
+            //};
+
             var attack = new Attack1335
             {
-                Version = 166,
+                Version = 167,
                 Split   = 1008,
-                Method  = 1335,
+                Method  = 1868,
                 //     TargetCount = 12,
                 PlayerId = _selfInformation.PersonInfo.PersonId,
                 //PlayerId2 = _selfInformation.PlayerId,
                 WeaponId   = _selfInformation.PersonInfo.Weapon2,
-                WeaponSlot = 1
+                WeaponSlot = 65281,
             };
             var i = 0;
             foreach (var reborn in chunkedReborn)
@@ -161,9 +173,9 @@ namespace NewGMHack.Stub.Services
             // var hex = BitConverter.ToString(buf).Replace("-", " ");
             var attackBytes  = attack.ToByteArray().AsSpan();
             var targetBytes  = targets.AsSpan().AsByteSpan();
-            var attackPacket = attackBytes.CombineWith(targetBytes).ToArray();
-            // var hex =  BitConverter.ToString( attackPacket);
-            // _logger.ZLogInformation($"bomb bomb {attackPacket.Length} |the hex: {hex}");
+            var attackPacket = attackBytes.CombineWith(targetBytes).CombineWith([0x00]).ToArray();
+            //var hex = BitConverter.ToString(attackPacket);
+            //_logger.ZLogInformation($"bomb bomb {attackPacket.Length} |the hex: {hex}");
             await Task.Run(() =>
             {
                 for (int j = 0; j < 3; j++)

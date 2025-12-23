@@ -15,4 +15,8 @@ public enum FeatureName
     SuckStarOverChina,
     IsAutoFunnel,
     CollectGift,
+    EnableOverlay,
+    EnableAutoAim ,
+    Debug,
+    FreeMove,
 }

@@ -71,50 +71,50 @@ namespace NewGMHack.Stub.Services
 private readonly SemaphoreSlim _aimLock = new(1, 1);
         private bool IsRightMouseDown()
             => (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
-        private int GetBest(Vector2 center)
-        {
-            //Entity best = null;
-            float bestDist = float.MaxValue;
-            int i = 0;
-            int best = -1;
-            foreach (var entity in _self.Targets)
-            {
-                if (entity.CurrentHp <= 0 || entity.MaxHp <= 0) continue;
-                if (entity.ScreenX <= 0 || entity.ScreenY <= 0) continue;
+//        private int GetBest(Vector2 center)
+//        {
+//            //Entity best = null;
+//            float bestDist = float.MaxValue;
+//            int i = 0;
+//            int best = -1;
+//            foreach (var entity in _self.Targets)
+//            {
+//                if (entity.CurrentHp <= 0 || entity.MaxHp <= 0) continue;
+//                if (entity.ScreenX <= 0 || entity.ScreenY <= 0) continue;
 
-                float dist = Vector2.Distance(center, new Vector2(entity.ScreenX, entity.ScreenY));
-                if (dist < bestDist)
-                {
-                    bestDist = dist;
-                    best = i;
-                    //best = entity;
-                }
-                i++;
-            }
-            //return i;
-            return best;
-        }
+//                float dist = Vector2.Distance(center, new Vector2(entity.ScreenX, entity.ScreenY));
+//                if (dist < bestDist)
+//                {
+//                    bestDist = dist;
+//                    best = i;
+//                    //best = entity;
+//                }
+//                i++;
+//            }
+//            //return i;
+//            return best;
+//        }
 
-private Entity GetBestTarget(Vector2 crosshair)
-{
-    Entity best = null;
-    float bestDist = float.MaxValue;
+//private Entity GetBestTarget(Vector2 crosshair)
+//{
+//    Entity best = null;
+//    float bestDist = float.MaxValue;
 
-    foreach (var t in _self.Targets)
-    {
-        if (t.CurrentHp <= 0 || t.ScreenX <= 0 || t.ScreenY <= 0) continue;
+//    foreach (var t in _self.Targets)
+//    {
+//        if (t.CurrentHp <= 0 || t.ScreenX <= 0 || t.ScreenY <= 0) continue;
 
-        float dist = Vector2.Distance(crosshair, new Vector2(t.ScreenX, t.ScreenY));
-                if (dist > _self.AimRadius) continue;
-        if (dist < bestDist)
-        {
-            bestDist = dist;
-            best = t;
-        }
-    }
+//        float dist = Vector2.Distance(crosshair, new Vector2(t.ScreenX, t.ScreenY));
+//                if (dist > _self.AimRadius) continue;
+//        if (dist < bestDist)
+//        {
+//            bestDist = dist;
+//            best = t;
+//        }
+//    }
 
-    return best;
-}
+//    return best;
+//}
 
 private async Task ProcessAim()
 {
@@ -123,9 +123,11 @@ private async Task ProcessAim()
     try
     {
         Vector2 crosshair = new(_self.CrossHairX, _self.CrossHairY);
-        Entity target = GetBestTarget(crosshair);
-        if (target == null) return;
-
+                //Entity target = GetBestTarget(crosshair);
+                //if (target == null) return;
+                var target = _self.Targets.FirstOrDefault(x => x.IsBest);
+                if (target == null) return;
+                if (target.CurrentHp <= 0 || target.ScreenX <=0 || target.ScreenY <= 0) return;
         Vector2 targetPos = new(target.ScreenX, target.ScreenY);
         Vector2 delta = targetPos - crosshair;
 
@@ -141,7 +143,7 @@ private async Task ProcessAim()
         float maxClamp = Math.Clamp(distance * 0.5f, 10f, 100f);
         move.X = Math.Clamp(move.X, -maxClamp, maxClamp);
         move.Y = Math.Clamp(move.Y, -maxClamp, maxClamp);
-
+        
         mouse_event(MOUSEEVENTF_MOVE, (int)move.X, (int)move.Y, 0, UIntPtr.Zero);
         await Task.Delay(10);
     }

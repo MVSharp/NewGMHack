@@ -8,10 +8,13 @@ using MessagePack;
 // using MessagePipe;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using NewGMHack.Stub.Hooks;
 using NewGMHack.Stub.MemoryScanner;
 using NewGMHack.Stub.PacketStructs.Recv;
 using NewGMHack.Stub.Services;
+using Reloaded.Hooks;
+using Reloaded.Hooks.Definitions;
 using SharedMemory;
 using ZLogger;
 
@@ -31,7 +34,6 @@ namespace NewGMHack.Stub
             //AllocConsole();
             //Console.WriteLine("hi");
 
-            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
             var hostBuilder = Host.CreateDefaultBuilder()
                                   .ConfigureLogging(c =>
                                    {
@@ -121,9 +123,14 @@ services.AddHostedService<PacketDispatcher>();
                                        //services.AddSingleton<WinsockHookManager>(); // this is no problem , only once
                                        //services.AddSingleton<WinsockHookManager>(); // this is no problem , only once
                                        //services.AddSingleton<IHookManager, ZoaGraphicsHookManager>();
-                                       services.AddSingleton<IHookManager ,D3D9HookManager>();
-                                       services.AddSingleton<IHookManager ,DirectInputHookManager>();
+
+                                       services.AddSingleton<IHookManager, D3D9HookManager>();
                                        services.AddSingleton<IHookManager,WinsockHookManager>();
+services.AddSingleton<IReloadedHooks>(provider =>
+{
+    return new ReloadedHooks();
+});
+                                       services.AddSingleton<IHookManager, DirectInputHookManager>();
                                        //services.AddHostedService<PacketProcessorService>();
                                    })
                                   .Build();

@@ -24,6 +24,7 @@ public class MainHookService : IHostedService
     {
         _logger.ZLogInformation($"Starting hook service...");
 
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
         foreach (var manager in _hookManagers)
         {
             try

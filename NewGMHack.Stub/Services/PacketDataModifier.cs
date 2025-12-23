@@ -8,7 +8,6 @@ using NewGMHack.Stub;
 using NewGMHack.Stub.PacketStructs;
 using NewGMHack.Stub.PacketStructs.Send;
 using NewGMHack.Stub.Services;
-using Reloaded.Memory.Extensions;
 using ZLinq;
 using ZLogger;
 
@@ -109,8 +108,22 @@ public static float DecodePosition(byte high, byte low)
 
         switch (method)
         {
-            case 1335:
+            case 1868:// todo ,now has problem since they added some rubblsih header bytes
             {
+                    
+                    _logger?.ZLogInformation($"prending 1335: {BitConverter.ToString(raw.ToArray())}");
+
+                    //var attack = new Attack1335
+                    //{
+                    //    Version = 167,
+                    //    Split   = 1008,
+                    //    Method  = 1868,
+                    //    //     TargetCount = 12,
+                    //    PlayerId = _selfInformation.PersonInfo.PersonId,
+                    //    //PlayerId2 = _selfInformation.PlayerId,
+                    //    WeaponId   = _selfInformation.PersonInfo.Weapon2,
+                    //    WeaponSlot = 65281,
+                    //};
                     if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) &&
                         !_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
                     {
@@ -125,7 +138,7 @@ public static float DecodePosition(byte high, byte low)
                     targets[i].Damage = ushort.MaxValue;
 
                 var attackBytes = attack.ToByteArray();
-                var targetsBytes = targets.AsByteSpan();
+                var targetsBytes = targets.AsByteSpan().CombineWith([0x00]);
                 var modified = new byte[attackBytes.Length + targetsBytes.Length];
 
                 attackBytes.CopyTo(modified.AsSpan(0, attackBytes.Length));
@@ -135,53 +148,53 @@ public static float DecodePosition(byte high, byte low)
                     return modified;
             }
 
-            case 1486:
-            {
+            //case 1486:
+            //{
 
-                    if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) &&
-                        !_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
-                    {
-                        return null;
-                    }
+            //        if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) &&
+            //            !_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+            //        {
+            //            return null;
+            //        }
 
-                    var attack = raw.ReadStruct<Attack1486>();
-                var targets = raw.SliceAfter<Attack1486>().CastTo<TargetData>();
-                if (attack.PlayerId != _self.PersonInfo.PersonId) return null;
+            //        var attack = raw.ReadStruct<Attack1486>();
+            //    var targets = raw.SliceAfter<Attack1486>().CastTo<TargetData>();
+            //    if (attack.PlayerId != _self.PersonInfo.PersonId) return null;
 
-                for (int i = 0; i < targets.Length; i++)
-                    targets[i].Damage = ushort.MaxValue;
+            //    for (int i = 0; i < targets.Length; i++)
+            //        targets[i].Damage = ushort.MaxValue;
 
-                var attackBytes = attack.ToByteArray();
-                var targetsBytes = targets.AsByteSpan();
-                var modified = new byte[attackBytes.Length + targetsBytes.Length];
+            //    var attackBytes = attack.ToByteArray();
+            //    var targetsBytes = targets.AsByteSpan();
+            //    var modified = new byte[attackBytes.Length + targetsBytes.Length];
 
-                attackBytes.CopyTo(modified.AsSpan(0, attackBytes.Length));
-                targetsBytes.CopyTo(modified.AsSpan(attackBytes.Length));
+            //    attackBytes.CopyTo(modified.AsSpan(0, attackBytes.Length));
+            //    targetsBytes.CopyTo(modified.AsSpan(attackBytes.Length));
 
-                _logger?.ZLogInformation($"Modified 1486: {BitConverter.ToString(modified)}");
-                return modified;
-            }
+            //    _logger?.ZLogInformation($"Modified 1486: {BitConverter.ToString(modified)}");
+            //    return modified;
+            //}
 
-            case 1538:
-            {
+            //case 1538:
+            //{
 
-                    if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) &&
-                        !_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
-                    {
-                        return null;
-                    }
+            //        if (!_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) &&
+            //            !_self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+            //        {
+            //            return null;
+            //        }
 
-                    var buf = result.MethodBody.ToArray();
-                buf[46] = 0xFF;
-                buf[47] = 0xFF;
+            //        var buf = result.MethodBody.ToArray();
+            //    buf[46] = 0xFF;
+            //    buf[47] = 0xFF;
 
-                var modified = new byte[6 + buf.Length];
-                data[0..6].CopyTo(modified.AsSpan(0, 6));
-                buf.CopyTo(modified.AsSpan(6));
+            //    var modified = new byte[6 + buf.Length];
+            //    data[0..6].CopyTo(modified.AsSpan(0, 6));
+            //    buf.CopyTo(modified.AsSpan(6));
 
-                _logger?.ZLogInformation($"Modified 1538: {BitConverter.ToString(modified)}");
-                return modified;
-            }
+            //    _logger?.ZLogInformation($"Modified 1538: {BitConverter.ToString(modified)}");
+            //    return modified;
+            //}
             default:
                 return null;
         }

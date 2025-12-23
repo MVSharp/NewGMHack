@@ -21,17 +21,21 @@ public class ClientConfig
 {
     public List<HackFeatures> Features = new()
     {
-        new HackFeatures() { Name = FeatureName.IsMissionBomb, IsEnabled    = true },
+        new HackFeatures() { Name = FeatureName.IsMissionBomb, IsEnabled    = false },
         new HackFeatures() { Name = FeatureName.IsAutoReady, IsEnabled      = false },
         new HackFeatures() { Name = FeatureName.IsAutoCharge, IsEnabled = false },
         new HackFeatures() { Name = FeatureName.IsPlayerBomb, IsEnabled     = false },
-        new HackFeatures() { Name = FeatureName.IsRebound, IsEnabled     = true },
-        new HackFeatures() { Name = FeatureName.IsIllusion, IsEnabled     = true },
-        new HackFeatures() { Name = FeatureName.SuckStarOverChina, IsEnabled     = true },
+        new HackFeatures() { Name = FeatureName.IsRebound, IsEnabled     = false },
+        new HackFeatures() { Name = FeatureName.IsIllusion, IsEnabled     = false },
+        new HackFeatures() { Name = FeatureName.SuckStarOverChina, IsEnabled     = false },
         new HackFeatures() { Name = FeatureName.IsAimSupport, IsEnabled     = false },
-
-        new HackFeatures() { Name = FeatureName.IsAutoFunnel, IsEnabled     = true },
+        new HackFeatures() { Name = FeatureName.IsAutoFunnel, IsEnabled     = false },
         new HackFeatures() { Name = FeatureName.CollectGift, IsEnabled     = false },
+        new HackFeatures() { Name = FeatureName.IsAutoFunnel, IsEnabled     = false },
+        new HackFeatures() { Name = FeatureName.EnableAutoAim, IsEnabled     = true },
+        new HackFeatures() { Name = FeatureName.EnableOverlay, IsEnabled     = true },
+        new HackFeatures() { Name = FeatureName.Debug, IsEnabled     = false },
+        new HackFeatures() { Name = FeatureName.FreeMove, IsEnabled     = false },
     };
     public bool IsInGame { get; set; } = false;
 }
