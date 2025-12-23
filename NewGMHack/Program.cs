@@ -12,7 +12,7 @@ namespace EntityDumper
     class Program
     {
         //private static readonly int BaseOffset = 0x5C1FEC;
-        private static readonly int BaseOffset = 0x013100EC;
+        private static readonly int BaseOffset = 0x012CAFAC;
         //private static readonly int[] Offsets = { 0x50, 0x4, 0x8 };
         private static readonly int[] Offsets = { 0x40, 0x0, 0x8 };
         private static readonly int HpOffset = 0x34;
@@ -24,7 +24,6 @@ namespace EntityDumper
         static void Main(string[] args)
         {
             // Subscribe to Squalr logs for error output
-
             string ModuleName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ==")) + ".exe";
             Logger.Subscribe(new EngineLogEvents());
 

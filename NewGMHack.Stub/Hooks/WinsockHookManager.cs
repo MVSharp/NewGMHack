@@ -302,6 +302,7 @@ using Squalr.Engine.Utils.Extensions;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
+using ZLogger;
 
 public sealed class WinsockHookManager(
     ILogger<WinsockHookManager> logger,
@@ -375,6 +376,10 @@ private void HookFunction<T>(string dllName, string functionName, T hookDelegate
         if(length <= 6) 
         return _originalSend!(socket, buffer, length, flags);
         Span<byte> data = new((void*)buffer, length);
+        if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.Debug))
+        {
+            logger.ZLogInformation($"[SEND]{BitConverter.ToString(data.ToArray())}");
+        }
         if (data[2] != 0xF0 && data[3] != 0x03) 
         return _originalSend!(socket, buffer, length, flags);
         try
@@ -429,6 +434,11 @@ private void HookFunction<T>(string dllName, string functionName, T hookDelegate
             if (receivedLength > 6)
             {
                 Span<byte> data = new((void*)buffer, receivedLength);
+
+                if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.Debug))
+                {
+                    logger.ZLogInformation($"[RECV]{BitConverter.ToString(data.ToArray())}");
+                }
                 if (data[2] == 0xF0 && data[3] == 0x03)
                 {
                     channel.Writer.TryWrite(new PacketContext(socket, data.ToArray()));

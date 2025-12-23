@@ -309,6 +309,8 @@ namespace NewGMHack.Stub.Hooks
         }
         public void DrawEntities(Device device)
         {
+            if (!self.ClientConfig.Features.GetFeature(FeatureName.EnableOverlay).IsEnabled)
+                return;
 
             if (device == null || _line == null || _line.IsDisposed || !_initialized)
             {
@@ -606,6 +608,9 @@ center + new Vector2(0, size)
         }
         public void DrawUI(Device device)
         {
+
+            if (!self.ClientConfig.Features.GetFeature(FeatureName.EnableOverlay).IsEnabled)
+                return;
             if (device == null || _line == null || _line.IsDisposed || !_initialized)
             {
                 Initialize(device);
@@ -1089,7 +1094,6 @@ center + new Vector2(0, size)
                     overlayManager.Initialize(_device);
                     _deviceInitialized = true;
                 }
-
                 overlayManager.DrawEntities(_device);
                 overlayManager.DrawUI(_device);
             }

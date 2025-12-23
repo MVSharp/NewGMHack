@@ -109,6 +109,14 @@ public class PacketProcessorService : BackgroundService
         {
             // case 1992 or 1338 or 2312 or 1525 or 1521 or 2103:
             //1342 player reborn in battle
+            case 2143: // battle reborn
+                _selfInformation.ClientConfig.IsInGame = true;
+                if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+                {
+                    _logger.ZLogInformation($"battle reborn packet");
+                    ReadReborns(reader, reborns,false);
+                }
+                break;
             case 1992 or 1342 or 2065: //or 1521 or 2312 or 1525 or 1518:
                 _selfInformation.ClientConfig.IsInGame = true;
                 if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
@@ -430,11 +438,11 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         }
     }
 
-    private void ReadReborns(ByteReader reader, ConcurrentBag<Reborn> reborns)
+    private void ReadReborns(ByteReader reader, ConcurrentBag<Reborn> reborns , bool isReadLocation = true)
     {
         try
         {
-            var reborn = reader.ReadReborn();
+            var reborn = reader.ReadReborn(isReadLocation);
 
             // lock (_lock)
             // {
