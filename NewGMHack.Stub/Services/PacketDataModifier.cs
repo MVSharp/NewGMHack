@@ -111,7 +111,7 @@ public static float DecodePosition(byte high, byte low)
             case 1868:// todo ,now has problem since they added some rubblsih header bytes
             {
                     
-                    _logger?.ZLogInformation($"prending 1335: {BitConverter.ToString(raw.ToArray())}");
+                    //_logger?.ZLogInformation($"prending 1335: {BitConverter.ToString(raw.ToArray())}");
 
                     //var attack = new Attack1335
                     //{
@@ -137,9 +137,9 @@ public static float DecodePosition(byte high, byte low)
                 for (int i = 0; i < targets.Length; i++)
                     targets[i].Damage = ushort.MaxValue;
 
-                var attackBytes = attack.ToByteArray();
-                var targetsBytes = targets.AsByteSpan().CombineWith([0x00]);
-                var modified = new byte[attackBytes.Length + targetsBytes.Length];
+                var attackBytes  = attack.ToByteArray();
+                var targetsBytes = targets.AsByteSpan().CombineWith((ReadOnlySpan<byte>)[0x00]);
+                var modified     = new byte[attackBytes.Length + targetsBytes.Length];
 
                 attackBytes.CopyTo(modified.AsSpan(0, attackBytes.Length));
                 targetsBytes.CopyTo(modified.AsSpan(attackBytes.Length));

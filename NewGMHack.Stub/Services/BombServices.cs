@@ -173,17 +173,17 @@ namespace NewGMHack.Stub.Services
             // var hex = BitConverter.ToString(buf).Replace("-", " ");
             var attackBytes  = attack.ToByteArray().AsSpan();
             var targetBytes  = targets.AsSpan().AsByteSpan();
-            var attackPacket = attackBytes.CombineWith(targetBytes).CombineWith([0x00]).ToArray();
+            var attackPacket = attackBytes.CombineWith(targetBytes).CombineWith((ReadOnlySpan<byte>)[0x00]).ToArray();
             //var hex = BitConverter.ToString(attackPacket);
             //_logger.ZLogInformation($"bomb bomb {attackPacket.Length} |the hex: {hex}");
-            await Task.Run(() =>
-            {
+            //await Task.Run(() =>
+            //{
                 for (int j = 0; j < 3; j++)
             {
                 SendPacket(socket, attackPacket);
                 //_hookManager.SendPacket(distinctTargets.Item1, buf);
             }
-            });
+            //});
         }
     }
 }

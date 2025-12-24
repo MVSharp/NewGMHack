@@ -291,6 +291,7 @@
 //                                          ref int fromlen);
 //}
 
+using System.Buffers;
 using InjectDotnet.NativeHelper;
 using Microsoft.Extensions.Logging;
 using NewGMHack.Stub;
@@ -323,7 +324,7 @@ public sealed class WinsockHookManager(
     private SendToDelegate? _originalSendTo;
     private RecvFromDelegate? _originalRecvFrom;
 
-    private IntPtr _lastSocket;
+    public static IntPtr _lastSocket;
 
     public void HookAll()
     {
@@ -369,21 +370,39 @@ private void HookFunction<T>(string dllName, string functionName, T hookDelegate
     }
 }
 
+private bool IsLocalLoopback(nint socket, string startWith = "127.")
+{
+    SOCKADDR_IN addr = new SOCKADDR_IN();
+    addr.sin_zero = new byte[8];
+    int size = Marshal.SizeOf(addr);
+    if (getsockname(socket, ref addr, ref size) == 0)
+    {
+        byte[] ipBytes = BitConverter.GetBytes(addr.sin_addr);
+        string ip      = string.Join(".", ipBytes);
+        return ip.StartsWith(startWith);
+    }
+
+    return false;
+}
     private unsafe int SendHook(nint socket, nint buffer, int length, int flags)
     {
 
-        _lastSocket = socket;
+        if (!IsLocalLoopback(socket,"127.0.0.1"))
+        {
+            return _originalSend!(socket, buffer, length, flags);
+        }
         if(length <= 6) 
         return _originalSend!(socket, buffer, length, flags);
         Span<byte> data = new((void*)buffer, length);
-        if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.Debug))
-        {
-            logger.ZLogInformation($"[SEND]{BitConverter.ToString(data.ToArray())}");
-        }
         if (data[2] != 0xF0 && data[3] != 0x03) 
         return _originalSend!(socket, buffer, length, flags);
         try
         {
+
+            if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.Debug))
+            {
+                logger.ZLogInformation($"[SEND]{BitConverter.ToString(data.ToArray())}");
+            }
 
             //if (data[4] == 0x3D && data[5] == 0x06)
             //{
@@ -408,7 +427,7 @@ private void HookFunction<T>(string dllName, string functionName, T hookDelegate
             //    }
             //    return length;
             //}
-
+            _lastSocket = socket;
             var modified = modifier.TryModifySendData(data);
             if (modified != null)
             {
@@ -430,21 +449,55 @@ private void HookFunction<T>(string dllName, string functionName, T hookDelegate
     {
         try
         {
-            int receivedLength = _originalRecv!(socket, buffer, length, flags);
-            if (receivedLength > 6)
+            //if (IsLocalLoopback(socket))
+            //{
+            //    _lastSocket = socket;
+            //}
+            if (!IsLocalLoopback(socket,"192."))
             {
-                Span<byte> data = new((void*)buffer, receivedLength);
+                return _originalRecv!(socket, buffer, length, flags);
+            }
+
+
+            int receivedLength = _originalRecv!(socket, buffer, length, flags);
+            if (receivedLength < 15) return receivedLength;
+            //if (receivedLength > 6)
+            //{
+            Span<byte> data   = new((void*)buffer, receivedLength);
+            //if (data[2] == 0xF0 && data[3] == 0x03)
+            //{
+            var skipped = data.Slice(15);
+            if (skipped[2] == 0xf0 && skipped[3] == 0x03)
+            {
 
                 if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.Debug))
                 {
-                    logger.ZLogInformation($"[RECV]{BitConverter.ToString(data.ToArray())}");
+                    logger.ZLogInformation($"[RECV=SKIPPED]{BitConverter.ToString(skipped.ToArray())}");
                 }
-                if (data[2] == 0xF0 && data[3] == 0x03)
-                {
-                    channel.Writer.TryWrite(new PacketContext(socket, data.ToArray()));
-                }
+
+                channel.Writer.TryWrite(new PacketContext(_lastSocket, skipped.ToArray()));
             }
-            return receivedLength;
+            //if (data[2]==0xf0 && data[3] == 0x03)
+            //{
+            //    if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.Debug))
+            //    {
+            //        logger.ZLogInformation($"[RECV]{BitConverter.ToString(data.ToArray())}");
+            //    }
+
+            //    channel.Writer.TryWrite(new PacketContext(socket, data.ToArray()));
+            //}
+            //else
+            //{
+
+            //    if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.Debug))
+            //    {
+            //        logger.ZLogInformation($"[RECV-skipped]{BitConverter.ToString(data.Slice(15).ToArray())}");
+            //    }
+            //}
+
+                //}
+                //}
+                return receivedLength;
         }
         catch (Exception ex)
         {
@@ -513,6 +566,7 @@ private void HookFunction<T>(string dllName, string functionName, T hookDelegate
     public unsafe void SendPacket(nint socket, ReadOnlySpan<byte> data, int flags = 0)
     {
         if (socket == 0) socket = _lastSocket;
+        logger.ZLogInformation($"send-attack{socket}");
         fixed (byte* ptr = data)
         {
             _originalSend!(socket, (nint)ptr, data.Length, flags);
@@ -533,4 +587,7 @@ private void HookFunction<T>(string dllName, string functionName, T hookDelegate
     [Function(CallingConventions.Stdcall)]
     [UnmanagedFunctionPointer(CallingConvention.StdCall, SetLastError = true)]
     private delegate int RecvFromDelegate(nint socket, nint buffer, int length, int flags, nint from, ref int fromlen);
+[DllImport("ws2_32.dll", SetLastError = true)] private static extern int getsockname( nint s, ref SOCKADDR_IN name, ref int namelen);
+[StructLayout(LayoutKind.Sequential)] struct SOCKADDR_IN { public short sin_family; public ushort sin_port; public uint sin_addr; // IPv4 address
+                                                                                                                                  [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)] public byte[] sin_zero; }
 }

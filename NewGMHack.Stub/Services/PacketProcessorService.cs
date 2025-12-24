@@ -17,7 +17,7 @@ using ZLogger;
 
 namespace NewGMHack.Stub.Services;
 
-public record PacketContext(nint Socket, byte[] Data);
+public record PacketContext(nint Socket, ReadOnlyMemory<byte> Data);
 
 public class PacketProcessorService : BackgroundService
 {
@@ -68,7 +68,7 @@ public class PacketProcessorService : BackgroundService
     {
         if (packet.Data.Length == 0) return;
         //_logger.ZLogInformation($"{packet.Socket} | {packet.Data.Length}");
-        var methodPackets = _buffSplitter.Split(packet.Data);
+        var methodPackets = _buffSplitter.Split(packet.Data.Span);
         //_logger.ZLogInformation($"method packet : {methodPackets.Count}");
         if (methodPackets.Count == 0) return;
         var reborns = new ConcurrentBag<Reborn>();
@@ -190,8 +190,16 @@ public class PacketProcessorService : BackgroundService
             //    _selfInformation.ClientConfig.IsInGame = false;
             //    _selfInformation.BombHistory.Clear();
             //    HandleRoommateLeave(socket, methodPacket.MethodBody.AsMemory());
-                //break;
+            //break;
+            case 2472:
+                _selfInformation.ClientConfig.IsInGame = true;
+                ReadHitResponse2472(methodPacket.MethodBody,reborns);
+                break;
 
+          case 1616:
+              _selfInformation.ClientConfig.IsInGame = true;
+              ReadHitResponse1616(methodPacket.MethodBody,reborns);
+              break;
             //case 1338: // hitted or got hitted recv
 
             //    _selfInformation.ClientConfig.IsInGame = true;
@@ -292,10 +300,38 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
          }
     }
 
-    private void ReadHitResponse1338(ReadOnlyMemory<byte> bytes, ConcurrentBag<Reborn> reborns )
+ private void ReadHitResponse1616(ReadOnlyMemory<byte> bytes, ConcurrentBag<Reborn> reborns )
+ {
+     // _logger.ZLogInformation($"hit");
+        var  hitResponse = bytes.Span.ReadStruct<HitResponse1616>();
+
+          // hitResponse = bytes.ReadStruct<HitResponse1525>();
+     // _logger.ZLogInformation($"hit:{hitResponse.PlayerId} | {hitResponse.FromId} | {hitResponse.ToId}  ");
+     // lock (_lock)
+     // {
+     //     _selfInformation.PersonInfo.PersonId = hitResponse.PlayerId;
+     // }
+     if (hitResponse.FromId != _selfInformation.PersonInfo.PersonId)
+     {
+         if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
+             _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+         {
+             reborns.Add(new Reborn(hitResponse.PlayerId, hitResponse.ToId, 0));
+         }
+     }
+
+     if (hitResponse.ToId == _selfInformation.PersonInfo.PersonId)
+     {
+         if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsRebound))
+         {
+             reborns.Add(new Reborn(hitResponse.PlayerId, hitResponse.FromId, 0));
+         }
+     }
+ }
+    private void ReadHitResponse2472(ReadOnlyMemory<byte> bytes, ConcurrentBag<Reborn> reborns )
     {
         // _logger.ZLogInformation($"hit");
-           var  hitResponse = bytes.Span.ReadStruct<HitResponse1338>();
+           var  hitResponse = bytes.Span.ReadStruct<HitResponse2472>();
 
              // hitResponse = bytes.ReadStruct<HitResponse1525>();
         // _logger.ZLogInformation($"hit:{hitResponse.PlayerId} | {hitResponse.FromId} | {hitResponse.ToId}  ");
@@ -425,7 +461,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
                                           //.Distinct()
                                          .ToList();
             int targetCount = distinctTargets.Count;
-            _logger.ZLogInformation($"target counts : {targetCount}");
+            _logger.ZLogInformation($"target counts : {targetCount} -- {string.Join(",",distinctTargets.Select(c=>c.TargetId))}");
             if (targetCount > 0)
             {
                 await _bombChannel.Writer.WriteAsync((packet.Socket, distinctTargets));
