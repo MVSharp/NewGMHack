@@ -1,10 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Channels;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NewGMHack.Stub.Hooks;
@@ -16,102 +13,40 @@ using ZLogger;
 
 namespace NewGMHack.Stub.Services
 {
-    internal sealed class BombServices(
-        Channel<(nint, List<Reborn>)> bombChannel,
-        ILogger<BombServices>         _logger,
+    internal class BombHistoryServices(
+        ILogger<BombHistoryServices>  _logger,
         IEnumerable<IHookManager>     managers,
+        Channel<(nint, List<Reborn>)> bombChannel,
         SelfInformation               _selfInformation) : BackgroundService
     {
-        /// <inheritdoc />
-        // [DllImport("ws2_32.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Unicode,
-        //            SetLastError = true)]
-        // private static extern int send(nint socket, nint buffer, int length, int flags);
         private readonly WinsockHookManager _hookManager = managers.OfType<WinsockHookManager>().First();
 
-        public unsafe void SendPacket(nint socket, ReadOnlySpan<byte> data, int flags = 0)
-        {
-            try
-            {
-                fixed (byte* ptr = data)
-                {
-                    nint buffer = (nint)ptr;
-                    _hookManager.SendPacket(socket, data, flags);
-                    //send(socket, buffer, data.Length, flags);
-                    //this.OriginalSend(socket, buffer, data.Length, flags);
-                }
-            }
-            catch
-            {
-                // ignored
-            }
-        }
-
-        //private IntPtr cachedSocket = 0;
-
+        /// <inheritdoc />
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            while (_selfInformation.PersonInfo.PersonId == 0)
+            while (!stoppingToken.IsCancellationRequested)
             {
-                await Task.Delay(100, stoppingToken);
-            }
-
-            while (_selfInformation.PersonInfo.Weapon2 <= 0)
-            {
-                await Task.Delay(100, stoppingToken);
-            }
-
-            await foreach (var distinctTargets in bombChannel.Reader.ReadAllAsync(stoppingToken))
-            {
-                foreach (var chunkedReborn in distinctTargets.Item2.AsValueEnumerable().OrderBy(c => c.Location)
-                                                             .Chunk(12).ToArray())
+                try
                 {
-                    //cachedSocket = distinctTargets.Item1;
-                    //   InitTargetData();
-                    try
-                    {
-                        
-                        await Attack(chunkedReborn, distinctTargets.Item1);
-                        AddHistories(chunkedReborn);
-                        //await HandleHistories();
-                    }
-                    catch
-                    {
-                    }
+                    await HandleHistories(stoppingToken);
                 }
+                catch (Exception ex)
+                {
+                    _logger.ZLogError(ex, $"Error processing bomb history");
+                } // run every 10 ms await Task.Delay(10, stoppingToken); }
+
+                await Task.Delay(100,stoppingToken); 
             }
         }
 
-        private void AddHistories(IEnumerable<Reborn> reborns)
+        private async Task HandleHistories(CancellationToken stoppingToken)
         {
-            foreach (var r in reborns)
+            foreach (var keys in _selfInformation.BombHistory.Keys.Chunk(12).ToList())
             {
-                var isInserted = _selfInformation.BombHistory.Emplace(r.TargetId, 1);
-                if (!isInserted)
-                {
-                    if (_selfInformation.BombHistory.Get(r.TargetId, out var count))
-                    {
-                        if (count > 10)
-                        {
-                            _selfInformation.BombHistory.Remove(r.TargetId);
-                        }
-                        else
-                        {
-                            _selfInformation.BombHistory.Update(r.TargetId, ++count);
-                        }
-                    }
-                }
-            }
-        }
-
-        private async Task HandleHistories()
-        {
-            foreach (var keys in _selfInformation.BombHistory.Keys.Chunk(12))
-            {
-                List<uint> reborns = new(12);
+                var reborns = new List<uint>(12);
                 foreach (var key in keys)
                 {
-                    var isGetSucessfully = _selfInformation.BombHistory.Get(key, out var count);
-                    if (isGetSucessfully)
+                    if (_selfInformation.BombHistory.Get(key, out var count))
                     {
                         if (count >= 10)
                         {
@@ -124,12 +59,14 @@ namespace NewGMHack.Stub.Services
                     }
                 }
 
-                _logger.ZLogInformation($"bomb history bomb : {string.Join("|", reborns)}");
                 if (reborns.Count > 0)
                 {
-                    await Attack(reborns.AsValueEnumerable()
-                                        .Select(c => new Reborn(_selfInformation.PersonInfo.PersonId, c, 0)).ToArray(),
-                                 _selfInformation.LastSocket);
+                    //_logger.ZLogInformation($"bomb history bomb : {string.Join("|", reborns)}");
+                    var rebornObjs = reborns.AsValueEnumerable()
+                                            .Select(c => new Reborn(_selfInformation.PersonInfo.PersonId, c, 0))
+                                            .ToList(); // reuse BombServices.Attack await _bombServices.Attack(rebornObjs, cachedSocket); }
+                   await bombChannel.Writer.WriteAsync(( _selfInformation.LastSocket,rebornObjs));
+                    //await Attack(rebornObjs, _selfInformation.LastSocket);
                 }
             }
         }
@@ -192,12 +129,30 @@ namespace NewGMHack.Stub.Services
             //_logger.ZLogInformation($"bomb bomb {attackPacket.Length} |the hex: {hex}");
             //await Task.Run(() =>
             //{
-                for (int j = 0; j < 3; j++)
+            for (int j = 0; j < 3; j++)
             {
                 SendPacket(socket, attackPacket);
                 //_hookManager.SendPacket(distinctTargets.Item1, buf);
             }
             //});
+        }
+
+        public unsafe void SendPacket(nint socket, ReadOnlySpan<byte> data, int flags = 0)
+        {
+            try
+            {
+                fixed (byte* ptr = data)
+                {
+                    nint buffer = (nint)ptr;
+                    _hookManager.SendPacket(socket, data, flags);
+                    //send(socket, buffer, data.Length, flags);
+                    //this.OriginalSend(socket, buffer, data.Length, flags);
+                }
+            }
+            catch
+            {
+                // ignored
+            }
         }
     }
 }

@@ -6,10 +6,16 @@ using System.Threading.Tasks;
 
 namespace NewGMHack.CommunicationModel.PacketStructs.Recv
 {
+    public unsafe struct Dead1506
+    {
+        public UInt32 PersonId;
+        public UInt32 DeadId;
+    }
     public unsafe struct DeadStruct
     {
         public UInt32 PersonId;
         public UInt32 KillerId;
+        public byte   padding;
         public byte   Count; //max 14
     }
 

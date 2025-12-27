@@ -37,7 +37,7 @@ static extern bool ReadProcessMemory(
         {
             _cache.Clear();
         }
-        public async Task<(string gname, int w1, int w2, int w3)> Scan(uint id)
+        public async Task<(string gname, int w1, int w2, int w3)> Scan(uint id,CancellationToken token)
         {
 
             logger.ZLogInformation($"Input : {id}");

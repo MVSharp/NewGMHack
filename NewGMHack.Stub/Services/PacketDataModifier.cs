@@ -132,8 +132,17 @@ public static float DecodePosition(byte high, byte low)
 
                     var attack = raw.ReadStruct<Attack1335>();
                 var targets = raw.SliceAfter<Attack1335>().CastTo<TargetData>();
-                if (attack.PlayerId != _self.PersonInfo.PersonId) return null;
-
+                if (attack.PlayerId != _self.PersonInfo.PersonId)
+                {
+                    var tmpId = attack.PlayerId;
+                    attack.PlayerId   = _self.PersonInfo.PersonId;
+                    attack.WeaponId   = _self.PersonInfo.Weapon2;
+                    attack.WeaponSlot = 1;
+                    for (int i = 0; i < targets.Length; i++)
+                    {
+                            targets[i].TargetId = tmpId;
+                    }
+                }
                 for (int i = 0; i < targets.Length; i++)
                     targets[i].Damage = ushort.MaxValue;
 

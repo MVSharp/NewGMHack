@@ -89,15 +89,16 @@ namespace NewGMHack.Stub
                                        services.AddTransient<IBuffSplitter, BuffSplitter>();
                                        services.AddSingleton<IHostedService, MainHookService>();
                                        services.AddSingleton<IHostedService, EntityScannerService>();
+                                       //services.AddSingleton<IHostedService, BombHistoryServices>(); //BUG it locked my services
                                        //services.AddHostedService<MainHookService>();
                                        services.AddSingleton(Channel.CreateUnbounded<PacketContext>(
                                                               new UnboundedChannelOptions
                                                                   { SingleReader = false, SingleWriter = true }));
 
-                                       // for (int i = 0; i < 3; i++)
-                                       // {
+                                       //for (int i = 0; i < 3; i++)
+                                       //{
                                            services.AddSingleton<IHostedService, PacketProcessorService>();
-                                       // }
+                                       //}
                                        services.AddSingleton<OverlayManager>();
 
                                        services.AddSingleton(Channel.CreateUnbounded<(IntPtr, List<Reborn>)>(

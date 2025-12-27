@@ -643,6 +643,7 @@ center + new Vector2(0, size)
             y += LineHeight + SectionSpacing;
 
             DrawInfoRow(device, x, ref y, "PersonId", self.PersonInfo.PersonId.ToString());
+            DrawInfoRow(device, x, ref y, "LastSocket", self.LastSocket.ToString());
             DrawInfoRow(device, x, ref y, "GundamId", self.PersonInfo.GundamId.ToString());
             DrawInfoRow(device, x, ref y, "Weapons", $"{self.PersonInfo.Weapon1}, {self.PersonInfo.Weapon2}, {self.PersonInfo.Weapon3}");
             DrawInfoRow(device, x, ref y, "Position", $"X:{self.PersonInfo.X:F1} Y:{self.PersonInfo.Y:F1} Z:{self.PersonInfo.Z:F1}");

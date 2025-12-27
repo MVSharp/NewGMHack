@@ -20,7 +20,7 @@ public class EntityScannerService : BackgroundService
 
     // Offsets from Lua (all uint for x86)
     //private const uint BaseOffset = 0x013100EC;
-    private const           uint   BaseOffset     = 0x012DD054;
+    private const           uint   BaseOffset     = 0x012DF06C;
     private static readonly uint[] Offsets        = { 0x40, 0x0, 0x8 };
     private const           uint   HpOffset       = 0x34;
     private const           uint   MaxHpOffset    = 0x38;

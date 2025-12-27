@@ -36,4 +36,5 @@ public class Info
 
     [Key(11)]
     public int MaxHp { get; set; }
+
 }

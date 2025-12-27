@@ -17,7 +17,7 @@ using ZLogger;
 
 namespace NewGMHack.Stub.Services;
 
-public record PacketContext(nint Socket, ReadOnlyMemory<byte> Data);
+public record PacketContext(nint Socket, byte[] Data);
 
 public class PacketProcessorService : BackgroundService
 {
@@ -51,46 +51,69 @@ public class PacketProcessorService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var packet in _packetChannel.Reader.ReadAllAsync(stoppingToken))
+        try
         {
-            try
-            {
-                await Parse(packet);
-            }
-            catch (Exception ex)
-            {
-                _logger.ZLogInformation($"{ex.Message} | {ex.StackTrace}");
-            }
+        _logger.ZLogInformation($"Starting Parse for packet");
+         await foreach (var packet in _packetChannel.Reader.ReadAllAsync(stoppingToken))
+         {
+             if (packet.Data.Length > 0)
+             {
+                 await Parse(packet, stoppingToken);
+             }
+         }     
+        _logger.ZLogInformation($"Finished Parse");
+            //await foreach (var packet in _packetChannel.Reader.ReadAllAsync(stoppingToken))
+            //{
+            //    try
+            //    {
+            //        if(packet.Data.Length == 0)continue;
+            //        await Parse(packet);
+            //    }
+            //    catch (Exception ex)
+            //    {
+            //        _logger.ZLogInformation($"{ex.Message} | {ex.StackTrace}");
+            //    }
+            //}
+        }
+        catch(Exception ex)
+        {
+            _logger.ZLogCritical(ex,$"the packet processor stopped");
         }
     }
 
-    private async Task Parse(PacketContext packet)
+    private async Task Parse(PacketContext packet,CancellationToken token)
     {
+        try
+        {
+
         if (packet.Data.Length == 0) return;
-        //_logger.ZLogInformation($"{packet.Socket} | {packet.Data.Length}");
-        var methodPackets = _buffSplitter.Split(packet.Data.Span);
-        //_logger.ZLogInformation($"method packet : {methodPackets.Count}");
+        var methodPackets = _buffSplitter.Split(packet.Data);
         if (methodPackets.Count == 0) return;
         var reborns = new ConcurrentBag<Reborn>();
-        if (methodPackets.Count >= 9)
+        if (methodPackets.Count >= 20)
         {
-            await Parallel.ForEachAsync(methodPackets, new ParallelOptions() { MaxDegreeOfParallelism = 3 },
-                                        async (methodPacket, _) =>
+            await Parallel.ForEachAsync(methodPackets, new ParallelOptions() { MaxDegreeOfParallelism = 3 ,CancellationToken = token},
+                                        async (methodPacket, ct) =>
                                         {
-                                            await DoParseWork(packet.Socket, methodPacket, reborns);
+                                            await DoParseWork(packet.Socket, methodPacket, reborns ,ct);
                                         });
         }
         else
         {
             foreach (var methodPacket in methodPackets)
             {
-                await DoParseWork(packet.Socket, methodPacket, reborns);
+                await DoParseWork(packet.Socket, methodPacket, reborns,token);
             }
         }
 
         if (!reborns.IsEmpty)
         {
-            await SendToBombServices(packet, reborns);
+            await SendToBombServices(packet, reborns,token);
+        }
+        }
+        catch(Exception ex)
+        {
+            _logger.ZLogError(ex,$"Error occur in packet processor");
         }
     }
        /// <summary>
@@ -100,11 +123,12 @@ public class PacketProcessorService : BackgroundService
        /// <param name="methodPacket"></param>
        /// <param name="reborns"></param>
        /// <returns></returns>
-    private async Task DoParseWork(IntPtr socket, PacketSegment methodPacket, ConcurrentBag<Reborn> reborns)
+    private async Task DoParseWork(IntPtr socket, PacketSegment methodPacket, ConcurrentBag<Reborn> reborns,CancellationToken token)
     {
         var method = methodPacket.Method;
         var reader = new ByteReader(methodPacket.MethodBody);
-        //_logger.ZLogInformation($"method: {method}");
+        //_logger.ZLogInformation($"processing {method} {BitConverter.ToString(methodPacket.MethodBody)}");
+        ////_logger.ZLogInformation($"method: {method}");
         switch (method)
         {
             // case 1992 or 1338 or 2312 or 1525 or 1521 or 2103:
@@ -127,8 +151,13 @@ public class PacketProcessorService : BackgroundService
 
                 // _logger.ZLogInformation($"found reborn  : {reborn.TargetId}");
                 break;
-            case 2722 or 2670 or 2361: 
+            case 2722 or 2670 or 2361:
                 ChargeGundam(socket, _selfInformation.PersonInfo.Slot);
+                break;
+
+            case 2107 or 2108 or 2109 or 2110 or 2877:// these are possible back room`
+                ChargeGundam(socket, _selfInformation.PersonInfo.Slot);
+                SendF5(socket);
                 break;
             // case 1338:
             //     //need add ignore teammale
@@ -146,7 +175,7 @@ public class PacketProcessorService : BackgroundService
                 _logger.ZLogInformation($"change gundam detected:{changed.MachineId}");
                 var slot = changed.Slot;
                 _selfInformation.PersonInfo.Slot = slot;
-                await ScanGundam(changed.MachineId);
+                await ScanGundam(changed.MachineId,token:token);
                 ChargeGundam(socket, slot);
 
                 break;
@@ -200,6 +229,14 @@ public class PacketProcessorService : BackgroundService
               _selfInformation.ClientConfig.IsInGame = true;
               ReadHitResponse1616(methodPacket.MethodBody,reborns);
               break;
+            case 2360:
+                _selfInformation.ClientConfig.IsInGame = true;
+                ReadDeads(methodPacket.MethodBody);
+                break;
+            case 1506:
+                _selfInformation.ClientConfig.IsInGame = true;
+                ReadDeads1506(methodPacket.MethodBody);
+                break;
             //case 1338: // hitted or got hitted recv
 
             //    _selfInformation.ClientConfig.IsInGame = true;
@@ -222,7 +259,7 @@ public class PacketProcessorService : BackgroundService
                 // No-op
                 break;
             case 2070: // gift recv 16 08
-                await ReadGifts(socket,methodPacket.MethodBody.AsMemory());
+                 ReadGifts(socket,methodPacket.MethodBody.AsMemory());
                 break;
             //case 2132 : //funnel recv
             //    _selfInformation.ClientConfig.IsInGame = true;
@@ -232,6 +269,31 @@ public class PacketProcessorService : BackgroundService
                 break;
         }
     }
+
+    private void ReadDeads1506(ReadOnlyMemory<byte> methodPacketMethodBody)
+    {
+        try
+        {
+
+            var  dead      = methodPacketMethodBody.Span.ReadStruct<Dead1506>();
+            bool isRemoved = _selfInformation.BombHistory.Remove(dead.DeadId);
+            if (!isRemoved)
+            {
+                _logger.ZLogInformation($"error in bomb history remove : readdead 1506");
+            }
+            else
+            {
+                _logger.ZLogInformation($"removed :{dead.DeadId} since it is dead from 1506");
+            }
+
+        }
+        catch(Exception ex)
+        {
+            _logger.LogError(ex,$"error occur in readdeads 1506");
+        }
+
+    }
+
     //private void ReadAndSendFunnel(ReadOnlyMemory<byte> buffer)
     //{
     //    var funnelRecv = buffer.Span.ReadStruct<FunnelPacketRecv>();
@@ -245,8 +307,15 @@ public class PacketProcessorService : BackgroundService
     //sendFunnel2129.WeaponId = funnelRecv.WeaponId;
     //sendFunnel2129.TargetId = sendFunnel.TargetId;
     //}
-
-public async Task ReadGifts(IntPtr socket,ReadOnlyMemory<byte> buffer)
+    public void SendF5(IntPtr socket)
+    {
+        if (!_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoReady)) return;
+        ReadOnlySpan<byte> msg5 = new byte[] { 0x0A, 0x00, 0xF0, 0x03, 0x89, 0x09, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00 };
+        ReadOnlySpan<byte> msg6 = [0x06 ,0x00 ,0xF0 ,0x03,0x1A,0x09, 0x00,0x00 ,0x00 ,0x00];
+        _winsockHookManager.SendPacket(socket,msg5);
+        _winsockHookManager.SendPacket(socket,msg6);
+    }
+  public  void ReadGifts(IntPtr socket,ReadOnlyMemory<byte> buffer)
 {
 _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select(b => b.ToString("X2")))}");
        if (!_selfInformation.ClientConfig.Features.GetFeature(FeatureName.CollectGift).IsEnabled) return;
@@ -282,35 +351,45 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
 }
     private void ReadDeads(ReadOnlyMemory<byte> buffer)
     {
+        try
+        {
+
          var deadStruct = buffer.Span.ReadStruct<DeadStruct>();
          var deads      = buffer.Span.SliceAfter<DeadStruct>().CastTo<Deads>();
-
-             _logger.ZLogInformation($"sstruct : {deadStruct.PersonId}|{deadStruct.KillerId}|{deadStruct.Count}");
+             // _logger.ZLogInformation($"sstruct : {deadStruct.PersonId}|{deadStruct.KillerId}|{deadStruct.Count}");
          if (deadStruct.Count > 0)
          {
-             _logger.ZLogInformation($"the deads:{string.Join("|" , deads.AsValueEnumerable().Select(c=>c.Id).ToArray())}");
+             // _logger.ZLogInformation($"the deads:{string.Join("|" , deads.AsValueEnumerable().Select(c=>c.Id).ToArray())}");
              foreach (var dead in deads)
              {
                  if (_selfInformation.BombHistory.Get(dead.Id,out var count))
                  {
-                     _selfInformation.BombHistory.Remove(dead.Id);
-                    _logger.ZLogInformation($"Removed:{dead.Id} since it is dead");
+                     bool isRemoved = _selfInformation.BombHistory.Remove(dead.Id);
+                     if (isRemoved)
+                     {
+                        _logger.ZLogInformation($"Removed:{dead.Id} since it is dead");
+                     }
+                     else
+                     {
+
+                        _logger.ZLogInformation($"cannot remove:{dead.Id}");
+                     }
                  }
              }
          }
+        }
+        catch(Exception ex)
+        {
+            _logger.LogError(ex , $"error in readdead");
+        }
     }
 
  private void ReadHitResponse1616(ReadOnlyMemory<byte> bytes, ConcurrentBag<Reborn> reborns )
  {
-     // _logger.ZLogInformation($"hit");
-        var  hitResponse = bytes.Span.ReadStruct<HitResponse1616>();
+     try
+     {
 
-          // hitResponse = bytes.ReadStruct<HitResponse1525>();
-     // _logger.ZLogInformation($"hit:{hitResponse.PlayerId} | {hitResponse.FromId} | {hitResponse.ToId}  ");
-     // lock (_lock)
-     // {
-     //     _selfInformation.PersonInfo.PersonId = hitResponse.PlayerId;
-     // }
+        var  hitResponse = bytes.Span.ReadStruct<HitResponse1616>();
      if (hitResponse.FromId != _selfInformation.PersonInfo.PersonId)
      {
          if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
@@ -327,18 +406,18 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
              reborns.Add(new Reborn(hitResponse.PlayerId, hitResponse.FromId, 0));
          }
      }
+     }
+     catch
+     {
+
+     }
  }
     private void ReadHitResponse2472(ReadOnlyMemory<byte> bytes, ConcurrentBag<Reborn> reborns )
     {
-        // _logger.ZLogInformation($"hit");
-           var  hitResponse = bytes.Span.ReadStruct<HitResponse2472>();
+        try
+        {
 
-             // hitResponse = bytes.ReadStruct<HitResponse1525>();
-        // _logger.ZLogInformation($"hit:{hitResponse.PlayerId} | {hitResponse.FromId} | {hitResponse.ToId}  ");
-        // lock (_lock)
-        // {
-        //     _selfInformation.PersonInfo.PersonId = hitResponse.PlayerId;
-        // }
+        var  hitResponse = bytes.Span.ReadStruct<HitResponse2472>();
         if (hitResponse.FromId != _selfInformation.PersonInfo.PersonId)
         {
             if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
@@ -355,6 +434,11 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
                 reborns.Add(new Reborn(hitResponse.PlayerId, hitResponse.FromId, 0));
             }
         }
+        }
+        catch
+        {
+
+        } 
     }
 
     private void ReadHitResponse1525(ReadOnlyMemory<byte> bytes, ConcurrentBag<Reborn> reborns )
@@ -452,7 +536,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         return roomates;
     }
 
-    private async Task SendToBombServices(PacketContext packet, ConcurrentBag<Reborn> reborns)
+    private async Task SendToBombServices(PacketContext packet, ConcurrentBag<Reborn> reborns,CancellationToken token)
     {
         try
         {
@@ -464,13 +548,12 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
             _logger.ZLogInformation($"target counts : {targetCount} -- {string.Join(",",distinctTargets.Select(c=>c.TargetId))}");
             if (targetCount > 0)
             {
-                await _bombChannel.Writer.WriteAsync((packet.Socket, distinctTargets));
+                await _bombChannel.Writer.WriteAsync((packet.Socket, distinctTargets),token);
             }
         }
         catch (Exception ex)
         {
             _logger.ZLogError($"{ex.Message} {ex.StackTrace ?? ""}");
-            return;
         }
     }
 
@@ -495,8 +578,8 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
     private  void ChargeGundam(IntPtr socket  ,UInt32 slot)
     {
         //return;//TODO fix
-        _logger.ZLogInformation($"charging gundam: {slot} ");
         if (slot == 0) return;
+        _logger.ZLogInformation($"charging gundam: {slot} ");
         if (!_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoCharge)) return;
         ChargeRequest r = new();
         r.Version = 14;
@@ -505,11 +588,11 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         r.Slot = slot;
         _winsockHookManager.SendPacket(socket, r.ToByteArray().AsSpan());
     }
-    private async Task ScanGundam(UInt32 machineId)
+    private async Task ScanGundam(UInt32 machineId,CancellationToken token)
     {
         _logger
            .ZLogInformation($"Machine id begin scan: {machineId} ");
-        var w =  await gm.Scan(machineId);
+        var w =  await gm.Scan(machineId,token);
 
         _logger
            .ZLogInformation($"Machine id  scan completed: {machineId} ");
@@ -547,11 +630,28 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         //    0x00, 0x00, 0x00, 0x00, 0x00, 0x00
         //];
 
-byte[] escBuffer = {
+byte[] escBuffer =
+[
     0x0E, 0x00, 0xF0, 0x03, 0x39, 0x09, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00 , 0x00
-        };
+];
+ReadOnlySpan<byte> zone1 = [0x17, 0x00, 0xF0, 0x03, 0x6A, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x8D, 0xF6, 0xE1, 0x44, 0xD2, 0x3F, 0x2C, 0x45, 0x7D, 0x68, 0x31, 0x00, 0x01
+]; 
+ReadOnlySpan<byte> zone2 = [0x17, 0x00, 0xF0, 0x03, 0x6A, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xB0, 0x21, 0x09, 0x45, 0x0C, 0xF4, 0xEC, 0xC3, 0x7E, 0x68, 0x31, 0x00, 0x02
+];
+ReadOnlySpan<byte> zone3 = [0x17, 0x00, 0xF0, 0x03, 0x6A, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xD0, 0x91, 0x1A, 0xC5, 0x89, 0x47, 0xF1, 0xC4, 0x7F, 0x68, 0x31, 0x00, 0x03
+];
+//ReadOnlySpan<byte>   unknownSkip  = [0x0C, 0x00, 0xF0, 0x03, 0x1E, 0x08, 0x00, 0x00, 0x00, 0x00, 0xFA, 0x52, 0x00, 0x80, 0x00, 0x02
+//];
         _winsockHookManager.SendPacket(socket, escBuffer);
+
+        _winsockHookManager.SendPacket(socket, zone1);
+
+        _winsockHookManager.SendPacket(socket, zone2);
+
+        _winsockHookManager.SendPacket(socket, zone3);
+
+        //_winsockHookManager.SendPacket(socket, unknownSkip);
     }
 }
