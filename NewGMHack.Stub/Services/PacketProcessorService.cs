@@ -90,21 +90,21 @@ public class PacketProcessorService : BackgroundService
         var methodPackets = _buffSplitter.Split(packet.Data);
         if (methodPackets.Count == 0) return;
         var reborns = new ConcurrentBag<Reborn>();
-        if (methodPackets.Count >= 20)
-        {
-            await Parallel.ForEachAsync(methodPackets, new ParallelOptions() { MaxDegreeOfParallelism = 3 ,CancellationToken = token},
-                                        async (methodPacket, ct) =>
-                                        {
-                                            await DoParseWork(packet.Socket, methodPacket, reborns ,ct);
-                                        });
-        }
-        else
-        {
+        //if (methodPackets.Count >= 20)
+        //{
+        //    await Parallel.ForEachAsync(methodPackets, new ParallelOptions() { MaxDegreeOfParallelism = 3 ,CancellationToken = token},
+        //                                async (methodPacket, ct) =>
+        //                                {
+        //                                    await DoParseWork(packet.Socket, methodPacket, reborns ,ct);
+        //                                });
+        //}
+        //else
+        //{
             foreach (var methodPacket in methodPackets)
             {
                 await DoParseWork(packet.Socket, methodPacket, reborns,token);
             }
-        }
+        //}
 
         if (!reborns.IsEmpty)
         {
@@ -276,7 +276,7 @@ public class PacketProcessorService : BackgroundService
         {
 
             var  dead      = methodPacketMethodBody.Span.ReadStruct<Dead1506>();
-            bool isRemoved = _selfInformation.BombHistory.Remove(dead.DeadId);
+            bool isRemoved = _selfInformation.BombHistory.TryRemove(dead.DeadId, out _);
             if (!isRemoved)
             {
                 _logger.ZLogInformation($"error in bomb history remove : readdead 1506");
@@ -351,7 +351,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
 }
     private void ReadDeads(ReadOnlyMemory<byte> buffer)
     {
-        try
+      try
         {
 
          var deadStruct = buffer.Span.ReadStruct<DeadStruct>();
@@ -362,9 +362,9 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
              // _logger.ZLogInformation($"the deads:{string.Join("|" , deads.AsValueEnumerable().Select(c=>c.Id).ToArray())}");
              foreach (var dead in deads)
              {
-                 if (_selfInformation.BombHistory.Get(dead.Id,out var count))
+                 if (_selfInformation.BombHistory.TryGetValue(dead.Id,out var count))
                  {
-                     bool isRemoved = _selfInformation.BombHistory.Remove(dead.Id);
+                     bool isRemoved = _selfInformation.BombHistory.TryRemove(dead.Id,out var _);
                      if (isRemoved)
                      {
                         _logger.ZLogInformation($"Removed:{dead.Id} since it is dead");
@@ -381,8 +381,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         catch(Exception ex)
         {
             _logger.LogError(ex , $"error in readdead");
-        }
-    }
+        }    }
 
  private void ReadHitResponse1616(ReadOnlyMemory<byte> bytes, ConcurrentBag<Reborn> reborns )
  {

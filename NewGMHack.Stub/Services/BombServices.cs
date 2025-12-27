@@ -85,54 +85,63 @@ namespace NewGMHack.Stub.Services
         {
             foreach (var r in reborns)
             {
-                var isInserted = _selfInformation.BombHistory.Emplace(r.TargetId, 1);
+                var isInserted = _selfInformation.BombHistory.TryAdd(r.TargetId, 1);
                 if (!isInserted)
                 {
-                    if (_selfInformation.BombHistory.Get(r.TargetId, out var count))
+                    if (_selfInformation.BombHistory.TryGetValue(r.TargetId, out var count))
                     {
                         if (count > 10)
                         {
-                            _selfInformation.BombHistory.Remove(r.TargetId);
+                            var isRemoved = _selfInformation.BombHistory.TryRemove(r.TargetId,out var _);
+                            if (isRemoved)
+                            {
+                                _logger.ZLogInformation($"removed {r.TargetId} from bomb histroy due to exeed limit");
+                            }
+                            else
+                            {
+
+                                _logger.ZLogInformation($"failed to remove {r.TargetId} from bomb histroy");
+                            }
                         }
                         else
                         {
-                            _selfInformation.BombHistory.Update(r.TargetId, ++count);
+                            _selfInformation.BombHistory.AddOrUpdate(r.TargetId, count + 1, (_, c) => c + 1);
                         }
                     }
                 }
             }
         }
 
-        private async Task HandleHistories()
-        {
-            foreach (var keys in _selfInformation.BombHistory.Keys.Chunk(12))
-            {
-                List<uint> reborns = new(12);
-                foreach (var key in keys)
-                {
-                    var isGetSucessfully = _selfInformation.BombHistory.Get(key, out var count);
-                    if (isGetSucessfully)
-                    {
-                        if (count >= 10)
-                        {
-                            _selfInformation.BombHistory.Remove(key);
-                            continue;
-                        }
+        //private async Task HandleHistories()
+        //{
+        //    foreach (var keys in _selfInformation.BombHistory.Keys.Chunk(12))
+        //    {
+        //        List<uint> reborns = new(12);
+        //        foreach (var key in keys)
+        //        {
+        //            var isGetSucessfully = _selfInformation.BombHistory.Get(key, out var count);
+        //            if (isGetSucessfully)
+        //            {
+        //                if (count >= 10)
+        //                {
+        //                    _selfInformation.BombHistory.Remove(key);
+        //                    continue;
+        //                }
 
-                        _selfInformation.BombHistory.Update(key, ++count);
-                        reborns.Add(key);
-                    }
-                }
+        //                _selfInformation.BombHistory.Update(key, ++count);
+        //                reborns.Add(key);
+        //            }
+        //        }
 
-                _logger.ZLogInformation($"bomb history bomb : {string.Join("|", reborns)}");
-                if (reborns.Count > 0)
-                {
-                    await Attack(reborns.AsValueEnumerable()
-                                        .Select(c => new Reborn(_selfInformation.PersonInfo.PersonId, c, 0)).ToArray(),
-                                 _selfInformation.LastSocket);
-                }
-            }
-        }
+        //        _logger.ZLogInformation($"bomb history bomb : {string.Join("|", reborns)}");
+        //        if (reborns.Count > 0)
+        //        {
+        //            await Attack(reborns.AsValueEnumerable()
+        //                                .Select(c => new Reborn(_selfInformation.PersonInfo.PersonId, c, 0)).ToArray(),
+        //                         _selfInformation.LastSocket);
+        //        }
+        //    }
+        //}
 
         private async Task Attack(Reborn[] chunkedReborn, IntPtr socket)
         {

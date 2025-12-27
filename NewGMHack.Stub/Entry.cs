@@ -89,7 +89,7 @@ namespace NewGMHack.Stub
                                        services.AddTransient<IBuffSplitter, BuffSplitter>();
                                        services.AddSingleton<IHostedService, MainHookService>();
                                        services.AddSingleton<IHostedService, EntityScannerService>();
-                                       //services.AddSingleton<IHostedService, BombHistoryServices>(); //BUG it locked my services
+                                       services.AddSingleton<IHostedService, BombHistoryServices>(); //BUG it locked my services
                                        //services.AddHostedService<MainHookService>();
                                        services.AddSingleton(Channel.CreateUnbounded<PacketContext>(
                                                               new UnboundedChannelOptions

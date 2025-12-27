@@ -46,15 +46,24 @@ namespace NewGMHack.Stub.Services
                 var reborns = new List<uint>(12);
                 foreach (var key in keys)
                 {
-                    if (_selfInformation.BombHistory.Get(key, out var count))
+                    if (_selfInformation.BombHistory.TryGetValue(key, out var count))
                     {
                         if (count >= 10)
                         {
-                            _selfInformation.BombHistory.Remove(key);
+                            var isRemoved =_selfInformation.BombHistory.TryRemove(key, out _);
+                            if (isRemoved)
+                            {
+                                _logger.ZLogInformation($"Removed {key} from bomb history due to exeeed limit");
+                            }
+                            else
+                            {
+
+                                _logger.ZLogInformation($"failed to Removed {key} from bomb history");
+                            }
                             continue;
                         }
 
-                        _selfInformation.BombHistory.Update(key, ++count);
+                        _selfInformation.BombHistory.AddOrUpdate(key, count + 1, (_, c) => c + 1);
                         reborns.Add(key);
                     }
                 }
