@@ -28,7 +28,7 @@ namespace NewGMHack.Stub
         public Info                    PersonInfo   { get; set; } = new();
         public ClientConfig            ClientConfig { get; set; } = new();
         public ConcurrentBag<Roommate> Roommates    { get; set; } = [];
-        public ConcurrentDictionary<uint, int> BombHistory  { get; set; } = new ConcurrentDictionary<uint, int>();
+        public CMap<uint, int>         BombHistory  { get; set; } = new CMap<uint, int>(12);
         public int                     ScreenWidth  { get; set; }
         public int                     ScreenHeight { get; set; }
         public int                     CrossHairX   { get; set; }
