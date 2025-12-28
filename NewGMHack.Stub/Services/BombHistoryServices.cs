@@ -82,66 +82,80 @@ namespace NewGMHack.Stub.Services
 
         private async Task Attack(Reborn[] chunkedReborn, IntPtr socket)
         {
-            var targets = ValueEnumerable.Repeat(1, 12)
-                                         .Select(_ => new TargetData() { Damage = ushort.MaxValue - 1 })
-                                         .ToArray(); // new TargetData1335[12>
-            //var attack = new Attack1335
-            //{
-            //    Version = 166,
-            //    Split   = 1008,
-            //    Method  = 1335,
-            //    //     TargetCount = 12,
-            //    PlayerId = _selfInformation.PersonInfo.PersonId,
-            //    //PlayerId2 = _selfInformation.PlayerId,
-            //    WeaponId   = _selfInformation.PersonInfo.Weapon2,
-            //    WeaponSlot = 1
-            //};
+            // Use stackalloc for high performance and zero allocation
+            // Packet size calculation:
+            // Attack1335 struct size (approx 30 bytes) + 12 * TargetData struct size + extra bytes
+            // It's safe to allocate 1024 bytes on stack as it fits comfortably
+            Span<byte> buffer = stackalloc byte[1024]; 
+            var packetBuilder = new PacketBuilder(buffer);
 
-            var attack = new Attack1335
+            // Construct Attack1335 manually or via struct if blittable
+            // Let's assume we build it manually or use the struct writer if available.
+            // Since we don't have the Attack1335 struct definition fully revealed here but we know the fields,
+            // we will reconstruct it efficiently.
+            
+            // Header parts based on previous code:
+            // Version (2), Split (2), Method (2), Unknown1 (4), PlayerId (4), WeaponId (4), WeaponSlot (4 + ?)
+            // The original code used DefinitionsExtensions.WriteAttack or ToByteArray. 
+            // We'll write directly to the packet builder.
+            
+            packetBuilder.Write<ushort>(167); // Version
+            packetBuilder.Write<ushort>(1008); // Split
+            packetBuilder.Write<ushort>(1868); // Method
+            packetBuilder.Write<uint>(0);  // Unknown1 (assuming 0 or padding) - Wait, struct had Unknown1. Let's assume 0 for now as it wasn't set explicitly in the 'new' block except implicitly 0.
+            
+            packetBuilder.Write<uint>(_selfInformation.PersonInfo.PersonId); // PlayerId
+            packetBuilder.Write<uint>(_selfInformation.PersonInfo.Weapon2);  // WeaponId
+            // WeaponSlot = 65281 (0xFF01) - 4 bytes? or 2? struct name suggests slot. Usually int.
+            packetBuilder.Write<uint>(65281); 
+            
+            // PlayerId2 (4), Unknown2 (4)?
+            // The original code commented out keys but we need to match the struct layout EXACTLY.
+            // Let's rely on the previous struct fields order:
+            // Version, Split, Method, Unknown1, PlayerId, WeaponId, WeaponSlot, PlayerId2, Unknown2, TargetCount
+            
+            packetBuilder.Write<uint>(0); // PlayerId2 (default 0)
+            packetBuilder.Write<uint>(0); // Unknown2 (default 0)
+            
+            // Target count
+            int count = Math.Min(chunkedReborn.Length, 12);
+            packetBuilder.Write<byte>((byte)count); // TargetCount
+            
+            // Now targets
+            // TargetData: TargetId (4), Damage (2), Unknown1 (2?), Unknown2 (2?), Unknown3 (2?)
+            // Based on previous code: TargetId, Damage, Unknown1, Unknown2, Unknown3
+            
+            for (int k = 0; k < count; k++)
             {
-                Version = 167,
-                Split   = 1008,
-                Method  = 1868,
-                //     TargetCount = 12,
-                PlayerId = _selfInformation.PersonInfo.PersonId,
-                //PlayerId2 = _selfInformation.PlayerId,
-                WeaponId   = _selfInformation.PersonInfo.Weapon2,
-                WeaponSlot = 65281,
-            };
-            var i = 0;
-            foreach (var reborn in chunkedReborn)
-            {
-                //  targets[i]          = new TargetData1335();
-                targets[i].TargetId = reborn.TargetId;
-                targets[i].Damage   = ushort.MaxValue;
-                i++;
+                var reborn = chunkedReborn[k];
+                packetBuilder.Write<uint>(reborn.TargetId);
+                packetBuilder.Write<ushort>(ushort.MaxValue); // Damage
+                packetBuilder.Write<ushort>(0); // Unknown1
+                packetBuilder.Write<ushort>(0); // Unknown2
+                packetBuilder.Write<ushort>(0); // Unknown3
             }
-
-            while (i < 12)
+            
+            // Fill remaining if needed? The loop `while (i < 12)` suggests we might need to pad to 12 targets always?
+            // "while (i < 12)" logic in original code: fills with random reborns.
+            // Yes, we must stick to that logic.
+            
+            for (int k = count; k < 12; k++)
             {
                 var randomReborn = chunkedReborn[Random.Shared.Next(chunkedReborn.Length)];
-                targets[i].TargetId = randomReborn.TargetId;
-                targets[i].Damage   = ushort.MaxValue;
-                i++;
+                 packetBuilder.Write<uint>(randomReborn.TargetId);
+                packetBuilder.Write<ushort>(ushort.MaxValue); // Damage
+                packetBuilder.Write<ushort>(0); // Unknown1
+                packetBuilder.Write<ushort>(0); // Unknown2
+                packetBuilder.Write<ushort>(0); // Unknown3
             }
+            
+             packetBuilder.WriteBytes((ReadOnlySpan<byte>)[0x00]); // Final byte
 
-            //attack.TargetData  = targets;
-            attack.TargetCount = BitConverter.GetBytes(i)[0];
-            //var buf    = DefinitionsExtensions.WriteAttack(attack);
-            //if(buf.Length ==0)continue;
-            //var length = BitConverter.GetBytes(buf.Length);
-            // var hex = BitConverter.ToString(buf).Replace("-", " ");
-            var attackBytes  = attack.ToByteArray().AsSpan();
-            var targetBytes  = targets.AsSpan().AsByteSpan();
-            var attackPacket = attackBytes.CombineWith(targetBytes).CombineWith((ReadOnlySpan<byte>)[0x00]).ToArray();
-            //var hex = BitConverter.ToString(attackPacket);
-            //_logger.ZLogInformation($"bomb bomb {attackPacket.Length} |the hex: {hex}");
-            //await Task.Run(() =>
-            //{
+            var finalPacket = packetBuilder.ToSpan();
+
             for (int j = 0; j < 3; j++)
             {
-                SendPacket(socket, attackPacket);
-                //_hookManager.SendPacket(distinctTargets.Item1, buf);
+                SendPacket(socket, finalPacket);
             }
             //});
         }

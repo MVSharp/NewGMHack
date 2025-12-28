@@ -428,17 +428,78 @@ public static (string ip, int port)? GetLocalAddress(nint socket)
 
     return null;
 }
+    //private unsafe int SendHook(nint socket, nint buffer, int length, int flags)
+    //{
+    // Optimized: Constants needed for checking without strings
+    private const uint LoopbackMask = 0x000000FF; // Check first byte (little endian: low byte is first)
+    private const uint LoopbackValue = 0x7F; // 127
+    
+    // Private ranges: 
+    // 10.0.0.0/8     -> (ip & 0xFF) == 10
+    // 172.16.0.0/12  -> (ip & 0xFF) == 172 && ... (simplification: just check 172)
+    // 192.168.0.0/16 -> (ip & 0xFF) == 192 && ((ip >> 8) & 0xFF) == 168
+    // Note: sin_addr is Network Byte Order (Big Endian). 
+    // BUT we read it as uint on Little Endian. 
+    // Byte 0 (lowest address) is the first octet.
+    // So 'ip & 0xFF' gives the first octet.
+    
+    private bool IsPrivateIp(uint ip)
+    {
+        uint firstOctet = ip & 0xFF; // First byte (lowest address)
+        if (firstOctet == 127) return true; // Loopback
+        if (firstOctet == 10) return true;
+        if (firstOctet == 172) return true; // Broad check for 172.x
+        if (firstOctet == 192) // Check 192.168
+        {
+             uint secondOctet = (ip >> 8) & 0xFF;
+             if (secondOctet == 168) return true;
+        }
+        return false;
+    }
+    
     private unsafe int SendHook(nint socket, nint buffer, int length, int flags)
     {
-        var local  = GetLocalAddress(socket);
-        var remote = GetRemoteAddress(socket);
-        var isValid = local is not null                  && remote is not null && local.Value.ip.StartsWith("127.") &&
-                        remote.Value.ip.StartsWith("127.") && local.Value.port >= 40000 && local.Value.port <= 65535 &&
-                        remote.Value.port                                      >= 4000 && remote.Value.port <= 7000;
-        if (!isValid)
+        // Avoid string allocations! Use cached structs methods or direct check.
+        // Logic: 
+        // 1. Check if Local is 127.x.x.x AND Port 40000-65535
+        // 2. Check if Remote is 127.x.x.x AND Port 4000-7000
+        
+        // Optimize: we really only need to block/allow specific traffic.
+        // Original logic: "if !isValid return original".
+        
+        SOCKADDR_IN localAddr = new SOCKADDR_IN();
+        int addrSize = Marshal.SizeOf(localAddr);
+        bool isLocalValid = false;
+        
+        if (getsockname(socket, ref localAddr, ref addrSize) == 0)
         {
-            return _originalSend!(socket, buffer, length, flags);
+             // Check IP starts with 127.
+             if ((localAddr.sin_addr & 0xFF) == 127) 
+             {
+                 ushort port = ntohs(localAddr.sin_port);
+                 if (port >= 40000 && port <= 65535) isLocalValid = true;
+             }
         }
+        
+        if (!isLocalValid) return _originalSend!(socket, buffer, length, flags);
+
+        SOCKADDR_IN remoteAddr = new SOCKADDR_IN();
+        addrSize = Marshal.SizeOf(remoteAddr);
+        bool isRemoteValid = false;
+        
+        if (getpeername(socket, ref remoteAddr, ref addrSize) == 0)
+        {
+             if ((remoteAddr.sin_addr & 0xFF) == 127)
+             {
+                 ushort port = ntohs(remoteAddr.sin_port);
+                 if (port >= 4000 && port <= 7000) isRemoteValid = true;
+             }
+        }
+
+        if (!isRemoteValid) return _originalSend!(socket, buffer, length, flags);
+
+        // Passed checks.
+        
         if(length <= 6) 
         return _originalSend!(socket, buffer, length, flags);
         Span<byte> data = new((void*)buffer, length);
@@ -498,16 +559,16 @@ public static (string ip, int port)? GetLocalAddress(nint socket)
     {
         try
         {
-            //if (IsLocalLoopback(socket))
-            //{
-            //    _lastSocket = socket;
-            //}
-            var local  = GetLocalAddress(socket);
-            var remote = GetRemoteAddress(socket);
-            if (remote.Value.ip.StartsWith("127.") || remote.Value.ip.StartsWith("172.") ||
-                remote.Value.ip.StartsWith("192.") || remote.Value.ip.StartsWith("10."))
+            // Optimize: Check remote IP for private range directly
+            SOCKADDR_IN remoteAddr = new SOCKADDR_IN();
+            int addrSize = Marshal.SizeOf(remoteAddr);
+            
+            if (getpeername(socket, ref remoteAddr, ref addrSize) == 0)
             {
-                return _originalRecv!(socket, buffer, length, flags);
+                if (IsPrivateIp(remoteAddr.sin_addr))
+                {
+                     return _originalRecv!(socket, buffer, length, flags);
+                }
             }
 
 

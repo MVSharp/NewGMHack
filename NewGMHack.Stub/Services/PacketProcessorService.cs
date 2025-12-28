@@ -89,22 +89,26 @@ public class PacketProcessorService : BackgroundService
         if (packet.Data.Length == 0) return;
         var methodPackets = _buffSplitter.Split(packet.Data);
         if (methodPackets.Count == 0) return;
-        var reborns = new ConcurrentBag<Reborn>();
-        //if (methodPackets.Count >= 20)
-        //{
-        //    await Parallel.ForEachAsync(methodPackets, new ParallelOptions() { MaxDegreeOfParallelism = 3 ,CancellationToken = token},
-        //                                async (methodPacket, ct) =>
-        //                                {
-        //                                    await DoParseWork(packet.Socket, methodPacket, reborns ,ct);
-        //                                });
-        //}
-        //else
-        //{
+        var reborns = new ConcurrentQueue<Reborn>(); // Use Queue for better performance than Bag
+            
+        if (methodPackets.Count >= 20)
+        {
+             // Use 50% of processors or at least 2, cap at 8 to avoid saturation
+             int maxDegree = Math.Max(2, Math.Min(Environment.ProcessorCount / 2, 8));
+             
+            await Parallel.ForEachAsync(methodPackets, new ParallelOptions() { MaxDegreeOfParallelism = maxDegree ,CancellationToken = token},
+                                        async (methodPacket, ct) =>
+                                        {
+                                            await DoParseWork(packet.Socket, methodPacket, reborns ,ct);
+                                        });
+        }
+        else
+        {
             foreach (var methodPacket in methodPackets)
             {
                 await DoParseWork(packet.Socket, methodPacket, reborns,token);
             }
-        //}
+        }
 
         if (!reborns.IsEmpty)
         {
@@ -123,7 +127,7 @@ public class PacketProcessorService : BackgroundService
        /// <param name="methodPacket"></param>
        /// <param name="reborns"></param>
        /// <returns></returns>
-    private async Task DoParseWork(IntPtr socket, PacketSegment methodPacket, ConcurrentBag<Reborn> reborns,CancellationToken token)
+    private async Task DoParseWork(IntPtr socket, PacketSegment methodPacket, ConcurrentQueue<Reborn> reborns,CancellationToken token)
     {
         var method = methodPacket.Method;
         var reader = new ByteReader(methodPacket.MethodBody);
@@ -383,7 +387,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
             _logger.LogError(ex , $"error in readdead");
         }    }
 
- private void ReadHitResponse1616(ReadOnlyMemory<byte> bytes, ConcurrentBag<Reborn> reborns )
+ private void ReadHitResponse1616(ReadOnlyMemory<byte> bytes, ConcurrentQueue<Reborn> reborns )
  {
      try
      {
@@ -394,7 +398,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
          if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
              _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
          {
-             reborns.Add(new Reborn(hitResponse.PlayerId, hitResponse.ToId, 0));
+             reborns.Enqueue(new Reborn(hitResponse.PlayerId, hitResponse.ToId, 0));
          }
      }
 
@@ -402,7 +406,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
      {
          if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsRebound))
          {
-             reborns.Add(new Reborn(hitResponse.PlayerId, hitResponse.FromId, 0));
+             reborns.Enqueue(new Reborn(hitResponse.PlayerId, hitResponse.FromId, 0));
          }
      }
      }
@@ -411,7 +415,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
 
      }
  }
-    private void ReadHitResponse2472(ReadOnlyMemory<byte> bytes, ConcurrentBag<Reborn> reborns )
+    private void ReadHitResponse2472(ReadOnlyMemory<byte> bytes, ConcurrentQueue<Reborn> reborns )
     {
         try
         {
@@ -422,7 +426,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
             if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
                 _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
             {
-                reborns.Add(new Reborn(hitResponse.PlayerId, hitResponse.ToId, 0));
+                reborns.Enqueue(new Reborn(hitResponse.PlayerId, hitResponse.ToId, 0));
             }
         }
 
@@ -430,7 +434,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         {
             if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsRebound))
             {
-                reborns.Add(new Reborn(hitResponse.PlayerId, hitResponse.FromId, 0));
+                reborns.Enqueue(new Reborn(hitResponse.PlayerId, hitResponse.FromId, 0));
             }
         }
         }
@@ -535,7 +539,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         return roomates;
     }
 
-    private async Task SendToBombServices(PacketContext packet, ConcurrentBag<Reborn> reborns,CancellationToken token)
+    private async Task SendToBombServices(PacketContext packet, ConcurrentQueue<Reborn> reborns,CancellationToken token)
     {
         try
         {
@@ -556,7 +560,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         }
     }
 
-    private void ReadReborns(ByteReader reader, ConcurrentBag<Reborn> reborns , bool isReadLocation = true)
+    private void ReadReborns(ByteReader reader, ConcurrentQueue<Reborn> reborns , bool isReadLocation = true)
     {
         try
         {
@@ -566,7 +570,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
             // {
             if (reborn.PersionId == _selfInformation.PersonInfo.PersonId)
             {
-                reborns.Add(reborn);
+                reborns.Enqueue(reborn);
             }
             // }
         }

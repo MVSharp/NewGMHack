@@ -57,16 +57,6 @@ static extern bool ReadProcessMemory(
                     return ("", 0, 0, 0);
                 var addresses = (await mem.AoBScan($"{realID} 00 00", true, true)).ToList();
 
-                //var process = Process.GetProcessesByName(processName).FirstOrDefault();
-                //if (process == null)
-                //{
-                //    logger.ZLogInformation($"Process not found");
-                //    return default;
-                //}
-
-                //logger.ZLogInformation($"Begin Aob");
-                //var addresses = (await fullAoBScanner.ScanAsync(realID, process)).ToList();
-
                 logger.ZLogInformation($"Address count : {addresses.Count}");
                 if (addresses.Count == 0)
                 {
@@ -74,49 +64,58 @@ static extern bool ReadProcessMemory(
                     return ("", 0, 0, 0);
                 }
 
-                //foreach (var buffer in from buffer in addresses.AsValueEnumerable()
-                //                                               .Select(address => mem.ReadBytes(address.ToString("X"),
-                //                                                                600L)).OfType<byte[]>()
-                //                       where buffer[5] != 0x00
-                //                       let n = GetName(buffer)
-                //                       where !n.Contains("sprs")
-                //                       where !string.IsNullOrEmpty(n) && !string.IsNullOrWhiteSpace(n)
-                //                       where IsValid(n)
-                //                       select buffer)
-                //{
-                //    return (BitConverter.ToInt32(new byte[] { buffer[585], buffer[586], buffer[587], buffer[588] }, 0),
-                //            BitConverter.ToInt32(new byte[] { buffer[589], buffer[590], buffer[591], buffer[592] }
-                //                               , 0),
-                //            BitConverter.ToInt32(new byte[] { buffer[593], buffer[594], buffer[595], buffer[596] }, 0));
-                //}
+                var bufferPool = System.Buffers.ArrayPool<byte>.Shared;
+                // Reading 600 bytes, allocate at least that much.
+                // Note: mem.ReadBytes returns a new byte[], which is external code we can't change easily unless Mem is our class.
+                // Wait, 'using Memory;' suggests a library.
+                // If 'mem' is a library class (likely Memory.dll from helper), we can't change its return type.
+                // However, the commented out code used ReadProcessMemory directly.
+                // I will restore the ReadProcessMemory usage with ArrayPool to avoid the 'mem.ReadBytes' allocation!
+                
+                var process = System.Diagnostics.Process.GetProcessesByName(processName).FirstOrDefault();
+                 if (process == null) return ("", 0, 0, 0);
 
-                foreach (var address in addresses.AsValueEnumerable())
+                byte[] pooledBuffer = bufferPool.Rent(600);
+                try
                 {
-                    var buffer = mem.ReadBytes(address.ToString("X"), 600L);
-                    //byte[] buffer = new byte[600];
-                    //bool success = ReadProcessMemory(process.Handle, (IntPtr)address, buffer, buffer.Length, out _);
-
-                    //logger.ZLogInformation($"read result : {success}");
-                    //if (!success) continue;
-
-                    //logger.ZLogInformation($"scan : {name} | {address}");
-                    if (buffer is not not null || buffer[5] == 0x00)
-                        continue;
-
-                    var name = GetName(buffer);
-                    //logger.ZLogInformation($"name:{name}");
-                    if (string.IsNullOrWhiteSpace(name) || name.Contains("sprs") || !IsValid(name))
-                        continue;
-
-                    var r = (name,
-                        BitConverter.ToInt32(buffer, 585),
-                        BitConverter.ToInt32(buffer, 589),
-                        BitConverter.ToInt32(buffer, 593)
-                    );
-                    if (r.Item2 + 1 == r.Item3 || r.Item3 + 1 == r.Item4)
+                    foreach (var address in addresses.AsValueEnumerable())
                     {
-                        _cache.TryAdd(id, r);
+                        // Direct ReadProcessMemory to pooled buffer
+                         bool success = ReadProcessMemory(process.Handle, (IntPtr)address, pooledBuffer, 600, out _);
+                        if (!success) continue; 
+                        
+                        var bufferSpan = pooledBuffer.AsSpan(0, 600);
+                        
+                        if (bufferSpan[5] == 0x00) // Original Logic: buffer[5] != 0x00 needed? 
+                            // wait, original logic:  if (buffer is not not null || buffer[5] == 0x00) continue; 
+                            // "is not not null" -> "is not null"? Or double negative typo?
+                            // "if buffer is not null OR buffer[5] == 0x00 continue" -> logic seems weird.
+                            // If buffer returned by ReadBytes is null, continue.
+                            // If buffer[5] is 0x00, continue.
+                            // So we want: buffer != null AND buffer[5] != 0x00.
+                            
+                            // Re-implementing validation:
+                            if (bufferSpan[5] == 0x00) continue;
+
+                        var name = GetName(bufferSpan);
+                        //logger.ZLogInformation($"name:{name}");
+                        if (string.IsNullOrWhiteSpace(name) || name.Contains("sprs") || !IsValid(name))
+                            continue;
+
+                        var r = (name,
+                            BitConverter.ToInt32(pooledBuffer, 585),
+                            BitConverter.ToInt32(pooledBuffer, 589),
+                            BitConverter.ToInt32(pooledBuffer, 593)
+                        );
+                        if (r.Item2 + 1 == r.Item3 || r.Item3 + 1 == r.Item4)
+                        {
+                            _cache.TryAdd(id, r);
+                        }
                     }
+                }
+                finally
+                {
+                    bufferPool.Return(pooledBuffer);
                 }
 
                 return ("", 0, 0, 0);

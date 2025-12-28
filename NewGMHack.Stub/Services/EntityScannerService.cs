@@ -121,9 +121,9 @@ public class EntityScannerService : BackgroundService
             var moduleBase = GetModuleBaseAddress(ProcessName);
             if (moduleBase == 0) return false;
 
-            var pointerBase = checked(moduleBase + BaseOffset);
+            var pointerBase = moduleBase + BaseOffset;
             if (!TryReadUInt(pointerBase,                      out var firstPtr)     || firstPtr     == 0) return false;
-            if (!TryReadUInt(checked(firstPtr + MySelfOffset), out var entityStruct) || entityStruct == 0) return false;
+            if (!TryReadUInt(firstPtr + MySelfOffset, out var entityStruct) || entityStruct == 0) return false;
             if (!TryReadEntityData(entityStruct, out var entity)) return false;
 
             if (entity.CurrentHp > 300_000 || entity.MaxHp > 300_000) return false;
@@ -143,22 +143,22 @@ public class EntityScannerService : BackgroundService
                 if ((GetAsyncKeyState((int)Keys.D)     & 0x8000) != 0) loc.X += 50f;
                 if ((GetAsyncKeyState((int)Keys.Space) & 0x8000) != 0) loc.Y += 50f;
                 if ((GetAsyncKeyState((int)Keys.V)     & 0x8000) != 0) loc.Y -= 50f;
-                if (TryReadUInt(checked(entityStruct + PosPtrOffset), out var posPtr) && posPtr != 0)
+                if (TryReadUInt(entityStruct + PosPtrOffset, out var posPtr) && posPtr != 0)
                 {
-                    WriteFloat(checked(posPtr + XyzOffsets[0]), loc.X);
-                    //WriteFloat(checked(posPtr + XyzOffsets[1]), loc.Y);
-                    WriteFloat(checked(posPtr + XyzOffsets[2]), loc.Z);
+                    WriteFloat(posPtr + XyzOffsets[0], loc.X);
+                    //WriteFloat(posPtr + XyzOffsets[1], loc.Y);
+                    WriteFloat(posPtr + XyzOffsets[2], loc.Z);
                 }
             }
 
             if (_selfInfo.ClientConfig.Features.IsFeatureEnable(FeatureName.IsIllusion))
             {
                 var loc = GetRandomEntitesLoc();
-                if (TryReadUInt(checked(entityStruct + PosPtrOffset), out var posPtr) && posPtr != 0)
+                if (TryReadUInt(entityStruct + PosPtrOffset, out var posPtr) && posPtr != 0)
                 {
-                    WriteFloat(checked(posPtr + XyzOffsets[0]), loc.x);
-                    WriteFloat(checked(posPtr + XyzOffsets[1]), loc.y);
-                    WriteFloat(checked(posPtr + XyzOffsets[2]), loc.z);
+                    WriteFloat(posPtr + XyzOffsets[0], loc.x);
+                    WriteFloat(posPtr + XyzOffsets[1], loc.y);
+                    WriteFloat(posPtr + XyzOffsets[2], loc.z);
                 }
             }
 
@@ -182,9 +182,9 @@ public class EntityScannerService : BackgroundService
                     float offsetY = (float)(radius * Math.Sin(phi) * Math.Sin(theta));
                     float offsetZ = (float)(radius * Math.Cos(phi));
 
-                    WriteFloat(checked(e.EntityPosPtrAddress + XyzOffsets[0]), _selfInfo.PersonInfo.X + offsetX);
-                    WriteFloat(checked(e.EntityPosPtrAddress + XyzOffsets[1]), _selfInfo.PersonInfo.Y + offsetY);
-                    WriteFloat(checked(e.EntityPosPtrAddress + XyzOffsets[2]), _selfInfo.PersonInfo.Z + offsetZ);
+                    WriteFloat(e.EntityPosPtrAddress + XyzOffsets[0], _selfInfo.PersonInfo.X + offsetX);
+                    WriteFloat(e.EntityPosPtrAddress + XyzOffsets[1], _selfInfo.PersonInfo.Y + offsetY);
+                    WriteFloat(e.EntityPosPtrAddress + XyzOffsets[2], _selfInfo.PersonInfo.Z + offsetZ);
                 }
             }
 
@@ -211,12 +211,12 @@ public class EntityScannerService : BackgroundService
             var moduleBase = GetModuleBaseAddress(ProcessName);
             if (moduleBase == 0) return false;
 
-            var baseAddr = checked(moduleBase + BaseOffset);
+            var baseAddr = moduleBase + BaseOffset;
             if (!IsAddressValid(baseAddr)) return false;
             var entityAddr = ReadPointerChain(baseAddr, Offsets);
             if (entityAddr == 0) return false;
 
-            if (!TryReadUInt(checked(entityAddr - 0x8), out var listHead) || listHead == 0) return false;
+            if (!TryReadUInt(entityAddr - 0x8, out var listHead) || listHead == 0) return false;
 
             var       visited      = new HashSet<uint>();
             int       currentIndex = 0;
@@ -229,13 +229,13 @@ public class EntityScannerService : BackgroundService
                 visited.Add(current);
                 scannedCount++;
 
-                if (!TryReadUInt(checked(current + 0x8), out var dataAddr) || dataAddr == 0)
+                if (!TryReadUInt(current + 0x8, out var dataAddr) || dataAddr == 0)
                 {
                     current = TryReadUInt(current, out var next) ? next : 0;
                     continue;
                 }
 
-                if (!TryReadInt(checked(dataAddr + EntityIdOffset), out var eid))
+                if (!TryReadInt(dataAddr + EntityIdOffset, out var eid))
                 {
                     current = TryReadUInt(current, out var next) ? next : 0;
                     continue;
@@ -273,20 +273,20 @@ public class EntityScannerService : BackgroundService
     {
         entity = new Entity();
 
-        if (!TryReadInt(checked(entityStruct + HpOffset),    out int hp) ||
-            !TryReadInt(checked(entityStruct + MaxHpOffset), out int maxHp))
+        if (!TryReadInt(entityStruct + HpOffset,    out int hp) ||
+            !TryReadInt(entityStruct + MaxHpOffset, out int maxHp))
             return false;
 
-        if (!TryReadUInt(checked(entityStruct + PosPtrOffset), out var posPtr) || posPtr == 0)
+        if (!TryReadUInt(entityStruct + PosPtrOffset, out var posPtr) || posPtr == 0)
             return false;
 
-        if (!TryReadFloat(checked(posPtr + XyzOffsets[0]), out float x) ||
-            !TryReadFloat(checked(posPtr + XyzOffsets[1]), out float y) ||
-            !TryReadFloat(checked(posPtr + XyzOffsets[2]), out float z))
+        if (!TryReadFloat(posPtr + XyzOffsets[0], out float x) ||
+            !TryReadFloat(posPtr + XyzOffsets[1], out float y) ||
+            !TryReadFloat(posPtr + XyzOffsets[2], out float z))
             return false;
         if (hp > 600_000 || maxHp > 600_000) return false;
         if (hp < 0       || maxHp < 0) return false;
-        var pos = new Vector3(x, checked(y + 50), z);
+        var pos = new Vector3(x, y + 50, z);
         // if (!IsValidPosition(pos)) return false;
 
         entity.CurrentHp           = hp;
@@ -355,7 +355,7 @@ public class EntityScannerService : BackgroundService
         foreach (var offset in offsets)
         {
             if (!TryReadUInt(addr, out addr) || addr == 0) return 0;
-            addr = checked(addr + offset);
+            addr = addr + offset;
         }
 
         return addr;

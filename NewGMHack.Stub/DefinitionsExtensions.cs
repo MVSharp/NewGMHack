@@ -121,8 +121,47 @@ public static Span<T> ToSpan<T>(this ReadOnlySpan<T> readOnlySpan)
     public static string ToHex(this Span<byte> span) =>
         Convert.ToHexString(span);
 }
+    }
+
+    public ref struct PacketBuilder
+    {
+        private Span<byte> _buffer;
+        private int _position;
+
+        public PacketBuilder(Span<byte> buffer)
+        {
+            _buffer = buffer;
+            _position = 0;
+        }
+
+        public void Write<T>(T value) where T : unmanaged
+        {
+            if (MemoryMarshal.TryWrite(_buffer.Slice(_position), in value))
+            {
+                _position += Marshal.SizeOf<T>();
+            }
+            else 
+            {
+                 throw new InvalidOperationException("Buffer too small for Write operation.");
+            }
+        }
+
+        public void WriteBytes(ReadOnlySpan<byte> bytes)
+        {
+             if (bytes.Length == 0) return;
+             bytes.CopyTo(_buffer.Slice(_position));
+             _position += bytes.Length;
+        }
+        
+        public ReadOnlySpan<byte> ToSpan() => _buffer.Slice(0, _position);
+    }
+
     public static class DefinitionsExtensions
     {
+        public static void ToByteSpan<T>(this T value, Span<byte> destination) where T : unmanaged
+        {
+             MemoryMarshal.Write(destination, in value);
+        }
 
         public static List<Reborn> ReadDamaged(ref this ByteReader reader)
         {
@@ -191,48 +230,4 @@ public static Span<T> ToSpan<T>(this ReadOnlySpan<T> readOnlySpan)
 
             return map;
         }
-
-        // public static byte[] WriteAttack(Attack1335 att)
-        // {
-        //     try
-        //     {
-        //
-        //     using var ms     = new MemoryStream();
-        //     var       writer = new BinaryWriter(ms);
-        //     writer.Write(att.Version);
-        //     writer.Write(att.Split);
-        //     writer.Write(att.Method);
-        //     writer.Write(att.Unknown1);
-        //     writer.Write(att.PlayerId);
-        //     writer.Write(att.WeaponId);
-        //     // writer.Write(att.WeaponSplit);
-        //     writer.Write(att.WeaponSlot);
-        //     writer.Write(att.PlayerId2);
-        //     writer.Write(att.Unknown2);
-        //     writer.Write(att.TargetCount);
-        //     foreach (var target in att.TargetData)
-        //     {
-        //         if (target.TargetId == 0)
-        //         {
-        //             target.Damage = 0;
-        //         }
-        //
-        //         writer.Write(target.TargetId);
-        //         writer.Write(target.Damage);
-        //         writer.Write(target.Unknown1);
-        //         writer.Write(target.Unknown2);
-        //         writer.Write(target.Unknown3);
-        //     }
-        //
-        //     return ms.ToArray();
-        //
-        //     }
-        //     catch
-        //     {
-        //
-        //     }
-        //
-        //     return default;
-        // }
     }
-}

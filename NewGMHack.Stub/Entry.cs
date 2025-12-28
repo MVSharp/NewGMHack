@@ -91,9 +91,9 @@ namespace NewGMHack.Stub
                                        services.AddSingleton<IHostedService, EntityScannerService>();
                                        services.AddSingleton<IHostedService, BombHistoryServices>(); //BUG it locked my services
                                        //services.AddHostedService<MainHookService>();
-                                       services.AddSingleton(Channel.CreateUnbounded<PacketContext>(
-                                                              new UnboundedChannelOptions
-                                                                  { SingleReader = false, SingleWriter = true }));
+                                       services.AddSingleton(Channel.CreateBounded<PacketContext>(
+                                                              new BoundedChannelOptions(1000)
+                                                                  { SingleReader = false, SingleWriter = true, FullMode = BoundedChannelFullMode.DropWrite }));
 
                                        //for (int i = 0; i < 3; i++)
                                        //{
@@ -101,9 +101,9 @@ namespace NewGMHack.Stub
                                        //}
                                        services.AddSingleton<OverlayManager>();
 
-                                       services.AddSingleton(Channel.CreateUnbounded<(IntPtr, List<Reborn>)>(
-                                                              new UnboundedChannelOptions
-                                                                  { SingleReader = true, SingleWriter = false }));
+                                       services.AddSingleton(Channel.CreateBounded<(IntPtr, List<Reborn>)>(
+                                                              new BoundedChannelOptions(1000)
+                                                                  { SingleReader = true, SingleWriter = false, FullMode = BoundedChannelFullMode.DropWrite }));
                                        services.AddSingleton<IHostedService, BombServices>();
                                        services.AddSingleton<RemoteHandler>();
                                        services.AddSingleton<PacketDataModifier>();
@@ -115,10 +115,14 @@ namespace NewGMHack.Stub
                                                                     handler.HandleAsync(msgId, payload.AsMemory()));
                                        });
                                        services.AddSingleton<DirectInputLogicProcessor>();
-var packetChannel = Channel.CreateUnbounded<ReadOnlyMemory<byte>>();
-
-services.AddSingleton(packetChannel);
-services.AddHostedService<PacketDispatcher>();
+                                       var packetChannel = Channel.CreateBounded<ReadOnlyMemory<byte>>(new BoundedChannelOptions(2000)
+                                       {
+                                           FullMode = BoundedChannelFullMode.DropWrite,
+                                           SingleReader = true,
+                                           SingleWriter = false
+                                       });
+                                       services.AddSingleton(packetChannel);
+                                       services.AddHostedService<PacketDispatcher>();
                                        services.AddHostedService<AimBotServices>();
                                        services.AddSingleton<InputStateTracker>();
                                        //services.AddSingleton<WinsockHookManager>(); // this is no problem , only once
