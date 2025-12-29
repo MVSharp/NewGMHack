@@ -17,6 +17,9 @@ namespace NewGmHack.GUI
             _webStatus = webStatus;
             
             InitializeWebViewAsync();
+            
+            // Handle window resize for proper scaling (optional zoom reset)
+            SizeChanged += OnWindowSizeChanged;
         }
 
         private async void InitializeWebViewAsync()
@@ -25,7 +28,15 @@ namespace NewGmHack.GUI
             {
                 // Ensure the CoreWebView2 environment is initialized
                 await DashboardWebView.EnsureCoreWebView2Async();
-
+                
+                // Configure WebView2 settings for better scaling
+                var settings = DashboardWebView.CoreWebView2.Settings;
+                settings.IsZoomControlEnabled = true;  // Allow zoom
+                settings.IsPinchZoomEnabled = true;    // Allow pinch zoom
+                
+                // Set default zoom to 100% (frontend CSS handles responsive design)
+                DashboardWebView.ZoomFactor = 1.0;
+                
                 // Construct URI. 
                 string url = _webStatus.BaseUrl; 
                 if (string.IsNullOrEmpty(url)) url = "http://localhost:5000";
@@ -35,6 +46,18 @@ namespace NewGmHack.GUI
             catch (Exception ex)
             {
                 MessageBox.Show($"Failed to load WebView2: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void OnWindowSizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            // WebView2 automatically resizes with its container
+            // The frontend uses CSS vh/vw and flexbox, so it scales automatically
+            // No manual zoom adjustment needed - just ensure zoom stays at 100%
+            if (DashboardWebView.CoreWebView2 != null)
+            {
+                // Keep zoom at 100% - the CSS will handle scaling
+                DashboardWebView.ZoomFactor = 1.0;
             }
         }
     }

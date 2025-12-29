@@ -65,6 +65,7 @@ namespace NewGmHack.GUI.Services
                 _webHost = Host.CreateDefaultBuilder()
                     .ConfigureWebHostDefaults(webBuilder =>
                     {
+                        webBuilder.UseContentRoot(AppDomain.CurrentDomain.BaseDirectory); // Ensure we look in EXE dir
                         webBuilder.UseUrls(url);
                         webBuilder.ConfigureServices(services =>
                         {

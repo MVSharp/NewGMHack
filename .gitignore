@@ -361,3 +361,23 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# ======================
+# Frontend (Vue/Vite)
+# ======================
+frontend/dist/
+frontend/node_modules/
+frontend/.vite/
+frontend/*.local
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# Temp files
+old_frontend/
+*.tmp
+*.temp
+
+# pnpm lock (optional, can be committed for reproducible builds)
+# frontend/pnpm-lock.yaml
