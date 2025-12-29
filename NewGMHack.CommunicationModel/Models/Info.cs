@@ -8,7 +8,7 @@ public class Info
     [Key(0)]
     public uint PersonId { get; set; }
     [Key(1)]
-    public uint GundamId { get; set; }
+    public uint CondomId { get; set; }
     [Key(2)]
     public uint Weapon1  { get; set; }
     [Key(3)]
@@ -26,7 +26,7 @@ public class Info
     public float Z { get;      set; }
 
     [Key(8)]
-    public string GundamName { get; set; } = "";
+    public string CondomName { get; set; } = "";
 
     [Key(9)]
     public uint Slot { get; set; } = 0;

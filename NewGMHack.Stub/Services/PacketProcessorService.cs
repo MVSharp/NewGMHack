@@ -161,11 +161,11 @@ public class PacketProcessorService : BackgroundService
                 // _logger.ZLogInformation($"found reborn  : {reborn.TargetId}");
                 break;
             case 2722 or 2670 or 2361:
-                ChargeGundam(socket, _selfInformation.PersonInfo.Slot);
+                ChargeCondom(socket, _selfInformation.PersonInfo.Slot);
                 break;
 
             case 2107 or 2108 or 2109 or 2110 or 2877:// these are possible back room`
-                ChargeGundam(socket, _selfInformation.PersonInfo.Slot);
+                ChargeCondom(socket, _selfInformation.PersonInfo.Slot);
                 SendF5(socket);
                 break;
             // case 1338:
@@ -181,11 +181,11 @@ public class PacketProcessorService : BackgroundService
             case 1246 or 2535:
                 _selfInformation.ClientConfig.IsInGame = false;
                 var changed   = reader.ReadChangedMachine();
-                _logger.ZLogInformation($"change gundam detected:{changed.MachineId}");
+                _logger.ZLogInformation($"change condom detected:{changed.MachineId}");
                 var slot = changed.Slot;
                 _selfInformation.PersonInfo.Slot = slot;
-                await ScanGundam(changed.MachineId,token:token);
-                ChargeGundam(socket, slot);
+                await ScanCondom(changed.MachineId,token:token);
+                ChargeCondom(socket, slot);
                 break;
             case 1259: // get room list
                 AssignPersonId(reader);
@@ -623,11 +623,11 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         {
         }
     }
-    private  void ChargeGundam(IntPtr socket  ,UInt32 slot)
+    private  void ChargeCondom(IntPtr socket  ,UInt32 slot)
     {
         //return;//TODO fix
         if (slot == 0) return;
-        _logger.ZLogInformation($"charging gundam: {slot} ");
+        _logger.ZLogInformation($"charging condom: {slot} ");
         if (!_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoCharge)) return;
         ChargeRequest r = new();
         r.Version = 14;
@@ -636,7 +636,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         r.Slot = slot;
         _winsockHookManager.SendPacket(socket, r.ToByteArray().AsSpan());
     }
-    private async Task ScanGundam(UInt32 machineId,CancellationToken token)
+    private async Task ScanCondom(UInt32 machineId,CancellationToken token)
     {
         _logger
            .ZLogInformation($"Machine id begin scan: {machineId} ");
@@ -647,8 +647,8 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         if (w is { w1: 0, w2: 0, w3: 0 }) return;
         lock (_lock)
         {
-            _selfInformation.PersonInfo.GundamId = machineId;
-            if(!string.IsNullOrEmpty(w.gname)) _selfInformation.PersonInfo.GundamName = w.gname;
+            _selfInformation.PersonInfo.CondomId = machineId;
+            if(!string.IsNullOrEmpty(w.gname)) _selfInformation.PersonInfo.CondomName = w.gname;
             if (w.w1 != 0) _selfInformation.PersonInfo.Weapon1 = (uint)w.w1;
             if (w.w2 != 0) _selfInformation.PersonInfo.Weapon2 = (uint)w.w2;
             if (w.w3 != 0) _selfInformation.PersonInfo.Weapon3 = (uint)w.w3;

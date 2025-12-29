@@ -82,15 +82,43 @@ namespace NewGmHack.GUI.ViewModels
         [RelayCommand]
         private async Task Inject()
         {
+            await InjectInternal(true);
+        }
+
+        public async Task<string> InjectFromWeb()
+        {
+            if (IsConnected) return "Already Connected";
+            
+            // Fire and forget the injection process
+            _ = InjectInternal(false); 
+            return "Injection Started";
+        }
+
+        public async Task DeattachFromWeb()
+        {
+            await _handler.DeattachRequest();
+        }
+
+        private bool _isInjecting = false;
+
+        private async Task InjectInternal(bool showDialogs)
+        {
+            if (_isInjecting || IsConnected) return;
+
             try
             {
+                _isInjecting = true;
                 string processName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ=="));
                 var target = Process.GetProcessesByName(processName).FirstOrDefault();
+                
+                // Allow some retries but maybe not infinite blocking if we want to be safe? 
+                // Original code loops forever. We'll stick to that to match behavior.
                 while (target == null)
                 {
                     target = Process.GetProcessesByName(processName).FirstOrDefault();
-                    Console.WriteLine("Waiting inject");
+                    Debug.WriteLine("Waiting inject...");
                     await Task.Delay(2000);
+                    // If we want to cancel?
                 }
 
                 var t = await Task.Run(() =>
@@ -100,8 +128,6 @@ namespace NewGmHack.GUI.ViewModels
                         Title = target.WriteMemory("Injected Form"),
                         Text =
                             target.WriteMemory($"This form has been injected into {target.MainModule?.FileName} and is running in its memory space"),
-                        //Picture = target.WriteMemory(picBytes),
-                        //pic_sz = picBytes.Length
                     };
                     return target.Inject(
                                           "NewGMHack.Stub.runtimeconfig.json",
@@ -119,23 +145,28 @@ namespace NewGmHack.GUI.ViewModels
                         await Task.Delay(1000);
                     }
                     await _featureHandler.Refresh();
-                    //await _featureHandler.BeginFetch().ConfigureAwait(false);
-                    await _dialogCoordinator.ShowMessageAsync(this, "Injected", "Injected");
+                    
+                    if(showDialogs)
+                        await _dialogCoordinator.ShowMessageAsync(this, "Injected", "Injected");
                 }
-
                 else
                 {
-                    Console.WriteLine("fucked , it failed,we r fucked up");
-                    await _dialogCoordinator.ShowMessageAsync(this, "failed to inject", "failed to inject");
+                    Console.WriteLine("Injected failed");
+                    if(showDialogs)
+                        await _dialogCoordinator.ShowMessageAsync(this, "failed to inject", "failed to inject");
                 }
 
             }
             catch(Exception ex)
             {
-
-                await _dialogCoordinator.ShowMessageAsync(this, "failed to inject", $"{ex.Message}|{ex.StackTrace}");
+                if(showDialogs)
+                    await _dialogCoordinator.ShowMessageAsync(this, "failed to inject", $"{ex.Message}|{ex.StackTrace}");
             }
-   }
+            finally
+            {
+                _isInjecting = false;
+            }
+        }
 
         /// <inheritdoc />
         public void SetHealthStatus(bool isConnected)

@@ -1,6 +1,6 @@
 const translations = {
     "en": {
-        "title": "BUNDAM BATTLE TRACK SYSTEM",
+        "title": "SD Hack By Michael Van",
         "date_format": "YYYY-MM-DD",
         "scanning": "SCANNING...",
         "scan": "SCAN",
@@ -41,13 +41,20 @@ const translations = {
         "feature_status": "STATUS",
         "enable": "ENABLE",
         "disable": "DISABLE",
-        "gundam_unit": "MOBILE SUIT",
+        "condom_unit": "CONDOM ID",
         "weapons": "LOADOUT",
         "roommate_name": "PILOT NAME",
-        "roommate_id": "PILOT ID"
+        "roommate_id": "PILOT ID",
+        "btn_inject": "INJECT",
+        "btn_deattach": "DEATTACH",
+        "btn_report": "REPORT",
+        "condom_name": "CONDOM NAME",
+        "slot": "SLOT",
+        "position": "COORDINATES",
+        "pilot_id": "PILOT ID"
     },
     "zh-CN": {
-        "title": "敢达对战追踪系统",
+        "title": "SD Hack By Michael Van",
         "date_format": "YYYY年MM月DD日",
         "scanning": "扫描中...",
         "scan": "扫描",
@@ -88,13 +95,20 @@ const translations = {
         "feature_status": "状态",
         "enable": "启用",
         "disable": "禁用",
-        "gundam_unit": "机体",
+        "condom_unit": "Condom ID",
         "weapons": "武装",
         "roommate_name": "机师名称",
-        "roommate_id": "机师ID"
+        "roommate_id": "机师ID",
+        "btn_inject": "注入",
+        "btn_deattach": "解除",
+        "btn_report": "报告",
+        "condom_name": "Condom Name",
+        "slot": "槽位",
+        "position": "坐标",
+        "pilot_id": "机师ID"
     },
     "zh-TW": {
-        "title": "鋼彈對戰追蹤系統",
+        "title": "SD Hack By Michael Van",
         "date_format": "YYYY年MM月DD日",
         "scanning": "掃描中...",
         "scan": "掃描",
@@ -135,10 +149,17 @@ const translations = {
         "feature_status": "狀態",
         "enable": "啟用",
         "disable": "禁用",
-        "gundam_unit": "機體",
+        "condom_unit": "Condom ID",
         "weapons": "武裝",
         "roommate_name": "機師名稱",
-        "roommate_id": "機師ID"
+        "roommate_id": "機師ID",
+        "btn_inject": "注入",
+        "btn_deattach": "解除",
+        "btn_report": "報告",
+        "condom_name": "Condom Name",
+        "slot": "槽位",
+        "position": "座標",
+        "pilot_id": "機師ID"
     }
 };
 

@@ -7,6 +7,9 @@ const connection = new signalR.HubConnectionBuilder()
 
 let currentPlayerId = 0;
 let featuresData = [];
+let currentPilotInfo = {};
+let isInjecting = false;
+
 
 // Start SignalR
 async function start() {
@@ -16,6 +19,21 @@ async function start() {
     } catch (err) {
         console.log("SignalR Error: " + err);
         setTimeout(start, 5000);
+    }
+
+    // Start Polling Status & Data
+    setInterval(tick, 1000); // 1s tick
+    tick();
+
+    loadFeatures();
+    loadLobby(); // Initial Load
+}
+
+async function tick() {
+    await pollStatus();
+    // If connected, keep pilot info fresh (handles PID changes without tab switch)
+    if (window.isConnected) {
+        await loadPilot();
     }
 }
 
@@ -61,7 +79,13 @@ connection.on("UpdateRoommates", (list) => {
 
 function updateText(id, val) {
     const el = document.getElementById(id);
-    if (el) el.innerText = val;
+    if (el) {
+        if (typeof val === 'number') {
+            el.innerText = val.toLocaleString();
+        } else {
+            el.innerText = val;
+        }
+    }
 }
 
 // Search / Load Stats
@@ -337,20 +361,30 @@ function renderFeatures() {
     if (!list) return;
     list.innerHTML = "";
 
+    const lang = i18n.currentLang(); // "en", "zh-CN", "zh-TW"
+
     featuresData.forEach(f => {
         const card = document.createElement("div");
         card.className = "feature-card";
 
-        // Backend returns String now due to JsonStringEnumConverter
-        // E.g. "IsGodMode"
-        const nameVal = (f.name !== undefined) ? f.name : f.Name;
+        const nameVal = f.name || f.Name;
         const isEnabled = (f.isEnabled !== undefined) ? f.isEnabled : f.IsEnabled;
 
-        // Try i18n
-        const displayName = i18n.get(nameVal) || nameVal;
+        // Dynamic Name from DTO
+        let displayName = nameVal;
+        if (f.displayNameEn) {
+            if (lang === 'zh-CN') displayName = f.displayNameCn || f.displayNameEn;
+            else if (lang === 'zh-TW') displayName = f.displayNameTw || f.displayNameEn;
+            else displayName = f.displayNameEn;
+        } else {
+            // Fallback to i18n lookup if old backend
+            displayName = i18n.get(nameVal) || nameVal;
+        }
+
+        const desc = f.description || f.Description || "";
 
         card.innerHTML = `
-            <div class="feature-name">${displayName}</div>
+            <div class="feature-name" title="${desc}">${displayName}</div>
             <div class="toggle-switch ${isEnabled ? 'active' : ''}" onclick="toggleFeature('${nameVal}', ${!isEnabled})">
                 <div class="toggle-knob"></div>
             </div>
@@ -389,17 +423,28 @@ async function loadPilot() {
 }
 
 function updatePilotInfo(info) {
-    // CamelCase fallbacks
-    const pid = info.personId || info.PersonId || "UNKNOWN";
-    const unit = info.gundamId || info.GundamId || "--";
+    if (!info) return;
+    currentPilotInfo = info;
+
+    // CamelCase fallbacks with Condom Logic
+    const pid = info.personId || info.PersonId || 0;
+    const unit = info.condomId || info.CondomId || info.gundamId || info.GundamId || "--";
+    const name = info.condomName || info.CondomName || info.gundamName || info.GundamName || "--";
+    const slot = (info.slot !== undefined) ? info.slot : (info.Slot !== undefined ? info.Slot : "--");
+
     const w1 = info.weapon1 || info.Weapon1 || "--";
     const w2 = info.weapon2 || info.Weapon2 || "--";
     const w3 = info.weapon3 || info.Weapon3 || "--";
 
+    const x = info.x || info.X || 0;
+    const y = info.y || info.Y || 0;
+    const z = info.z || info.Z || 0;
+
     updateText("pilot-id", pid);
     updateText("pilot-unit", unit);
+    updateText("pilot-unit-name", name);
+    updateText("pilot-slot", slot);
 
-    // Weapons
     const wEl = document.getElementById("pilot-weapons");
     if (wEl) {
         wEl.innerHTML = `
@@ -407,6 +452,16 @@ function updatePilotInfo(info) {
             <div style="margin-bottom:5px; color:#aaa">WEAPON 2: <span style="color:#fff">${w2}</span></div>
             <div style="color:#aaa">WEAPON 3: <span style="color:#fff">${w3}</span></div>
         `;
+    }
+
+    updateText("pilot-xyz", `X:${x.toFixed(2)} Y:${y.toFixed(2)} Z:${z.toFixed(2)}`);
+
+    // Context Update
+    if (pid !== 0 && pid != currentPlayerId) {
+        currentPlayerId = pid;
+        refreshStats(pid);
+        const input = document.getElementById("player-input");
+        if (input) input.value = pid;
     }
 }
 
@@ -446,5 +501,69 @@ function updateLobbyList(list) {
 }
 
 // Expose switchTab globally
+// Expose switchTab globally
 window.switchTab = switchTab;
 window.toggleFeature = toggleFeature;
+window.inject = inject;
+window.deattach = deattach;
+window.openReportPage = openReportPage;
+
+// === INJECTION & STATUS ===
+
+async function inject() {
+    isInjecting = true;
+    updateStatusUI(false);
+    try { await fetch('/api/inject', { method: 'POST' }); } catch (e) { isInjecting = false; }
+}
+
+async function deattach() {
+    try { await fetch('/api/deattach', { method: 'POST' }); } catch (e) { }
+}
+
+async function pollStatus() {
+    try {
+        const res = await fetch('/api/status', { cache: 'no-store' });
+        if (res.ok) {
+            const data = await res.json();
+            window.isConnected = data.isConnected; // Track globally
+            if (data.isConnected) isInjecting = false;
+            updateStatusUI(data.isConnected);
+        }
+    } catch (e) { }
+}
+
+function updateStatusUI(isConnected) {
+    const dot = document.getElementById('status-ind');
+    const btnInject = document.getElementById('btn-inject');
+    const btnDeattach = document.getElementById('btn-deattach');
+    const lastRefresh = document.getElementById('last-refresh');
+
+    if (isConnected) {
+        if (dot) { dot.className = "status-dot connected"; dot.title = "CONNECTED"; }
+        if (btnInject) { btnInject.disabled = true; btnInject.classList.remove('glow-animate'); btnInject.innerText = i18n.get('btn_inject') || "INJECT"; }
+        if (btnDeattach) btnDeattach.disabled = false;
+        if (lastRefresh) lastRefresh.innerText = "CONNECTED";
+    } else {
+        if (btnDeattach) btnDeattach.disabled = true;
+        if (btnInject) btnInject.disabled = false;
+
+        if (isInjecting) {
+            if (dot) { dot.className = "status-dot waiting"; dot.title = "INJECTING..."; }
+            if (btnInject) { btnInject.classList.add('glow-animate'); btnInject.innerText = "INJECTING..."; }
+            if (lastRefresh) lastRefresh.innerText = "WAITING...";
+        } else {
+            if (dot) { dot.className = "status-dot"; dot.title = "DISCONNECTED"; }
+            if (btnInject) { btnInject.classList.add('glow-animate'); btnInject.innerText = i18n.get('btn_inject') || "INJECT"; }
+            if (lastRefresh) lastRefresh.innerText = "DISCONNECTED";
+        }
+    }
+}
+
+function openReportPage() {
+    let url = window.location.protocol + "//" + window.location.host + "/";
+    if (currentPlayerId && currentPlayerId !== 0) {
+        url += "?pid=" + currentPlayerId;
+    }
+    window.open(url, '_blank');
+}
+

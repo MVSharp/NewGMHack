@@ -11,30 +11,40 @@ using Microsoft.AspNetCore.SignalR;
 using NewGMHack.CommunicationModel.IPC.Requests;
 using NewGMHack.CommunicationModel.IPC.Responses;
 using NewGMHack.CommunicationModel.Models;
-using NewGmHack.GUI; // For RemoteHandler
+using NewGmHack.GUI; 
+using NewGmHack.GUI.ViewModels; 
+using NewGMHack.Stub; // For ClientConfig
+using System.Reflection;
+using System.Linq;
+
 
 namespace NewGmHack.GUI.Services
 {
-    public class WebHostService : BackgroundService
+    public partial class WebHostService : BackgroundService
     {
         private readonly ILogger<WebHostService> _logger;
         private readonly System.Threading.Channels.Channel<RewardNotification> _channel;
         private readonly System.Threading.Channels.Channel<WebMessage> _webChannel;
         private readonly IWebServerStatus _webServerStatus;
         private readonly RemoteHandler _remoteHandler;
+        private readonly MainViewModel _mainViewModel; 
         private IHost? _webHost;
+        private readonly List<HackFeatures> _offlineFeatures = new ClientConfig().Features;
+
 
         public WebHostService(ILogger<WebHostService> logger, 
                               System.Threading.Channels.Channel<RewardNotification> channel,
                               System.Threading.Channels.Channel<WebMessage> webChannel,
                               IWebServerStatus webServerStatus,
-                              RemoteHandler remoteHandler)
+                              RemoteHandler remoteHandler,
+                              MainViewModel mainViewModel) // Added
         {
             _logger = logger;
             _channel = channel;
             _webChannel = webChannel;
             _webServerStatus = webServerStatus;
             _remoteHandler = remoteHandler;
+            _mainViewModel = mainViewModel;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -144,27 +154,50 @@ namespace NewGmHack.GUI.Services
 
                                 // === NEW API ENDPOINTS ===
 
-                                // GET /api/features
+                                // GET /api/features (Modified)
                                 endpoints.MapGet("/api/features", async (RemoteHandler handler) =>
                                 {
-                                    var features = await handler.GetFeatures();
-                                    return Results.Ok(features);
+                                    List<HackFeatures> sourceList;
+                                    if(_mainViewModel.IsConnected)
+                                    {
+                                        sourceList = await handler.GetFeatures();
+                                        // Sync offline config with remote state just in case? 
+                                        // For now, remote is truth.
+                                    }
+                                    else 
+                                    {
+                                        sourceList = _offlineFeatures;
+                                    }
+
+                                    // Map to DTO
+                                    var dtos = sourceList.Select(f => ToDto(f)).ToList();
+                                    return Results.Ok(dtos);
                                 });
 
-                                // POST /api/features  Body: { FeatureName: "...", IsEnabled: true }
+                                // POST /api/features
                                 endpoints.MapPost("/api/features", async (HttpContext context, RemoteHandler handler) =>
                                 {
-                                    // Bind manually or use FromBody if using full MVC. Minimal API supports binding.
                                     var req = await context.Request.ReadFromJsonAsync<FeatureChangeRequests>();
                                     if(req == null) return Results.BadRequest();
 
-                                    var result = await handler.SetFeatureEnable(req);
+                                    // 1. Update Offline Config (Single Source of Truth for UI when disconnected)
+                                    var offlineItem = _offlineFeatures.FirstOrDefault(x => x.Name == req.FeatureName);
+                                    if(offlineItem != null) offlineItem.IsEnabled = req.IsEnabled;
+
+                                    // 2. If Connected, Send to Remote
+                                    object result = true;
+                                    if(_mainViewModel.IsConnected)
+                                    {
+                                        result = await handler.SetFeatureEnable(req);
+                                    }
+
                                     return Results.Ok(result);
                                 });
 
                                 // GET /api/me (PersonInfo)
                                 endpoints.MapGet("/api/me", async (RemoteHandler handler) =>
                                 {
+                                    if(!_mainViewModel.IsConnected) return Results.Ok(new Info()); // Empty info
                                     var info = await handler.AskForInfo();
                                     return Results.Ok(info);
                                 });
@@ -172,8 +205,27 @@ namespace NewGmHack.GUI.Services
                                 // GET /api/roommates
                                 endpoints.MapGet("/api/roommates", async (RemoteHandler handler) =>
                                 {
+                                    if(!_mainViewModel.IsConnected) return Results.Ok(new System.Collections.Generic.List<Roommate>());
                                     var list = await handler.GetRoommates();
                                     return Results.Ok(list);
+                                });
+                                
+                                // INJECTION ENDPOINTS
+                                endpoints.MapPost("/api/inject", async () => 
+                                {
+                                    var status = await _mainViewModel.InjectFromWeb();
+                                    return Results.Ok(new { status });
+                                });
+                                
+                                endpoints.MapPost("/api/deattach", async () => 
+                                {
+                                    await _mainViewModel.DeattachFromWeb();
+                                    return Results.Ok();
+                                });
+
+                                endpoints.MapGet("/api/status", () => 
+                                {
+                                    return Results.Ok(new { isConnected = _mainViewModel.IsConnected });
                                 });
                             });
                         });
@@ -255,4 +307,40 @@ namespace NewGmHack.GUI.Services
     }
 
     public class DbConfig { public string ConnectionString { get; set; } = ""; }
+
+    public class FeatureDto
+    {
+        public string Name { get; set; } = "";
+        public bool IsEnabled { get; set; }
+        public string DisplayNameEn { get; set; } = "";
+        public string DisplayNameCn { get; set; } = "";
+        public string DisplayNameTw { get; set; } = "";
+        public string Description { get; set; } = "";
+    }
+
+    public partial class WebHostService
+    {
+        private static FeatureDto ToDto(HackFeatures f)
+        {
+            var dto = new FeatureDto 
+            { 
+                Name = f.Name.ToString(), 
+                IsEnabled = f.IsEnabled 
+            };
+
+            var memberInfo = typeof(FeatureName).GetMember(f.Name.ToString()).FirstOrDefault();
+            if (memberInfo != null)
+            {
+                var attr = memberInfo.GetCustomAttribute<FeatureMetadataAttribute>();
+                if (attr != null)
+                {
+                    dto.DisplayNameEn = attr.DisplayNameEn;
+                    dto.DisplayNameCn = attr.DisplayNameCn;
+                    dto.DisplayNameTw = attr.DisplayNameTw;
+                    dto.Description = attr.Description;
+                }
+            }
+            return dto;
+        }
+    }
 }

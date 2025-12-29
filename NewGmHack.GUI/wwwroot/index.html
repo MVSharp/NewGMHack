@@ -541,6 +541,89 @@
             background: rgba(102, 252, 241, 0.05);
             color: #fff;
         }
+
+        /* System Controls */
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff0055;
+            box-shadow: 0 0 5px #ff0055;
+            transition: all 0.3s;
+            margin-right: 15px;
+        }
+
+        .status-dot.connected {
+            background: #00ffaa;
+            box-shadow: 0 0 10px #00ffaa;
+        }
+
+        .status-dot.waiting {
+            background: #ffaa00;
+            box-shadow: 0 0 10px #ffaa00;
+            animation: blink 1s infinite;
+        }
+
+        .btn-action {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--neon-blue);
+            color: var(--neon-blue);
+            padding: 5px 20px;
+            font-family: 'Rajdhani';
+            cursor: pointer;
+            font-weight: 700;
+            letter-spacing: 1px;
+            transition: all 0.3s;
+            margin-right: 10px;
+        }
+
+        .btn-action:hover:not(:disabled) {
+            background: var(--neon-cyan);
+            color: #0b0c10;
+            box-shadow: 0 0 10px var(--neon-cyan);
+        }
+
+        .btn-action:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            border-color: #555;
+            color: #555;
+            animation: none !important;
+        }
+
+        .glow-animate {
+            animation: glowPulse 2s infinite;
+            border-color: var(--beam-pink);
+            color: var(--beam-pink);
+        }
+
+        @keyframes glowPulse {
+            0% {
+                box-shadow: 0 0 5px var(--beam-pink);
+            }
+
+            50% {
+                box-shadow: 0 0 20px var(--beam-pink);
+            }
+
+            100% {
+                box-shadow: 0 0 5px var(--beam-pink);
+            }
+        }
+
+        @keyframes blink {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
     </style>
 </head>
 
@@ -552,9 +635,21 @@
         <header>
             <div style="display:flex; align-items:center;">
                 <img src="condom.png" alt="Logo" style="height: 50px; margin-right: 15px;" />
-                <div class="logo" data-i18n="title">GUNDAM BATTLE TRACK SYSTEM</div>
+                <div class="logo" data-i18n="title">SD Hack By Michael Van</div>
             </div>
             <div class="header-right">
+                <!-- System Controls -->
+                <div
+                    style="display:flex; align-items:center; margin-right: 20px; border-right: 1px solid #333; padding-right: 20px;">
+                    <div id="status-ind" class="status-dot" title="DISCONNECTED"></div>
+                    <button id="btn-inject" class="btn-action glow-animate" onclick="inject()"
+                        data-i18n="btn_inject">INJECT</button>
+                    <button id="btn-deattach" class="btn-action" onclick="deattach()" data-i18n="btn_deattach"
+                        disabled>DEATTACH</button>
+                    <button id="btn-open-report" class="btn-action" onclick="openReportPage()"
+                        data-i18n="btn_report">REPORT</button>
+                </div>
+
                 <div class="lang-switch">
                     <span class="lang-btn" onclick="i18n.setLanguage('en')">EN</span>/
                     <span class="lang-btn" onclick="i18n.setLanguage('zh-CN')">简</span>/
@@ -767,16 +862,28 @@
                         <td id="pilot-id" class="glow-cyan" style="font-size:1.5em; font-weight:bold;">--</td>
                     </tr>
                     <tr>
-                        <th data-i18n="gundam_unit">MOBILE SUIT</td>
+                        <th data-i18n="condom_unit">CONDOM ID</td>
                         <td id="pilot-unit" class="glow-gold">--</td>
+                    </tr>
+                    <tr>
+                        <th data-i18n="condom_name">CONDOM NAME</td>
+                        <td id="pilot-unit-name" style="color: #fff">--</td>
+                    </tr>
+                    <tr>
+                        <th data-i18n="slot">SLOT</td>
+                        <td id="pilot-slot">--</td>
                     </tr>
                     <tr>
                         <th data-i18n="weapons">LOADOUT</td>
                         <td id="pilot-weapons">
-                            <div style="margin-bottom:5px;">WEAPON 1: --</div>
-                            <div style="margin-bottom:5px;">WEAPON 2: --</div>
-                            <div>WEAPON 3: --</div>
+                            <div id="w1" style="margin-bottom:5px;">WEAPON 1: --</div>
+                            <div id="w2" style="margin-bottom:5px;">WEAPON 2: --</div>
+                            <div id="w3">WEAPON 3: --</div>
                         </td>
+                    </tr>
+                    <tr>
+                        <th data-i18n="position">COORDINATES</td>
+                        <td id="pilot-xyz" style="font-family:'Roboto Mono'">X:-- Y:-- Z:--</td>
                     </tr>
                 </table>
             </div>

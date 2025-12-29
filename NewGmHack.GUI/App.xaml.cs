@@ -20,7 +20,7 @@ namespace NewGmHack.GUI
         private static readonly IHost _host = Host.CreateDefaultBuilder()
                                                   .ConfigureServices(services =>
                                                    {
-                                                       services.AddSingleton<MainWindow>();
+                                                       services.AddSingleton<NewMainWindow>();
                                                        services.AddSingleton<IDialogCoordinator>(sp=> DialogCoordinator.Instance);
                                                        services.AddSingleton<MainViewModel>();
 
@@ -42,11 +42,11 @@ namespace NewGmHack.GUI
                                                        services.AddSingleton<PersonInfoView>();
                                                        services.AddSingleton<PersonInfoUserControlsViewModel>();
                                                        services.AddSingleton<IHealthCheckHandler>(sp => sp
-                                                                                                     .GetRequiredService<MainViewModel>());
+                                                                                                    .GetRequiredService<MainViewModel>());
                                                        services.AddSingleton<FeaturesView>();
                                                        services.AddSingleton<FeaturesViewModel>();
                                                        services.AddSingleton<IFeatureHandler>(sp => sp
-                                                                                                     .GetRequiredService<FeaturesViewModel>());
+                                                                                                    .GetRequiredService<FeaturesViewModel>());
                                                        services.AddSingleton<IPersonInfoHandler>(sp => sp.GetRequiredService<PersonInfoUserControlsViewModel>());
                                                        //i do this for non blocking
                                                        services.AddSingleton< IHostedService,HealthCheckServices>();
@@ -90,7 +90,7 @@ namespace NewGmHack.GUI
             try
             {
                 await _host.StartAsync();
-                var main = _host.Services.GetRequiredService<MainWindow>();
+                var main = _host.Services.GetRequiredService<NewMainWindow>();
                 main.Show();
             }
             catch (Exception ex)
