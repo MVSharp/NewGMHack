@@ -12,6 +12,7 @@ using NewGmHack.GUI.Views;
 using ObservableCollections;
 using ZLinq;
 using System.Text;
+using System.Reflection;
 
 // using MessagePipe;
 // using NewGMHack.CommunicationModel.IPC;
@@ -129,10 +130,16 @@ namespace NewGmHack.GUI.ViewModels
                         Text =
                             target.WriteMemory($"This form has been injected into {target.MainModule?.FileName} and is running in its memory space"),
                     };
+                    
+                    // Read Stub DLL version dynamically
+                    var stubDllPath = "NewGMHack.Stub.dll";
+                    var stubVersion = GetAssemblyVersion(stubDllPath);
+                    var assemblyQualifiedName = $"NewGMHack.Stub.Entry, NewGMHack.Stub, Version={stubVersion}, Culture=neutral, PublicKeyToken=null";
+                    
                     return target.Inject(
                                           "NewGMHack.Stub.runtimeconfig.json",
-                                          "NewGMHack.Stub.dll",
-                                          "NewGMHack.Stub.Entry, NewGMHack.Stub, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+                                          stubDllPath,
+                                          assemblyQualifiedName,
                                           "Bootstrap",
                                           arg, true);
                 });
@@ -201,6 +208,24 @@ namespace NewGmHack.GUI.ViewModels
         public Task OnLoaded()
         {
             return Task.CompletedTask;
+        }
+        
+        /// <summary>
+        /// Read the version from a DLL file without loading it into the current AppDomain
+        /// </summary>
+        private static string GetAssemblyVersion(string dllPath)
+        {
+            try
+            {
+                // Use AssemblyName to read version without loading the assembly
+                var assemblyName = AssemblyName.GetAssemblyName(dllPath);
+                return assemblyName.Version?.ToString() ?? "1.0.0.0";
+            }
+            catch
+            {
+                // Fallback if we can't read the version
+                return "1.0.0.0";
+            }
         }
     }
 }

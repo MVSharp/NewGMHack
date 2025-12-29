@@ -89,6 +89,20 @@ namespace NewGmHack.GUI
         {
             try
             {
+                // Version check against GitHub (skipped in DEBUG mode)
+                var (versionOk, versionMessage) = await VersionCheckService.CheckVersionAsync();
+                if (!versionOk)
+                {
+                    MessageBox.Show(
+                        versionMessage ?? "Version mismatch detected. Please update to the latest version.",
+                        "Update Required",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning
+                    );
+                    Shutdown(1);
+                    return;
+                }
+                
                 await _host.StartAsync();
                 var main = _host.Services.GetRequiredService<NewMainWindow>();
                 main.Show();

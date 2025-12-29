@@ -50,6 +50,17 @@ if ($LASTEXITCODE -ne 0) { throw "GUI build failed" }
 dotnet build "NewGMHack.Stub/NewGMHack.Stub.csproj" -c Release -p:Platform=x86
 if ($LASTEXITCODE -ne 0) { throw "Stub build failed" }
 
+# 4.5. Update version.txt with Stub DLL version
+Write-Host "Updating version.txt..." -ForegroundColor Cyan
+$stubDll = "bin\x86\Release\NewGMHack.Stub.dll"
+if (Test-Path $stubDll) {
+    $version = [Reflection.AssemblyName]::GetAssemblyName($stubDll).Version.ToString()
+    $version | Set-Content "version.txt" -NoNewline
+    Write-Host "  Version: $version" -ForegroundColor Green
+} else {
+    Write-Host "  Warning: Stub DLL not found, version.txt not updated" -ForegroundColor Yellow
+}
+
 # 5. Cleanup Temp Files
 Write-Host "Cleaning up temp files..." -ForegroundColor Cyan
 

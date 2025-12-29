@@ -11,6 +11,14 @@
 		<DebugType>embedded</DebugType>
 		<EnableDynamicLoading>true</EnableDynamicLoading>
 		<UserSecretsId>8cfe72c6-d0db-49ea-83a5-380afe6d8698</UserSecretsId>
+		
+		<!-- Auto-increment version: Major.Minor.Build.Revision -->
+		<!-- Build = days since 2024-01-01, Revision = seconds since midnight / 2 -->
+		<_BuildNumber>$([System.DateTime]::UtcNow.Subtract($([System.DateTime]::Parse('2024-01-01'))).Days)</_BuildNumber>
+		<_RevisionNumber>$([MSBuild]::Divide($([System.DateTime]::UtcNow.TimeOfDay.TotalSeconds), 2).ToString('0'))</_RevisionNumber>
+		<Version>1.0.$(_BuildNumber).$(_RevisionNumber)</Version>
+		<AssemblyVersion>1.0.$(_BuildNumber).$(_RevisionNumber)</AssemblyVersion>
+		<FileVersion>1.0.$(_BuildNumber).$(_RevisionNumber)</FileVersion>
 	</PropertyGroup>
 
 	<ItemGroup>
