@@ -181,12 +181,9 @@ public class PacketProcessorService : BackgroundService
                 _selfInformation.PersonInfo.Slot = slot;
                 await ScanGundam(changed.MachineId,token:token);
                 ChargeGundam(socket, slot);
-
                 break;
             case 1259: // get room list
-
                 AssignPersonId(reader);
-
                 _selfInformation.ClientConfig.IsInGame = false;
                 break;
             case 1244 or 2109 or 1885 or 1565:
@@ -196,9 +193,18 @@ public class PacketProcessorService : BackgroundService
                 break;
             case 1550 or 1282 or 1490 or 2253 : // 1691 or 2337 or 1550:
                 _selfInformation.BombHistory.Clear();
-
                 _selfInformation.ClientConfig.IsInGame = true;
                 SendSkipScreen(socket);
+                break;
+            case 2751:
+                _selfInformation.BombHistory.Clear();
+                _selfInformation.ClientConfig.IsInGame = false;
+                ReadReport(methodPacket.MethodBody);
+                break;
+            case 2280:
+                _selfInformation.BombHistory.Clear();
+                _selfInformation.ClientConfig.IsInGame = false;
+                ReadBonus(methodPacket.MethodBody);
                 break;
             //case 1858 or 1270:
             //    _selfInformation.BombHistory.Clear();
@@ -414,6 +420,19 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
      {
 
      }
+ }
+
+ private void ReadReport(ReadOnlySpan<byte> bytes)
+ {
+     var report = bytes.ReadStruct<RewardReport>();
+     _logger.ZLogInformation($"Report Player:{report.PlayerId} K:{report.Kills} D:{report.Deaths} S:{report.Supports} Point:{report.Points} Exp:{report.ExpGain} GB:{report.GBGain} MachineExp:{report.MachineAddedExp} Practice:{report.PracticeExpAdded}");
+     var time   = DateTime.UtcNow;
+ }
+
+ private unsafe void ReadBonus(ReadOnlySpan<byte> bytes)
+ {
+     var rewardsBonus = bytes.ReadStruct<RewardBonus>();
+     _logger.ZLogInformation($"Bonus Player:{rewardsBonus.PlayerId} Values: {rewardsBonus.Bonuses[0]}|{rewardsBonus.Bonuses[1]}|{rewardsBonus.Bonuses[2]}|{rewardsBonus.Bonuses[3]}|{rewardsBonus.Bonuses[4]}|{rewardsBonus.Bonuses[5]}|{rewardsBonus.Bonuses[6]}|{rewardsBonus.Bonuses[7]}");
  }
     private void ReadHitResponse2472(ReadOnlyMemory<byte> bytes, ConcurrentQueue<Reborn> reborns )
     {
