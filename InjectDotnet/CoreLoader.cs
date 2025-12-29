@@ -41,12 +41,8 @@ internal class CoreLoader : IManagedLoader
                   ?? throw new
                       KeyNotFoundException($"Could not determine the Microsoft.NETCore.App runtime from runtimeConfig.json");
 
-            Version installedRuntimeVer
-                = GetInstalledFrameworks().FirstOrDefault(v => v >= runtimeVersion)
-                  ?? throw new
-                      DirectoryNotFoundException($"Could not find installed Microsoft.NETCore.App runtime with version >= {runtimeVersion:3}");
-
-            hostPath
+          Version installedRuntimeVer = GetInstalledFrameworks() .Where(v => v.Major == runtimeVersion.Major && v.Minor == runtimeVersion.Minor) .OrderByDescending(v => v) .FirstOrDefault() ?? throw new DirectoryNotFoundException( $"Could not find installed Microsoft.NETCore.App runtime compatible with {runtimeVersion}");
+          hostPath
                 = GetHostfxrPath(installedRuntimeVer)
                   ?? throw new
                       FileNotFoundException($"Could not find the {PLATFORM} hostfxr.dll for runtime version {runtimeVersion:3}");
