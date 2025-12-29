@@ -32,7 +32,19 @@ const translations = {
         "kpi_kills": "TOTAL KILLS",
         "kpi_deaths": "TOTAL DEATHS",
         "kpi_support": "TOTAL SUPPORT",
-        "gain": "GAIN"
+        "gain": "GAIN",
+        "nav_dashboard": "DASHBOARD",
+        "nav_features": "SYSTEM HACKS",
+        "nav_pilot": "PILOT INFO",
+        "nav_lobby": "LOBBY RECON",
+        "feature_name": "FEATURE",
+        "feature_status": "STATUS",
+        "enable": "ENABLE",
+        "disable": "DISABLE",
+        "gundam_unit": "MOBILE SUIT",
+        "weapons": "LOADOUT",
+        "roommate_name": "PILOT NAME",
+        "roommate_id": "PILOT ID"
     },
     "zh-CN": {
         "title": "敢达对战追踪系统",
@@ -67,7 +79,19 @@ const translations = {
         "kpi_kills": "总击坠",
         "kpi_deaths": "总被击坠",
         "kpi_support": "总助攻",
-        "gain": "收益"
+        "gain": "收益",
+        "nav_dashboard": "仪表盘",
+        "nav_features": "系统破解",
+        "nav_pilot": "机师信息",
+        "nav_lobby": "大厅侦察",
+        "feature_name": "功能名称",
+        "feature_status": "状态",
+        "enable": "启用",
+        "disable": "禁用",
+        "gundam_unit": "机体",
+        "weapons": "武装",
+        "roommate_name": "机师名称",
+        "roommate_id": "机师ID"
     },
     "zh-TW": {
         "title": "鋼彈對戰追蹤系統",
@@ -102,7 +126,19 @@ const translations = {
         "kpi_kills": "總擊墜",
         "kpi_deaths": "總被擊墜",
         "kpi_support": "總助攻",
-        "gain": "收益"
+        "gain": "收益",
+        "nav_dashboard": "儀表盤",
+        "nav_features": "系統破解",
+        "nav_pilot": "機師資訊",
+        "nav_lobby": "大廳偵察",
+        "feature_name": "功能名稱",
+        "feature_status": "狀態",
+        "enable": "啟用",
+        "disable": "禁用",
+        "gundam_unit": "機體",
+        "weapons": "武裝",
+        "roommate_name": "機師名稱",
+        "roommate_id": "機師ID"
     }
 };
 

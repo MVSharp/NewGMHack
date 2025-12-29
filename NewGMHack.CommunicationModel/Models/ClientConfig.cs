@@ -44,6 +44,7 @@ public class ClientConfig
 public class HackFeatures
 {
     [Key(0)]
+    [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter))]
     public FeatureName Name      { get; set; }
     [Key(1)]
     public bool        IsEnabled { get; set; }

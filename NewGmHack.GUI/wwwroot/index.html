@@ -53,8 +53,8 @@
         /* Layout Grid Wrapper */
         .dashboard-wrapper {
             display: grid;
-            grid-template-rows: auto auto 1fr;
-            /* Header, KPI, Main */
+            grid-template-rows: auto auto auto 1fr;
+            /* Header, Nav, KPI, Main */
             gap: 15px;
             height: 100vh;
             padding: 15px;
@@ -120,12 +120,81 @@
             color: #888;
         }
 
+        /* --- Navigation Bar --- */
+        .system-nav {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            border-bottom: 2px solid rgba(102, 252, 241, 0.3);
+            padding-bottom: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            margin-bottom: 0px;
+        }
+
+        .nav-btn {
+            background: transparent;
+            border: 1px solid var(--neon-blue);
+            color: var(--neon-blue);
+            padding: 8px 30px;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.1em;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+
+        .nav-btn:hover {
+            background: rgba(102, 252, 241, 0.1);
+            text-shadow: 0 0 8px var(--neon-cyan);
+            box-shadow: 0 0 15px rgba(102, 252, 241, 0.2);
+            border-color: var(--neon-cyan);
+            color: var(--neon-cyan);
+        }
+
+        .nav-btn.active {
+            background: var(--neon-cyan);
+            color: #0b0c10;
+            box-shadow: 0 0 20px rgba(102, 252, 241, 0.4);
+            font-weight: bold;
+            border-color: var(--neon-cyan);
+        }
+
+        /* --- Views --- */
+        .view-section {
+            display: none;
+            height: 100%;
+            overflow: hidden;
+            flex-direction: column;
+        }
+
+        .view-section.active {
+            display: flex;
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(5px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
         /* KPI Strip (Top Row) */
         .kpi-row {
             display: grid;
             grid-template-columns: repeat(9, 1fr);
-            /* 9 Items now */
             gap: 10px;
+            margin-bottom: 15px;
+            /* Give some spacing */
         }
 
         .kpi-card {
@@ -191,9 +260,10 @@
         .main-content {
             display: grid;
             grid-template-columns: 2fr 1.2fr;
-            /* Left (2) vs Right (1.2) */
             gap: 15px;
             overflow: hidden;
+            flex: 1;
+            /* Fill remaining height */
         }
 
         /* Panels */
@@ -371,12 +441,112 @@
             color: var(--neon-cyan);
             font-weight: bold;
         }
+
+        /* --- Features View Specifics --- */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+            padding: 20px;
+            overflow-y: auto;
+            max-height: calc(100vh - 200px);
+        }
+
+        .feature-card {
+            background: rgba(20, 20, 25, 0.8);
+            border: 1px solid var(--neon-blue);
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: border-color 0.3s;
+        }
+
+        .feature-card:hover {
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 10px rgba(102, 252, 241, 0.1);
+        }
+
+        .feature-name {
+            font-size: 1.1em;
+            color: #fff;
+            font-family: 'Rajdhani';
+            font-weight: 600;
+        }
+
+        /* Toggle Switch */
+        .toggle-switch {
+            width: 50px;
+            height: 26px;
+            background: #333;
+            border-radius: 13px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.3s;
+            border: 1px solid #555;
+        }
+
+        .toggle-switch.active {
+            background: var(--neon-cyan);
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 10px var(--neon-cyan);
+        }
+
+        .toggle-knob {
+            width: 22px;
+            height: 22px;
+            background: #fff;
+            border-radius: 50%;
+            position: absolute;
+            top: 1px;
+            left: 1px;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .toggle-switch.active .toggle-knob {
+            transform: translateX(24px);
+        }
+
+        /* --- Pilot/Lobby Tables --- */
+        .info-card {
+            background: rgba(20, 20, 25, 0.9);
+            border: 1px solid var(--neon-blue);
+            padding: 20px;
+            margin: 20px auto;
+            max-width: 800px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: 'Rajdhani';
+        }
+
+        .data-table th,
+        .data-table td {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            text-align: left;
+            color: #ccc;
+        }
+
+        .data-table th {
+            color: var(--neon-cyan);
+            font-size: 1.1em;
+            border-bottom: 2px solid var(--neon-blue);
+        }
+
+        .data-table tr:hover td {
+            background: rgba(102, 252, 241, 0.05);
+            color: #fff;
+        }
     </style>
 </head>
 
 <body>
 
-    <div class="dashboard-wrapper">
+    <div class="dashboard-wrapper"> <!-- The Grid defined in CSS -->
 
         <!-- Header -->
         <header>
@@ -400,149 +570,240 @@
             </div>
         </header>
 
-        <!-- KPI Row (9 Items) -->
-        <div class="kpi-row">
-            <div class="kpi-card accent-gold">
-                <div class="kpi-card-label" data-i18n="kpi_battle">TOTAL BATTLE</div>
-                <div id="total-matches" class="kpi-card-value">0</div>
+        <!-- Navigation Tabs (New) -->
+        <nav class="system-nav">
+            <button class="nav-btn active" onclick="switchTab('dashboard')" data-i18n="nav_dashboard">DASHBOARD</button>
+            <button class="nav-btn" onclick="switchTab('features')" data-i18n="nav_features">SYSTEM HACKS</button>
+            <button class="nav-btn" onclick="switchTab('pilot')" data-i18n="nav_pilot">PILOT INFO</button>
+            <button class="nav-btn" onclick="switchTab('lobby')" data-i18n="nav_lobby">LOBBY RECON</button>
+        </nav>
+
+        <!-- === VIEW: DASHBOARD === -->
+        <!-- Note: We use a wrapper view-dashboard that is active by default. 
+             However, the dashboard-wrapper grid is applied to the BODY's child.
+             So we need to be careful. The dashboard-wrapper expects Header, Nav, and then Content.
+             The content currently is KPI + Main.
+             If we wrap KPI+Main in a div, it becomes ONE grid item. 
+             So we need to adjust the View container to be the grid Item that expands.
+             OR we change dashboard-wrapper to standard block and let sub-containers grid.
+             
+             Let's change dashboard-wrapper grid to: Header, Nav, Content-Area.
+             Content-Area will be the view-section.
+        -->
+
+        <div id="view-dashboard" class="view-section active">
+            <!-- Reuse existing KPI + MainContent structure -->
+
+            <!-- KPI Row (9 Items) -->
+            <div class="kpi-row">
+                <div class="kpi-card accent-gold">
+                    <div class="kpi-card-label" data-i18n="kpi_battle">TOTAL BATTLE</div>
+                    <div id="total-matches" class="kpi-card-value">0</div>
+                </div>
+
+                <div class="kpi-card accent-gold">
+                    <div class="kpi-card-label" data-i18n="kpi_gb">GB EARNED</div>
+                    <div id="total-gb" class="kpi-card-value glow-gold">0</div>
+                </div>
+                <div class="kpi-card accent-orange">
+                    <div class="kpi-card-label" data-i18n="kpi_bonus">TOTAL BONUS</div>
+                    <div id="total-bonus" class="kpi-card-value glow-orange">0</div>
+                </div>
+                <!-- NEW KPI (TOTAL GAIN) -->
+                <div class="kpi-card accent-cyan">
+                    <div class="kpi-card-label" data-i18n="kpi_total_gain">TOTAL GAIN (INC BONUS)</div>
+                    <div id="total-gain-all" class="kpi-card-value glow-cyan">0</div>
+                </div>
+
+                <div class="kpi-card" style="border-color: var(--machine-silver)">
+                    <div class="kpi-card-label" data-i18n="kpi_exp">TOTAL MACHINE EXP GAINED</div>
+                    <div id="total-machine-exp" class="kpi-card-value glow-silver">0</div>
+                </div>
+
+                <div class="kpi-card accent-pink">
+                    <div class="kpi-card-label" data-i18n="kpi_max">MAX SCORE</div>
+                    <div id="max-points" class="kpi-card-value">0</div>
+                </div>
+                <div class="kpi-card accent-pink">
+                    <div class="kpi-card-label" data-i18n="kpi_kills">TOTAL KILLS</div>
+                    <div id="total-kills" class="kpi-card-value">0</div>
+                </div>
+                <div class="kpi-card accent-pink">
+                    <div class="kpi-card-label" data-i18n="kpi_deaths">TOTAL DEATHS</div>
+                    <div id="total-deaths" class="kpi-card-value">0</div>
+                </div>
+                <div class="kpi-card accent-pink">
+                    <div class="kpi-card-label" data-i18n="kpi_support">TOTAL SUPPORT</div>
+                    <div id="total-supports" class="kpi-card-value">0</div>
+                </div>
             </div>
 
-            <div class="kpi-card accent-gold">
-                <div class="kpi-card-label" data-i18n="kpi_gb">GB EARNED</div>
-                <div id="total-gb" class="kpi-card-value glow-gold">0</div>
-            </div>
-            <div class="kpi-card accent-orange">
-                <div class="kpi-card-label" data-i18n="kpi_bonus">TOTAL BONUS</div>
-                <div id="total-bonus" class="kpi-card-value glow-orange">0</div>
-            </div>
-            <!-- NEW KPI (TOTAL GAIN) -->
-            <div class="kpi-card accent-cyan">
-                <div class="kpi-card-label" data-i18n="kpi_total_gain">TOTAL GAIN (INC BONUS)</div>
-                <div id="total-gain-all" class="kpi-card-value glow-cyan">0</div>
-            </div>
+            <!-- Main Content -->
+            <div class="main-content">
+                <!-- Left: Hero + Graph -->
+                <div class="left-col">
+                    <!-- Top: Latest Match Hero -->
+                    <div class="panel" style="flex: 0 0 auto;">
+                        <div class="panel-header">
+                            <span data-i18n="latest_report">LATEST BATTLE REPORT</span>
+                            <span id="latest-ts"
+                                style="font-size:0.9rem; color:#888; font-family:'Roboto Mono';">--</span>
+                        </div>
+                        <div class="latest-stats-row">
+                            <div class="big-score-box">
+                                <div class="stat-label" style="font-size:0.8rem; color:#888;" data-i18n="perf_score">
+                                    PERFORMANCE SCORE</div>
+                                <div id="perf-score" class="big-score-val glitch">--</div>
+                            </div>
+                            <div class="mini-stat-grid">
+                                <div class="mini-stat">
+                                    <div class="lbl" data-i18n="kills">KILLS</div>
+                                    <div id="latest-kills" class="val">0</div>
+                                </div>
+                                <div class="mini-stat">
+                                    <div class="lbl" data-i18n="deaths">DEATHS</div>
+                                    <div id="latest-deaths" class="val">0</div>
+                                </div>
+                                <div class="mini-stat">
+                                    <div class="lbl" data-i18n="assist">ASSIST</div>
+                                    <div id="latest-supports" class="val">0</div>
+                                </div>
+                                <div class="mini-stat">
+                                    <div class="lbl" data-i18n="points">POINTS</div>
+                                    <div id="latest-points" class="val">0</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
-            <div class="kpi-card" style="border-color: var(--machine-silver)">
-                <div class="kpi-card-label" data-i18n="kpi_exp">TOTAL MACHINE EXP GAINED</div>
-                <div id="total-machine-exp" class="kpi-card-value glow-silver">0</div>
-            </div>
+                    <!-- Bottom: Chart (Fills remaining height) -->
+                    <div class="panel" style="flex: 1;">
+                        <div class="panel-header" data-i18n="trend_header">ECONOMIC TREND (LAST 10 BATTLES)</div>
+                        <div class="chart-wrapper">
+                            <canvas id="trendChart"></canvas>
+                        </div>
+                    </div>
+                </div>
 
-            <div class="kpi-card accent-pink">
-                <div class="kpi-card-label" data-i18n="kpi_max">MAX SCORE</div>
-                <div id="max-points" class="kpi-card-value">0</div>
-            </div>
-            <div class="kpi-card accent-pink">
-                <div class="kpi-card-label" data-i18n="kpi_kills">TOTAL KILLS</div>
-                <div id="total-kills" class="kpi-card-value">0</div>
-            </div>
-            <div class="kpi-card accent-pink">
-                <div class="kpi-card-label" data-i18n="kpi_deaths">TOTAL DEATHS</div>
-                <div id="total-deaths" class="kpi-card-value">0</div>
-            </div>
-            <div class="kpi-card accent-pink">
-                <div class="kpi-card-label" data-i18n="kpi_support">TOTAL SUPPORT</div>
-                <div id="total-supports" class="kpi-card-value">0</div>
+                <!-- Right: Metrics + Log -->
+                <div class="right-col">
+                    <!-- Top: Metrics Table -->
+                    <div class="panel">
+                        <div class="panel-header" data-i18n="pilot_efficiency">PILOT EFFICIENCY</div>
+                        <table class="metrics-table">
+                            <thead>
+                                <tr>
+                                    <th data-i18n="metric">METRIC</th>
+                                    <th data-i18n="hourly">HOURLY</th>
+                                    <th data-i18n="today">TODAY</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr style="color:var(--text-white); font-weight:700">
+                                    <td data-i18n="total_gain">TOTAL GAIN</td>
+                                    <td id="hour-total" class="glow-cyan">0</td>
+                                    <td id="today-total" class="glow-cyan">0</td>
+                                </tr>
+                                <tr>
+                                    <td data-i18n="base_gb">BASE GB</td>
+                                    <td id="hour-gb">0</td>
+                                    <td id="today-gb">0</td>
+                                </tr>
+                                <tr>
+                                    <td data-i18n="bonus">BONUS</td>
+                                    <td id="hour-bonus" class="glow-orange">0</td>
+                                    <td id="today-bonus" class="glow-orange">0</td>
+                                </tr>
+                                <tr>
+                                    <td data-i18n="exp">EXP</td>
+                                    <td id="hour-machine">0</td>
+                                    <td id="today-machine">0</td>
+                                </tr>
+                                <tr>
+                                    <td data-i18n="sorties">BATTLES</td>
+                                    <td id="hour-matches">0</td>
+                                    <td id="today-matches">0</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Bottom: Log (Fills remaining) -->
+                    <div class="panel" style="flex: 1; min-height: 0;">
+                        <div class="panel-header">COMBAT LOG</div>
+                        <div class="history-list-wrapper">
+                            <ul id="history-list" class="history-list"></ul>
+                        </div>
+                    </div>
+                </div>
+
+            </div> <!-- End Main Content -->
+        </div> <!-- End view-dashboard -->
+
+        <!-- === VIEW: FEATURES === -->
+        <div id="view-features" class="view-section">
+            <div class="panel" style="height:100%">
+                <div class="panel-header" data-i18n="nav_features">SYSTEM HACKS</div>
+                <div id="features-list" class="features-grid">
+                    <!-- Features injected here -->
+                    <div class="feature-card">
+                        <div class="feature-name">INFINITE BOOST</div>
+                        <div class="toggle-switch active">
+                            <div class="toggle-knob"></div>
+                        </div>
+                    </div>
+                    <!-- More placeholders will be replaced by JS -->
+                </div>
             </div>
         </div>
 
-        <!-- Main Content -->
-        <div class="main-content">
-
-            <!-- Left: Hero + Graph -->
-            <div class="left-col">
-                <!-- Top: Latest Match Hero -->
-                <div class="panel" style="flex: 0 0 auto;">
-                    <div class="panel-header">
-                        <span data-i18n="latest_report">LATEST BATTLE REPORT</span>
-                        <span id="latest-ts" style="font-size:0.9rem; color:#888; font-family:'Roboto Mono';">--</span>
-                    </div>
-                    <div class="latest-stats-row">
-                        <div class="big-score-box">
-                            <div class="stat-label" style="font-size:0.8rem; color:#888;" data-i18n="perf_score">
-                                PERFORMANCE SCORE</div>
-                            <div id="perf-score" class="big-score-val glitch">--</div>
-                        </div>
-                        <div class="mini-stat-grid">
-                            <div class="mini-stat">
-                                <div class="lbl" data-i18n="kills">KILLS</div>
-                                <div id="latest-kills" class="val">0</div>
-                            </div>
-                            <div class="mini-stat">
-                                <div class="lbl" data-i18n="deaths">DEATHS</div>
-                                <div id="latest-deaths" class="val">0</div>
-                            </div>
-                            <div class="mini-stat">
-                                <div class="lbl" data-i18n="assist">ASSIST</div>
-                                <div id="latest-supports" class="val">0</div>
-                            </div>
-                            <div class="mini-stat">
-                                <div class="lbl" data-i18n="points">POINTS</div>
-                                <div id="latest-points" class="val">0</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Bottom: Chart (Fills remaining height) -->
-                <div class="panel" style="flex: 1;">
-                    <div class="panel-header" data-i18n="trend_header">ECONOMIC TREND (LAST 10 BATTLES)</div>
-                    <div class="chart-wrapper">
-                        <canvas id="trendChart"></canvas>
-                    </div>
-                </div>
+        <!-- === VIEW: PILOT === -->
+        <div id="view-pilot" class="view-section">
+            <div class="panel-header" data-i18n="nav_pilot">PILOT INFO</div>
+            <div class="info-card">
+                <table class="data-table">
+                    <tr>
+                        <th data-i18n="roommate_id" style="width:30%">PILOT ID</td>
+                        <td id="pilot-id" class="glow-cyan" style="font-size:1.5em; font-weight:bold;">--</td>
+                    </tr>
+                    <tr>
+                        <th data-i18n="gundam_unit">MOBILE SUIT</td>
+                        <td id="pilot-unit" class="glow-gold">--</td>
+                    </tr>
+                    <tr>
+                        <th data-i18n="weapons">LOADOUT</td>
+                        <td id="pilot-weapons">
+                            <div style="margin-bottom:5px;">WEAPON 1: --</div>
+                            <div style="margin-bottom:5px;">WEAPON 2: --</div>
+                            <div>WEAPON 3: --</div>
+                        </td>
+                    </tr>
+                </table>
             </div>
+        </div>
 
-            <!-- Right: Metrics + Log -->
-            <div class="right-col">
-                <!-- Top: Metrics Table -->
-                <div class="panel">
-                    <div class="panel-header" data-i18n="pilot_efficiency">PILOT EFFICIENCY</div>
-                    <table class="metrics-table">
+        <!-- === VIEW: LOBBY === -->
+        <div id="view-lobby" class="view-section">
+            <div class="panel-header" data-i18n="nav_lobby">LOBBY RECON</div>
+            <div class="panel" style="flex:1">
+                <div class="history-list-wrapper">
+                    <table class="data-table" style="width:100%">
                         <thead>
                             <tr>
-                                <th data-i18n="metric">METRIC</th>
-                                <th data-i18n="hourly">HOURLY</th>
-                                <th data-i18n="today">TODAY</th>
+                                <th data-i18n="roommate_name">NAME</th>
+                                <th data-i18n="roommate_id">ID</th>
+                                <th data-i18n="feature_status">STATUS</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <tr style="color:var(--text-white); font-weight:700">
-                                <td data-i18n="total_gain">TOTAL GAIN</td>
-                                <td id="hour-total" class="glow-cyan">0</td>
-                                <td id="today-total" class="glow-cyan">0</td>
-                            </tr>
+                        <tbody id="lobby-list">
+                            <!-- Roommates injected here -->
                             <tr>
-                                <td data-i18n="base_gb">BASE GB</td>
-                                <td id="hour-gb">0</td>
-                                <td id="today-gb">0</td>
-                            </tr>
-                            <tr>
-                                <td data-i18n="bonus">BONUS</td>
-                                <td id="hour-bonus" class="glow-orange">0</td>
-                                <td id="today-bonus" class="glow-orange">0</td>
-                            </tr>
-                            <tr>
-                                <td data-i18n="exp">EXP</td>
-                                <td id="hour-machine">0</td>
-                                <td id="today-machine">0</td>
-                            </tr>
-                            <tr>
-                                <td data-i18n="sorties">BATTLES</td>
-                                <td id="hour-matches">0</td>
-                                <td id="today-matches">0</td>
+                                <td colspan="3" style="text-align:center; color:#555;">SCANNING LOBBY...</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-
-                <!-- Bottom: Log (Fills remaining) -->
-                <div class="panel" style="flex: 1; min-height: 0;">
-                    <div class="panel-header">COMBAT LOG</div>
-                    <div class="history-list-wrapper">
-                        <ul id="history-list" class="history-list"></ul>
-                    </div>
-                </div>
             </div>
-
         </div>
 
     </div>

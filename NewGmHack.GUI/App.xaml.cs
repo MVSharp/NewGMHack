@@ -35,6 +35,7 @@ namespace NewGmHack.GUI
                                                        
                                                        services.AddSingleton<IWebServerStatus, WebServerStatus>();
                                                        services.AddSingleton(System.Threading.Channels.Channel.CreateUnbounded<NewGMHack.CommunicationModel.IPC.Responses.RewardNotification>());
+                                                       services.AddSingleton(System.Threading.Channels.Channel.CreateUnbounded<WebMessage>());
                                                        services.AddHostedService<WebHostService>();
 
                                                        services.AddSingleton<RemoteHandler>();

@@ -7,7 +7,8 @@ namespace NewGmHack.GUI.Services
         RemoteHandler       handler,
         IHealthCheckHandler healthCheckHandler,
         IPersonInfoHandler  personInfoHandler,
-        IRoomManager roomManager
+        IRoomManager roomManager,
+        System.Threading.Channels.Channel<WebMessage> webChannel
         ) : BackgroundService
     {
         /// <inheritdoc />
@@ -20,10 +21,14 @@ namespace NewGmHack.GUI.Services
                 {
                     var healths = await handler.AskForHealth();
                     healthCheckHandler.SetHealthStatus(healths);
+                    
                     var info = await handler.AskForInfo();
                     personInfoHandler.SetInfo(info);
+                    webChannel.Writer.TryWrite(new WebMessage("UpdatePersonInfo", info));
+
                     var roommates = await handler.GetRoommates();
                     roomManager.UpdateRoomList(roommates);
+                    webChannel.Writer.TryWrite(new WebMessage("UpdateRoommates", roommates));
 
                     await Task.Delay(1000, stoppingToken).ConfigureAwait(false); // Success - wait 1s
                 }

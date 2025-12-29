@@ -8,9 +8,10 @@ using Dapper;
 using System.IO;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.SignalR;
+using NewGMHack.CommunicationModel.IPC.Requests;
 using NewGMHack.CommunicationModel.IPC.Responses;
-using System.Net.Sockets;
-using System.Net;
+using NewGMHack.CommunicationModel.Models;
+using NewGmHack.GUI; // For RemoteHandler
 
 namespace NewGmHack.GUI.Services
 {
@@ -18,16 +19,22 @@ namespace NewGmHack.GUI.Services
     {
         private readonly ILogger<WebHostService> _logger;
         private readonly System.Threading.Channels.Channel<RewardNotification> _channel;
+        private readonly System.Threading.Channels.Channel<WebMessage> _webChannel;
         private readonly IWebServerStatus _webServerStatus;
+        private readonly RemoteHandler _remoteHandler;
         private IHost? _webHost;
 
         public WebHostService(ILogger<WebHostService> logger, 
                               System.Threading.Channels.Channel<RewardNotification> channel,
-                              IWebServerStatus webServerStatus)
+                              System.Threading.Channels.Channel<WebMessage> webChannel,
+                              IWebServerStatus webServerStatus,
+                              RemoteHandler remoteHandler)
         {
             _logger = logger;
             _channel = channel;
+            _webChannel = webChannel;
             _webServerStatus = webServerStatus;
+            _remoteHandler = remoteHandler;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -56,7 +63,11 @@ namespace NewGmHack.GUI.Services
                             services.AddSingleton(new DbConfig { ConnectionString = connString });
                             // Pass the outer channel to inner container
                             services.AddSingleton(_channel);
+                            services.AddSingleton(_webChannel);
+                            // Pass RemoteHandler
+                            services.AddSingleton(_remoteHandler);
                             services.AddHostedService<RewardBroadcaster>();
+                            services.AddHostedService<WebBroadcaster>();
                         });
                         webBuilder.Configure(app =>
                         {
@@ -68,6 +79,7 @@ namespace NewGmHack.GUI.Services
                             app.UseEndpoints(endpoints =>
                             {
                                 endpoints.MapHub<RewardHub>("/rewardHub");
+                                
                                 // API: Get Player Stats Summary
                                 endpoints.MapGet("/api/stats/{playerId}", async (HttpContext context, uint playerId, DbConfig db) =>
                                 {
@@ -129,6 +141,40 @@ namespace NewGmHack.GUI.Services
                                     // Use specific serializer options to keep PascalCase if generic object, or just rely on default and handle in JS
                                     await context.Response.WriteAsJsonAsync(history, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = null });
                                 });
+
+                                // === NEW API ENDPOINTS ===
+
+                                // GET /api/features
+                                endpoints.MapGet("/api/features", async (RemoteHandler handler) =>
+                                {
+                                    var features = await handler.GetFeatures();
+                                    return Results.Ok(features);
+                                });
+
+                                // POST /api/features  Body: { FeatureName: "...", IsEnabled: true }
+                                endpoints.MapPost("/api/features", async (HttpContext context, RemoteHandler handler) =>
+                                {
+                                    // Bind manually or use FromBody if using full MVC. Minimal API supports binding.
+                                    var req = await context.Request.ReadFromJsonAsync<FeatureChangeRequests>();
+                                    if(req == null) return Results.BadRequest();
+
+                                    var result = await handler.SetFeatureEnable(req);
+                                    return Results.Ok(result);
+                                });
+
+                                // GET /api/me (PersonInfo)
+                                endpoints.MapGet("/api/me", async (RemoteHandler handler) =>
+                                {
+                                    var info = await handler.AskForInfo();
+                                    return Results.Ok(info);
+                                });
+
+                                // GET /api/roommates
+                                endpoints.MapGet("/api/roommates", async (RemoteHandler handler) =>
+                                {
+                                    var list = await handler.GetRoommates();
+                                    return Results.Ok(list);
+                                });
                             });
                         });
                     })
@@ -183,6 +229,27 @@ namespace NewGmHack.GUI.Services
             {
                 // Broadcast to all clients
                 await _hub.Clients.All.SendAsync("ReceiveReward", item, stoppingToken);
+            }
+        }
+    }
+
+    public class WebBroadcaster : BackgroundService
+    {
+        private readonly System.Threading.Channels.Channel<WebMessage> _channel;
+        private readonly IHubContext<RewardHub> _hub;
+
+        public WebBroadcaster(System.Threading.Channels.Channel<WebMessage> channel, IHubContext<RewardHub> hub)
+        {
+            _channel = channel;
+            _hub = hub;
+        }
+
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        {
+            await foreach (var item in _channel.Reader.ReadAllAsync(stoppingToken))
+            {
+                // MessageType = "UpdatePersonInfo", "UpdateRoommates", etc.
+                await _hub.Clients.All.SendAsync(item.MessageType, item.Payload, stoppingToken);
             }
         }
     }
