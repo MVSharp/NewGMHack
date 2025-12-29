@@ -23,7 +23,7 @@ namespace NewGmHack.GUI
                                                        services.AddSingleton<MainWindow>();
                                                        services.AddSingleton<IDialogCoordinator>(sp=> DialogCoordinator.Instance);
                                                        services.AddSingleton<MainViewModel>();
-                                                       services.AddSingleton<MainViewModel>();
+
                                                        
                                                        services.AddSingleton<NotificationHandler>();
                                                        services.AddSingleton(sp => 
@@ -33,6 +33,10 @@ namespace NewGmHack.GUI
                                                            return new RpcBuffer("Sdhook", (msgId, payload) => handler.HandleAsync(msgId, payload.AsMemory()));
                                                        });
                                                        
+                                                       services.AddSingleton<IWebServerStatus, WebServerStatus>();
+                                                       services.AddSingleton(System.Threading.Channels.Channel.CreateUnbounded<NewGMHack.CommunicationModel.IPC.Responses.RewardNotification>());
+                                                       services.AddHostedService<WebHostService>();
+
                                                        services.AddSingleton<RemoteHandler>();
                                                        services.AddSingleton<PersonInfoView>();
                                                        services.AddSingleton<PersonInfoUserControlsViewModel>();

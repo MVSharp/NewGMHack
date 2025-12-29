@@ -9,12 +9,14 @@ namespace NewGmHack.GUI.Services;
 public class NotificationHandler
 {
     private readonly ILogger<NotificationHandler> _logger;
+    private readonly System.Threading.Channels.Channel<RewardNotification> _channel;
     private readonly MessagePackSerializerOptions _options =
         MessagePackSerializerOptions.Standard.WithResolver(TypelessContractlessStandardResolver.Instance);
 
-    public NotificationHandler(ILogger<NotificationHandler> logger)
+    public NotificationHandler(ILogger<NotificationHandler> logger, System.Threading.Channels.Channel<RewardNotification> channel)
     {
         _logger = logger;
+        _channel = channel;
     }
 
     public async Task<byte[]> HandleAsync(ulong uid, ReadOnlyMemory<byte> payload)
@@ -33,9 +35,7 @@ public class NotificationHandler
                 if (request.Parameters is RewardNotification notification)
                 {
                     _logger.LogInformation($"Received Reward Notification for Player {notification.PlayerId} - Points: {notification.Points}");
-                    
-                    // TODO: Dispatch to UI / ViewModel / Web Server / Discord
-                    // For now, we just log it.
+                    _channel.Writer.TryWrite(notification);
                 }
                 else if (request.Parameters is byte[] bytes) 
                 {

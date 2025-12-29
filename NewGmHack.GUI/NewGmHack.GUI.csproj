@@ -21,11 +21,23 @@
 		<PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
 		<PackageReference Include="ObservableCollections" Version="3.3.4" />
 		<PackageReference Include="ZLinq" Version="1.5.4" />
+		<PackageReference Include="Dapper" Version="2.1.28" />
+		<PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\InjectDotnet\InjectDotnet.csproj" />
 		<ProjectReference Include="..\NewGMHack.CommunicationModel\NewGMHack.CommunicationModel.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Content Include="wwwroot\**">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
 	</ItemGroup>
 
 </Project>

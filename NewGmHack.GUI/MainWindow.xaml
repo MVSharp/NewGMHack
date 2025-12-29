@@ -34,6 +34,7 @@
                         IsEnabled="{Binding IsConnected , Converter={StaticResource ReversedBoolConverter}}"
                         Command="{Binding InjectCommand}" Width="100" Margin="0,0,10,0" />
                 <Button Content="Deattach" IsEnabled="{Binding IsConnected}" Command="{Binding DeattachCommand}"></Button>
+                <Button Content="Open Report" Command="{Binding OpenWebReportCommand}" Width="100" Margin="10,0,0,0" />
                 <!-- <CheckBox Content="Mission Mode" IsChecked="{Binding IsMissionBomb}" Margin="0,0,10,0"/> -->
                 <!-- <CheckBox Content="Player Mode" IsChecked="{Binding IsPlayerBomb}" Margin="0,0,10,0"/> -->
                 <!-- <CheckBox Content="Random Location" IsChecked="{Binding IsRandomLocation}" Margin="0,0,10,0"/> -->
