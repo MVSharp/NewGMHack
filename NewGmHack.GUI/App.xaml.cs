@@ -4,11 +4,14 @@ using MahApps.Metro.Controls.Dialogs;
 // using MessagePipe;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using NewGmHack.GUI.Abstracts;
 using NewGmHack.GUI.Services;
 using NewGmHack.GUI.ViewModels;
 using NewGmHack.GUI.Views;
 using SharedMemory;
+using ZLogger;
+using ZLogger.Providers;
 
 namespace NewGmHack.GUI
 {
@@ -18,6 +21,19 @@ namespace NewGmHack.GUI
     public partial class App
     {
         private static readonly IHost _host = Host.CreateDefaultBuilder()
+                                                  .ConfigureLogging((context, logging) =>
+                                                  {
+                                                      logging.ClearProviders();
+                                                      logging.SetMinimumLevel(LogLevel.Debug);
+                                                      logging.AddZLoggerConsole();
+                                                      logging.AddZLoggerRollingFile(options =>
+                                                      {
+                                                          options.FilePathSelector = (timestamp, sequenceNumber) =>
+                                                              $"logs/{timestamp.ToLocalTime():yyyy-MM-dd}_{sequenceNumber:000}.log";
+                                                          options.RollingInterval = RollingInterval.Day;
+                                                          options.RollingSizeKB = 10240; // 10MB per file
+                                                      });
+                                                  })
                                                   .ConfigureServices(services =>
                                                    {
                                                        services.AddSingleton<NewMainWindow>();

@@ -5,12 +5,14 @@ using CommunityToolkit.Mvvm.Input;
 using InjectDotnet;
 using MahApps.Metro.Controls.Dialogs;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using NewGMHack.CommunicationModel.IPC.Requests;
 using NewGmHack.GUI.Abstracts;
 using NewGmHack.GUI.Services;
 using NewGmHack.GUI.Views;
 using ObservableCollections;
 using ZLinq;
+using ZLogger;
 using System.Text;
 using System.Reflection;
 
@@ -30,12 +32,14 @@ namespace NewGmHack.GUI.ViewModels
         private readonly IFeatureHandler _featureHandler;
         private readonly PersonInfoUserControlsViewModel _personInfoVm;
         private readonly IWebServerStatus _webServerStatus;
+        private readonly ILogger<MainViewModel> _logger;
 
         public MainViewModel( RemoteHandler master,
                               IFeatureHandler featureHandler,
                               PersonInfoUserControlsViewModel personInfoVm,
                               IWebServerStatus webServerStatus,
-                              IDialogCoordinator              dialogCoordinator)
+                              IDialogCoordinator              dialogCoordinator,
+                              ILogger<MainViewModel> logger)
         {
             tabslist = [];
             Tabs = tabslist.ToNotifyCollectionChanged(SynchronizationContextCollectionEventDispatcher.Current);
@@ -47,6 +51,8 @@ namespace NewGmHack.GUI.ViewModels
             _featureHandler = featureHandler;
             _personInfoVm = personInfoVm;
             _webServerStatus = webServerStatus;
+            _logger = logger;
+            _logger.ZLogInformation($"MainViewModel initialized");
         }
 
         [RelayCommand]
@@ -104,12 +110,20 @@ namespace NewGmHack.GUI.ViewModels
 
         private async Task InjectInternal(bool showDialogs)
         {
-            if (_isInjecting || IsConnected) return;
+            if (_isInjecting || IsConnected)
+            {
+                _logger.ZLogDebug($"InjectInternal skipped: _isInjecting={_isInjecting}, IsConnected={IsConnected}");
+                return;
+            }
 
             try
             {
                 _isInjecting = true;
+                _logger.ZLogInformation($"Starting injection process (showDialogs={showDialogs})");
+                
                 string processName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ=="));
+                _logger.ZLogDebug($"Searching for process: {processName}");
+                
                 var target = Process.GetProcessesByName(processName).FirstOrDefault();
                 
                 // Allow some retries but maybe not infinite blocking if we want to be safe? 
@@ -117,10 +131,12 @@ namespace NewGmHack.GUI.ViewModels
                 while (target == null)
                 {
                     target = Process.GetProcessesByName(processName).FirstOrDefault();
-                    Debug.WriteLine("Waiting inject...");
+                    _logger.ZLogDebug($"Process not found, waiting 2 seconds...");
                     await Task.Delay(2000);
                     // If we want to cancel?
                 }
+
+                _logger.ZLogInformation($"Target process found: PID={target.Id}, Name={target.ProcessName}");
 
                 var t = await Task.Run(() =>
                 {
@@ -136,6 +152,9 @@ namespace NewGmHack.GUI.ViewModels
                     var stubVersion = GetAssemblyVersion(stubDllPath);
                     var assemblyQualifiedName = $"NewGMHack.Stub.Entry, NewGMHack.Stub, Version={stubVersion}, Culture=neutral, PublicKeyToken=null";
                     
+                    _logger.ZLogInformation($"Injecting with stubDllPath={stubDllPath}, stubVersion={stubVersion}");
+                    _logger.ZLogDebug($"AssemblyQualifiedName: {assemblyQualifiedName}");
+                    
                     return target.Inject(
                                           "NewGMHack.Stub.runtimeconfig.json",
                                           stubDllPath,
@@ -144,13 +163,16 @@ namespace NewGmHack.GUI.ViewModels
                                           arg, true);
                 });
 
+                _logger.ZLogInformation($"Injection returned result code: 0x{t:X}");
+
                 if (t == 0x128)
                 {
-                    Console.WriteLine("injected sucessfully");
+                    _logger.ZLogInformation($"Injection successful, waiting for connection...");
                     while (!IsConnected)
                     {
                         await Task.Delay(1000);
                     }
+                    _logger.ZLogInformation($"Connection established");
                     await _featureHandler.Refresh();
                     
                     if(showDialogs)
@@ -158,7 +180,7 @@ namespace NewGmHack.GUI.ViewModels
                 }
                 else
                 {
-                    Console.WriteLine("Injected failed");
+                    _logger.ZLogError($"Injection failed with result code: 0x{t:X}");
                     if(showDialogs)
                         await _dialogCoordinator.ShowMessageAsync(this, "failed to inject", "failed to inject");
                 }
@@ -166,12 +188,14 @@ namespace NewGmHack.GUI.ViewModels
             }
             catch(Exception ex)
             {
+                _logger.ZLogError(ex, $"Exception during injection: {ex.Message}");
                 if(showDialogs)
                     await _dialogCoordinator.ShowMessageAsync(this, "failed to inject", $"{ex.Message}|{ex.StackTrace}");
             }
             finally
             {
                 _isInjecting = false;
+                _logger.ZLogDebug($"InjectInternal completed, _isInjecting reset to false");
             }
         }
 

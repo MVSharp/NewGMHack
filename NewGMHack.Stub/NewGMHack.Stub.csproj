@@ -22,7 +22,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Faster.Map" Version="7.0.1" />
+		<PackageReference Include="Faster.Map" Version="8.0.7" />
 		<PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
 		<PackageReference Include="Reloaded.Hooks" Version="4.3.3" />
 	<!--	<PackageReference Include="Vortice.D3DCompiler" Version="3.6.2" />
@@ -44,17 +44,17 @@
 		<PackageReference Include="SharpDX.DXGI" Version="4.2.0" />
 		<PackageReference Include="SharpDX.Mathematics" Version="4.2.0" />
 		<PackageReference Include="SharpDX.RawInput" Version="4.2.0" /> 
-		<PackageReference Include="ZLinq" Version="1.5.2" />
-		<PackageReference Include="ZLinq.DropInGenerator" Version="1.5.2">
+		<PackageReference Include="ZLinq" Version="1.5.4" />
+		<PackageReference Include="ZLinq.DropInGenerator" Version="1.5.4">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
 		<PackageReference Include="ByteStream" Version="1.1.2" />
-		<PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
-		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.1" />
+		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.1" />
 		<PackageReference Include="ZLogger" Version="2.5.10" />
-		<PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
-		<PackageReference Include="Dapper" Version="2.1.28" />
+		<PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.1" />
+		<PackageReference Include="Dapper" Version="2.1.66" />
 
 	  <PackageReference Include="Squalr.Engine" Version="2.3.0.1" />
 	  <PackageReference Include="Squalr.Engine.Architecture" Version="2.3.0.1" />
