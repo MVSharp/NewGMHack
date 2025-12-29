@@ -228,6 +228,25 @@ namespace NewGmHack.GUI.Services
                                 {
                                     return Results.Ok(new { isConnected = _mainViewModel.IsConnected });
                                 });
+
+                                // API: App Version
+                                endpoints.MapGet("/api/version", () => 
+                                {
+                                    try
+                                    {
+                                        var stubPath = "NewGMHack.Stub.dll";
+                                        if (System.IO.File.Exists(stubPath))
+                                        {
+                                            var version = System.Reflection.AssemblyName.GetAssemblyName(stubPath).Version;
+                                            return Results.Ok(new { version = version?.ToString() ?? "1.0.0.0" });
+                                        }
+                                        return Results.Ok(new { version = "1.0.0.0" });
+                                    }
+                                    catch
+                                    {
+                                        return Results.Ok(new { version = "1.0.0.0" });
+                                    }
+                                });
                             });
                         });
                     })

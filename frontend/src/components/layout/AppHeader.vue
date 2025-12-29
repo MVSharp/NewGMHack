@@ -8,7 +8,8 @@ const {
     isInjecting,
     dateRange,
     inject,
-    deattach
+    deattach,
+    appVersion
 } = useSignalR()
 
 const { t, setLanguage, languages, currentLang } = useI18n()
@@ -43,7 +44,7 @@ async function handleDeattach() {
         <div class="flex items-center gap-4">
             <img src="/condom.png" class="h-12 transition-transform duration-300 hover:scale-110" alt="Logo" />
             <div class="logo-text text-2xl font-bold text-neon-cyan font-rajdhani tracking-widest uppercase">
-                {{ t('title') }}
+                {{ t('title') }} <span class="version-text text-sm font-normal opacity-70">v{{ appVersion }}</span>
             </div>
         </div>
         

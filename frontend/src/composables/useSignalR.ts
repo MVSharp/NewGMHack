@@ -28,6 +28,7 @@ const pilotInfo = ref<PilotInfo | null>(null)
 const roommates = ref<Roommate[]>([])
 const combatLog = ref<HistoryItem[]>([])
 const stats = ref<PlayerStats | null>(null)
+const appVersion = ref('1.0.0.0')
 
 // Latest match display
 const latestMatch = ref<{
@@ -275,6 +276,15 @@ export function useSignalR() {
         // PRODUCTION - Real SignalR + Polling
         await startSignalR()
 
+        // Fetch app version
+        try {
+            const res = await fetch('/api/version')
+            const data = await res.json()
+            appVersion.value = data.version ?? '1.0.0.0'
+        } catch {
+            appVersion.value = '1.0.0.0'
+        }
+
         // Start status polling (every 1s like old frontend)
         if (!statusInterval) {
             statusInterval = window.setInterval(async () => {
@@ -312,6 +322,7 @@ export function useSignalR() {
         stats,
         latestMatch,
         dateRange,
+        appVersion,
 
         // Actions
         start,

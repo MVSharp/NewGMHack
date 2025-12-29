@@ -12,7 +12,7 @@ public class VersionCheckService
 {
     // TODO: Update this URL after pushing to GitHub
     // Format: https://raw.githubusercontent.com/{owner}/{repo}/{branch}/version.txt
-    private const string VersionUrl = "https://raw.githubusercontent.com/YOUR_USERNAME/NewGMHack/main/version.txt";
+    private const string VersionUrl = "https://raw.githubusercontent.com/MVSharp/NewGMHack/refs/heads/master/version.txt";
     
     private static readonly HttpClient _httpClient = new()
     {
