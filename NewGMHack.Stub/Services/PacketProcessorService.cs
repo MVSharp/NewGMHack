@@ -14,6 +14,7 @@ using NewGMHack.Stub.PacketStructs.Recv;
 using SharpDX.Direct3D9;
 using ZLinq;
 using ZLogger;
+using NewGMHack.Stub.Models;
 
 namespace NewGMHack.Stub.Services;
 
@@ -35,7 +36,8 @@ public class PacketProcessorService : BackgroundService
     /// <inheritdoc />
     public PacketProcessorService(Channel<PacketContext> packetChannel, ILogger<PacketProcessorService> logger,
                                   IBuffSplitter buffSplitter, GmMemory gm, SelfInformation selfInformation,
-                                  Channel<(nint, List<Reborn>)> bombChannel, IEnumerable<IHookManager> managers)
+                                  Channel<(nint, List<Reborn>)> bombChannel, IEnumerable<IHookManager> managers,
+                                  Channel<RewardEvent> rewardChannel)
     {
         _packetChannel      = packetChannel;
         _logger             = logger;
@@ -44,7 +46,10 @@ public class PacketProcessorService : BackgroundService
         _selfInformation    = selfInformation;
         _bombChannel        = bombChannel;
         _winsockHookManager = managers.OfType<WinsockHookManager>().First();
+        _rewardChannel      = rewardChannel;
     }
+
+    private readonly Channel<RewardEvent> _rewardChannel;
 
     /// <inheritdoc />
     private readonly Lock _lock = new Lock();
@@ -426,13 +431,34 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
  {
      var report = bytes.ReadStruct<RewardReport>();
      _logger.ZLogInformation($"Report Player:{report.PlayerId} K:{report.Kills} D:{report.Deaths} S:{report.Supports} Point:{report.Points} Exp:{report.ExpGain} GB:{report.GBGain} MachineExp:{report.MachineAddedExp} Practice:{report.PracticeExpAdded}");
-     var time   = DateTime.UtcNow;
+     
+     _rewardChannel.Writer.TryWrite(new RewardEvent 
+     { 
+         Timestamp = DateTime.UtcNow, 
+         Report = report 
+     });
  }
 
  private unsafe void ReadBonus(ReadOnlySpan<byte> bytes)
  {
      var rewardsBonus = bytes.ReadStruct<RewardBonus>();
+     //LLM,create log
      _logger.ZLogInformation($"Bonus Player:{rewardsBonus.PlayerId} Values: {rewardsBonus.Bonuses[0]}|{rewardsBonus.Bonuses[1]}|{rewardsBonus.Bonuses[2]}|{rewardsBonus.Bonuses[3]}|{rewardsBonus.Bonuses[4]}|{rewardsBonus.Bonuses[5]}|{rewardsBonus.Bonuses[6]}|{rewardsBonus.Bonuses[7]}");
+     
+     var safeBonus = new SafeRewardBonus
+     {
+         PlayerId = rewardsBonus.PlayerId,
+         Bonuses = [ 
+             rewardsBonus.Bonuses[0], rewardsBonus.Bonuses[1], rewardsBonus.Bonuses[2], rewardsBonus.Bonuses[3], 
+             rewardsBonus.Bonuses[4], rewardsBonus.Bonuses[5], rewardsBonus.Bonuses[6], rewardsBonus.Bonuses[7] 
+         ]
+     };
+
+     _rewardChannel.Writer.TryWrite(new RewardEvent 
+     { 
+         Timestamp = DateTime.UtcNow, 
+         Bonus = safeBonus 
+     });
  }
     private void ReadHitResponse2472(ReadOnlyMemory<byte> bytes, ConcurrentQueue<Reborn> reborns )
     {

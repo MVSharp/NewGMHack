@@ -16,6 +16,7 @@ namespace NewGMHack.CommunicationModel.IPC
         GetFeaturesList,
         DeattachRequest,
         GetRoomInfo,
+        RewardNotification,
     }
 
     [MessagePackObject]

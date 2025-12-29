@@ -13,6 +13,7 @@ namespace NewGmHack.GUI.Services
         /// <inheritdoc />
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            //return;
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
@@ -23,13 +24,14 @@ namespace NewGmHack.GUI.Services
                     personInfoHandler.SetInfo(info);
                     var roommates = await handler.GetRoommates();
                     roomManager.UpdateRoomList(roommates);
+
+                    await Task.Delay(1000, stoppingToken).ConfigureAwait(false); // Success - wait 1s
                 }
                 catch
                 {
-                    // ignored
+                    // If failed, wait longer to avoid spamming exceptions on disconnect
+                    await Task.Delay(2000, stoppingToken).ConfigureAwait(false);
                 }
-                if (stoppingToken.IsCancellationRequested) break;
-                await Task.Delay(500, stoppingToken).ConfigureAwait(false);
             }
         }
     }

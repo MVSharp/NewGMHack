@@ -13,6 +13,7 @@ using NewGMHack.Stub.Hooks;
 using NewGMHack.Stub.MemoryScanner;
 using NewGMHack.Stub.PacketStructs.Recv;
 using NewGMHack.Stub.Services;
+using NewGMHack.Stub.Models;
 using Reloaded.Hooks;
 using Reloaded.Hooks.Definitions;
 using SharedMemory;
@@ -137,6 +138,14 @@ services.AddSingleton<IReloadedHooks>(provider =>
 });
                                        services.AddSingleton<IHookManager, DirectInputHookManager>();
                                        //services.AddHostedService<PacketProcessorService>();
+                                       services.AddSingleton(Channel.CreateBounded<RewardEvent>(new BoundedChannelOptions(100)
+                                       {
+                                           FullMode = BoundedChannelFullMode.DropWrite,
+                                           SingleReader = true,
+                                           SingleWriter = false
+                                       }));
+                                       services.AddSingleton<IpcNotificationService>();
+                                       services.AddHostedService<RewardPersisterService>();
                                    })
                                   .Build();
             var t = new Thread( async void () =>

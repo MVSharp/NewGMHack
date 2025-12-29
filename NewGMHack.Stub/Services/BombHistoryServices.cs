@@ -53,7 +53,7 @@ namespace NewGMHack.Stub.Services
                             var isRemoved =_selfInformation.BombHistory.TryRemove(key, out _);
                             if (isRemoved)
                             {
-                                _logger.ZLogInformation($"Removed {key} from bomb history due to exeeed limit");
+                                //_logger.ZLogInformation($"Removed {key} from bomb history due to exeeed limit");
                             }
                             else
                             {

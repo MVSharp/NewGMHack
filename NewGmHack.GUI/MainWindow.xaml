@@ -15,6 +15,10 @@
                  Background="#1E1E2F"
                  Foreground="White"
                  FontFamily="Segoe UI"
+                 GlowBrush="{DynamicResource MahApps.Brushes.Accent}"
+                 ResizeMode="CanResizeWithGrip"
+                 WindowStartupLocation="CenterScreen"
+                 IsWindowDraggable="True"
                  Title="New Sd Hack" Height="450" Width="800">
     <b:Interaction.Triggers>
         <b:EventTrigger EventName="Loaded">

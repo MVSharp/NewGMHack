@@ -23,7 +23,16 @@ namespace NewGmHack.GUI
                                                        services.AddSingleton<MainWindow>();
                                                        services.AddSingleton<IDialogCoordinator>(sp=> DialogCoordinator.Instance);
                                                        services.AddSingleton<MainViewModel>();
-                                                       services.AddSingleton(new RpcBuffer("Sdhook"));
+                                                       services.AddSingleton<MainViewModel>();
+                                                       
+                                                       services.AddSingleton<NotificationHandler>();
+                                                       services.AddSingleton(sp => 
+                                                       {
+                                                           var handler = sp.GetRequiredService<NotificationHandler>();
+                                                           // Combine: "Sdhook" now handles notifications too
+                                                           return new RpcBuffer("Sdhook", (msgId, payload) => handler.HandleAsync(msgId, payload.AsMemory()));
+                                                       });
+                                                       
                                                        services.AddSingleton<RemoteHandler>();
                                                        services.AddSingleton<PersonInfoView>();
                                                        services.AddSingleton<PersonInfoUserControlsViewModel>();

@@ -27,8 +27,15 @@ namespace NewGmHack.GUI.ViewModels
         /// <inheritdoc />
         public void UpdateRoomList(IEnumerable<Roommate> roommates)
         {
+            var newList = roommates as IList<Roommate> ?? roommates.ToList();
+            
+            // Optimization: If both are empty, do nothing (avoids UI refresh churn)
+            if (newList.Count == 0 && this.roommatesList.Count == 0) return;
+
+            // TODO: Implement smarter diffing to avoid Clear/Add if identical
+            
             this.roommatesList.Clear();
-            this.roommatesList.AddRange(roommates);
+            this.roommatesList.AddRange(newList);
         }
     }
 }
