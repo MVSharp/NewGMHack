@@ -53,7 +53,8 @@ namespace NewGMHack.Stub.Services
             {
                 try
                 {
-                    if (IsRightMouseDown() &&   _aimTask.IsCompleted)
+                    
+                    if (_self.ClientConfig.Features.IsFeatureEnable(FeatureName.EnableAutoAim) && IsRightMouseDown() &&   _aimTask.IsCompleted)
                     {
 
                         //if (_isAiming) continue;

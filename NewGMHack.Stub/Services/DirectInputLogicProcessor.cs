@@ -66,7 +66,7 @@ private int _lastManualWeapon = DIK_1;
             _logger.ZLogInformation($"null pointer on data");
             return;
         }
-        if (!IsAutoReadyEnabled && !IsAimSupportEnabled)
+        if (!IsAutoReadyEnabled)
         {
             _scheduledEvents.Clear();
             _logger.ZLogInformation($"our things: All features disabled, cleared scheduled events");
@@ -107,7 +107,7 @@ for (int i = DIK_1; i <= DIK_3; i++)
     {
         DIMOUSESTATE state = Marshal.PtrToStructure<DIMOUSESTATE>(dataPtr);
 
-        if (IsAimSupportEnabled)
+        if (IsAutoReadyEnabled)
         {
             //_logger.ZLogInformation($"handle aim");
             HandleAimSupport(ref state);
@@ -120,8 +120,8 @@ for (int i = DIK_1; i <= DIK_3; i++)
     private bool IsAutoReadyEnabled =>
         _self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoReady);
 
-    private bool IsAimSupportEnabled =>
-        _self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAimSupport);
+    //private bool IsAimSupportEnabled =>
+    //    _self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoAIm);
 
     private void HandleAutoReady()
     {

@@ -39,8 +39,8 @@ public enum FeatureName
     [FeatureMetadata("Illusion", "別天神", "別天神", "Invincibility (Illusion)")]
     IsIllusion,
 
-    [FeatureMetadata("Aim Assist", "自瞄辅助", "自瞄輔助", "Help aiming at targets")]
-    IsAimSupport,
+    //[FeatureMetadata("Aim Assist", "自瞄辅助", "自瞄輔助", "Help aiming at targets")]
+    //IsAimSupport,
 
     [FeatureMetadata("Auto Charge", "自動充電", "自動充電", "auto charge battery for machine")]
     IsAutoCharge,
