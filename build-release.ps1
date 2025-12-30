@@ -38,7 +38,6 @@ if (-not (Test-Path "$guiWwwRoot/index.html")) { throw "Copy failed: index.html 
 Write-Host "Cleaning .NET Projects..." -ForegroundColor Cyan
 dotnet clean "NewGmHack.GUI/NewGmHack.GUI.csproj" -p:Platform=x86 -v q
 dotnet clean "NewGMHack.Stub/NewGMHack.Stub.csproj" -p:Platform=x86 -v q
-
 # 4. Build .NET Projects (x86 Release)
 Write-Host "Building .NET Projects (x86)..." -ForegroundColor Cyan
 
@@ -52,13 +51,14 @@ if ($LASTEXITCODE -ne 0) { throw "Stub build failed" }
 
 # 4.5. Update version.txt with Stub DLL version
 Write-Host "Updating version.txt..." -ForegroundColor Cyan
-$stubDll = "bin\x86\Release\NewGMHack.Stub.dll"
+$stubDll = Join-Path $PSScriptRoot "bin\x86\Release\NewGMHack.Stub.dll"
 if (Test-Path $stubDll) {
     $version = [Reflection.AssemblyName]::GetAssemblyName($stubDll).Version.ToString()
-    $version | Set-Content "version.txt" -NoNewline
+    $versionFile = Join-Path $PSScriptRoot "version.txt"
+    $version | Set-Content $versionFile -NoNewline
     Write-Host "  Version: $version" -ForegroundColor Green
 } else {
-    Write-Host "  Warning: Stub DLL not found, version.txt not updated" -ForegroundColor Yellow
+    Write-Host "  Warning: Stub DLL not found at $stubDll, version.txt not updated" -ForegroundColor Yellow
 }
 
 # 5. Cleanup Temp Files

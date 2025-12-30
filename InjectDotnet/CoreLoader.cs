@@ -41,11 +41,24 @@ internal class CoreLoader : IManagedLoader
                   ?? throw new
                       KeyNotFoundException($"Could not determine the Microsoft.NETCore.App runtime from runtimeConfig.json");
 
-          Version installedRuntimeVer = GetInstalledFrameworks() .Where(v => v.Major == runtimeVersion.Major && v.Minor == runtimeVersion.Minor) .OrderByDescending(v => v) .FirstOrDefault() ?? throw new DirectoryNotFoundException( $"Could not find installed Microsoft.NETCore.App runtime compatible with {runtimeVersion}");
-          hostPath
-                = GetHostfxrPath(installedRuntimeVer)
-                  ?? throw new
-                      FileNotFoundException($"Could not find the {PLATFORM} hostfxr.dll for runtime version {runtimeVersion:3}");
+            // Get diagnostic info for better error messages
+            var pf86 = Environment.GetEnvironmentVariable("ProgramW6432");
+            var searchPath = $@"{pf86}\dotnet\packs\Microsoft.NETCore.App.Host.win-{PLATFORM}";
+            var installedVersions = GetInstalledFrameworks().ToList();
+            
+            Version installedRuntimeVer = installedVersions
+                .Where(v => v.Major == runtimeVersion.Major && v.Minor == runtimeVersion.Minor)
+                .OrderByDescending(v => v)
+                .FirstOrDefault() 
+                ?? throw new DirectoryNotFoundException(
+                    $"Could not find installed Microsoft.NETCore.App runtime compatible with {runtimeVersion}. " +
+                    $"Platform: {PLATFORM}, SearchPath: {searchPath}, " +
+                    $"Found versions: [{string.Join(", ", installedVersions)}]");
+            
+            hostPath = GetHostfxrPath(installedRuntimeVer)
+                ?? throw new FileNotFoundException(
+                    $"Could not find the {PLATFORM} hostfxr.dll for runtime version {installedRuntimeVer}. " +
+                    $"SearchPath: {searchPath}");
         }
         else if (entryPoint)
             throw new ArgumentException("Cannot inject into a .NET target at startup.", nameof(entryPoint));
@@ -110,10 +123,14 @@ internal class CoreLoader : IManagedLoader
     /// </summary>
     public static IEnumerable<Version> GetInstalledFrameworks()
     {
-        var pf86     = Environment.GetEnvironmentVariable("ProgramW6432");
-        var versions = Directory.GetDirectories($@"{pf86}\dotnet\packs\Microsoft.NETCore.App.Host.win-{PLATFORM}");
-
-        foreach (var v in versions)
+        var pf86 = Environment.GetEnvironmentVariable("ProgramW6432");
+        var hostPackPath = $@"{pf86}\dotnet\packs\Microsoft.NETCore.App.Host.win-{PLATFORM}";
+        
+        // Return empty if path doesn't exist (caller will provide detailed error)
+        if (!Directory.Exists(hostPackPath))
+            yield break;
+            
+        foreach (var v in Directory.GetDirectories(hostPackPath))
         {
             var dir = Path.GetFileName(v);
             if (Version.TryParse(dir, out var version))

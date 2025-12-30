@@ -65,4 +65,7 @@ public enum FeatureName
 
     [FeatureMetadata("Free Move", "自由移动", "自由移動", "Move freely")]
     FreeMove,
+
+    [FeatureMetadata("Static Process Mode", "後台模式", "後台模式", "Used to reduce resources when you left the game behind")]
+    BackGroundMode,
 }

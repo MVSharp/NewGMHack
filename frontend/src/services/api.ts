@@ -20,32 +20,47 @@ export interface Feature {
 export interface PlayerStats {
     stats: {
         Matches: number
+        Wins: number
+        Losses: number
+        Draws: number
+        WinRate: number
+        TotalPoints: number
         TotalGBGain: number
         TotalBonusGB: number
+        TotalMachineAddedExp: number
         TotalMachineExp: number
         MaxPoints: number
         TotalKills: number
         TotalDeaths: number
         TotalSupports: number
+        AvgDamageScore: number
+        AvgTeamScore: number
+        AvgSkillScore: number
         FirstSortieDate: string | null
         LastSortieDate: string | null
     }
     hourly: {
+        MatchesLastHour: number
+        WinsLastHour: number
+        LossesLastHour: number
         GBGainLastHour: number
         BonusLastHour: number
         MachineExpLastHour: number
-        MatchesLastHour: number
     }
     today: {
+        MatchesToday: number
+        WinsToday: number
+        LossesToday: number
         GBGainToday: number
         BonusToday: number
         MachineExpToday: number
-        MatchesToday: number
     }
 }
 
 export interface HistoryItem {
     CreatedAtUtc: string
+    GameStatus: string | null  // "Win", "Lost", "Draw"
+    GradeRank: string | null   // "A+", "A", "B+", etc.
     Points: number
     Kills: number
     Deaths: number
@@ -53,6 +68,9 @@ export interface HistoryItem {
     GBGain: number
     TotalBonus: number
     MachineAddedExp: number
+    DamageScore: number | null
+    TeamExpectationScore: number | null
+    SkillFulScore: number | null
 }
 
 export interface PilotInfo {
@@ -82,34 +100,49 @@ export interface ConnectionStatus {
 const MOCK_STATS: PlayerStats = {
     stats: {
         Matches: 142,
+        Wins: 85,
+        Losses: 47,
+        Draws: 10,
+        WinRate: 59.86,
+        TotalPoints: 285000,
         TotalGBGain: 1250300,
         TotalBonusGB: 89000,
-        TotalMachineExp: 45200,
+        TotalMachineAddedExp: 45200,
+        TotalMachineExp: 38000,
         MaxPoints: 3200,
         TotalKills: 567,
         TotalDeaths: 234,
         TotalSupports: 189,
+        AvgDamageScore: 72,
+        AvgTeamScore: 68,
+        AvgSkillScore: 75,
         FirstSortieDate: '2024-01-15T10:00:00Z',
         LastSortieDate: new Date().toISOString()
     },
     hourly: {
+        MatchesLastHour: 3,
+        WinsLastHour: 2,
+        LossesLastHour: 1,
         GBGainLastHour: 12500,
         BonusLastHour: 2300,
-        MachineExpLastHour: 850,
-        MatchesLastHour: 3
+        MachineExpLastHour: 850
     },
     today: {
+        MatchesToday: 18,
+        WinsToday: 11,
+        LossesToday: 6,
         GBGainToday: 85000,
         BonusToday: 12000,
-        MachineExpToday: 5200,
-        MatchesToday: 18
+        MachineExpToday: 5200
     }
 }
 
 const MOCK_HISTORY: HistoryItem[] = [
-    { CreatedAtUtc: new Date().toISOString(), Points: 2850, Kills: 5, Deaths: 2, Supports: 3, GBGain: 8500, TotalBonus: 1200, MachineAddedExp: 450 },
-    { CreatedAtUtc: new Date(Date.now() - 3600000).toISOString(), Points: 2100, Kills: 3, Deaths: 1, Supports: 4, GBGain: 6200, TotalBonus: 800, MachineAddedExp: 320 },
-    { CreatedAtUtc: new Date(Date.now() - 7200000).toISOString(), Points: 1800, Kills: 2, Deaths: 3, Supports: 2, GBGain: 5100, TotalBonus: 600, MachineAddedExp: 280 },
+    { CreatedAtUtc: new Date().toISOString(), GameStatus: 'Win', GradeRank: 'A+', Points: 2850, Kills: 5, Deaths: 2, Supports: 3, GBGain: 8500, TotalBonus: 1200, MachineAddedExp: 450, DamageScore: 85, TeamExpectationScore: 78, SkillFulScore: 92 },
+    { CreatedAtUtc: new Date(Date.now() - 3600000).toISOString(), GameStatus: 'Lost', GradeRank: 'B', Points: 2100, Kills: 3, Deaths: 1, Supports: 4, GBGain: 6200, TotalBonus: 800, MachineAddedExp: 320, DamageScore: 65, TeamExpectationScore: 70, SkillFulScore: 68 },
+    { CreatedAtUtc: new Date(Date.now() - 7200000).toISOString(), GameStatus: 'Win', GradeRank: 'A', Points: 2400, Kills: 4, Deaths: 2, Supports: 2, GBGain: 7100, TotalBonus: 900, MachineAddedExp: 380, DamageScore: 78, TeamExpectationScore: 72, SkillFulScore: 80 },
+    { CreatedAtUtc: new Date(Date.now() - 10800000).toISOString(), GameStatus: 'Draw', GradeRank: 'C+', Points: 1800, Kills: 2, Deaths: 3, Supports: 2, GBGain: 5100, TotalBonus: 600, MachineAddedExp: 280, DamageScore: 55, TeamExpectationScore: 60, SkillFulScore: 58 },
+    { CreatedAtUtc: new Date(Date.now() - 14400000).toISOString(), GameStatus: 'Win', GradeRank: 'B+', Points: 2200, Kills: 3, Deaths: 2, Supports: 3, GBGain: 6800, TotalBonus: 750, MachineAddedExp: 340, DamageScore: 70, TeamExpectationScore: 68, SkillFulScore: 72 },
 ]
 
 const MOCK_FEATURES: Feature[] = [

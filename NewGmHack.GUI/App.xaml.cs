@@ -118,7 +118,7 @@ namespace NewGmHack.GUI
                     Shutdown(1);
                     return;
                 }
-                
+
                 await _host.StartAsync();
                 var main = _host.Services.GetRequiredService<NewMainWindow>();
                 main.Show();

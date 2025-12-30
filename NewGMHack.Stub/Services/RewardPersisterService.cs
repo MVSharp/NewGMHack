@@ -5,7 +5,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NewGMHack.CommunicationModel.PacketStructs.Recv;
-using NewGMHack.CommunicationModel.IPC.Responses; // Add this
+using NewGMHack.CommunicationModel.IPC.Responses;
 using NewGMHack.Stub.Models;
 using ZLogger;
 
@@ -100,9 +100,10 @@ public class RewardPersisterService : BackgroundService
         }
 
         // Check if this event belongs to the pending record (same player? close in time?)
-        // If we already have the type of data this event provides (e.g. pending has Report and evt is Report), flush and start new.
-        bool isDuplicateType = (evt.Report != null && _pendingRecord.Points != null) || // Heuristic: Points is in Report
-                               (evt.Bonus != null && _pendingRecord.Bonus1 != null);    // Heuristic: Bonus1 is in Bonus
+        // If we already have the type of data this event provides, flush and start new.
+        bool isDuplicateType = (evt.Report != null && _pendingRecord.Points != null) ||
+                               (evt.Bonus != null && _pendingRecord.Bonus1 != null) ||
+                               (evt.Grade != null && _pendingRecord.GradeRank != null);
 
         if (isDuplicateType || evt.Timestamp - _pendingSince > TimeSpan.FromSeconds(5))
         {
@@ -113,7 +114,7 @@ public class RewardPersisterService : BackgroundService
         {
             Merge(evt);
             
-            // If full (has both Report and Bonus), flush immediately
+            // If full (has Report, Bonus, and Grade), flush immediately
             if (IsFull(_pendingRecord))
             {
                 await FlushPending();
@@ -126,7 +127,7 @@ public class RewardPersisterService : BackgroundService
         _pendingRecord = new MatchRewardRecord
         {
             CreatedAtUtc = evt.Timestamp.ToString("O"), // ISO 8601
-            PlayerId = evt.Report?.PlayerId ?? evt.Bonus?.PlayerId ?? 0
+            PlayerId = evt.Report?.PlayerId ?? evt.Bonus?.PlayerId ?? evt.Grade?.PlayerId ?? 0
         };
         _pendingSince = evt.Timestamp;
         Merge(evt);
@@ -139,7 +140,12 @@ public class RewardPersisterService : BackgroundService
         if (evt.Report.HasValue)
         {
             var r = evt.Report.Value;
-            _pendingRecord.PlayerId = r.PlayerId; // Update PlayerId just in case
+            _pendingRecord.PlayerId = r.PlayerId;
+            
+            // Transform WinOrLostOrDraw to GameStatus string
+            var gameStatus = RewardTransformations.ToGameStatus(r.WinOrLostOrDraw);
+            _pendingRecord.GameStatus = RewardTransformations.GameStatusToString(gameStatus);
+            
             _pendingRecord.Kills = r.Kills;
             _pendingRecord.Deaths = r.Deaths;
             _pendingRecord.Supports = r.Supports;
@@ -147,6 +153,7 @@ public class RewardPersisterService : BackgroundService
             _pendingRecord.ExpGain = r.ExpGain;
             _pendingRecord.GBGain = r.GBGain;
             _pendingRecord.MachineAddedExp = r.MachineAddedExp;
+            _pendingRecord.MachineExp = r.MachineExp;
             _pendingRecord.PracticeExpAdded = r.PracticeExpAdded;
         }
 
@@ -163,12 +170,22 @@ public class RewardPersisterService : BackgroundService
             _pendingRecord.Bonus7 = b.Bonuses[6];
             _pendingRecord.Bonus8 = b.Bonuses[7];
         }
+
+        if (evt.Grade != null)
+        {
+            var g = evt.Grade;
+            _pendingRecord.PlayerId = g.PlayerId;
+            _pendingRecord.GradeRank = RewardTransformations.GradeRankToString(g.Grade);
+            _pendingRecord.DamageScore = g.DamageScore;
+            _pendingRecord.TeamExpectationScore = g.TeamExpectationScore;
+            _pendingRecord.SkillFulScore = g.SkillFulScore;
+        }
     }
 
     private bool IsFull(MatchRewardRecord record)
     {
-        // Has Report data (checked via Points) AND Bonus data (checked via Bonus1 - assuming allocated array)
-        return record.Points.HasValue && record.Bonus1.HasValue;
+        // Has Report data (checked via Points), Bonus data (checked via Bonus1), and Grade data
+        return record.Points.HasValue && record.Bonus1.HasValue && record.GradeRank != null;
     }
 
     private async Task FlushPending()
@@ -180,22 +197,24 @@ public class RewardPersisterService : BackgroundService
             using var conn = new SqliteConnection(_connectionString);
             string sql = @"
                 INSERT INTO MatchRewards (
-                    PlayerId, CreatedAtUtc, 
-                    Kills, Deaths, Supports, Points, ExpGain, GBGain, MachineAddedExp, PracticeExpAdded,
+                    PlayerId, CreatedAtUtc, GameStatus,
+                    Kills, Deaths, Supports, Points, ExpGain, GBGain, MachineAddedExp, MachineExp, PracticeExpAdded,
+                    GradeRank, DamageScore, TeamExpectationScore, SkillFulScore,
                     Bonus1, Bonus2, Bonus3, Bonus4, Bonus5, Bonus6, Bonus7, Bonus8
                 ) VALUES (
-                    @PlayerId, @CreatedAtUtc,
-                    @Kills, @Deaths, @Supports, @Points, @ExpGain, @GBGain, @MachineAddedExp, @PracticeExpAdded,
+                    @PlayerId, @CreatedAtUtc, @GameStatus,
+                    @Kills, @Deaths, @Supports, @Points, @ExpGain, @GBGain, @MachineAddedExp, @MachineExp, @PracticeExpAdded,
+                    @GradeRank, @DamageScore, @TeamExpectationScore, @SkillFulScore,
                     @Bonus1, @Bonus2, @Bonus3, @Bonus4, @Bonus5, @Bonus6, @Bonus7, @Bonus8
                 )";
             
             await conn.ExecuteAsync(sql, _pendingRecord);
-            _logger.LogInformation($"Saved reward record for Player {_pendingRecord.PlayerId}");
+            _logger.LogInformation($"Saved reward record for Player {_pendingRecord.PlayerId} [{_pendingRecord.GameStatus}] Grade:{_pendingRecord.GradeRank}");
 
             // Send Notification
             var notification = new RewardNotification
             {
-                RecordId = _pendingRecord.Id, // Note: Id isn't populated unless we fetch it back or use RETURNING. For now 0 is fine or we query.
+                RecordId = _pendingRecord.Id,
                 PlayerId = _pendingRecord.PlayerId,
                 Points = _pendingRecord.Points ?? 0,
                 Kills = _pendingRecord.Kills ?? 0,
@@ -221,7 +240,10 @@ public class RewardPersisterService : BackgroundService
         try
         {
             using var conn = new SqliteConnection(_connectionString);
-            string sql = @"
+            await conn.OpenAsync();
+            
+            // Step 1: Create table if not exists (for fresh installs)
+            string createTableSql = @"
                 CREATE TABLE IF NOT EXISTS MatchRewards (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
                     PlayerId INTEGER NOT NULL,
@@ -242,15 +264,46 @@ public class RewardPersisterService : BackgroundService
                     Bonus6 INTEGER,
                     Bonus7 INTEGER,
                     Bonus8 INTEGER
-                );
-                
-                CREATE INDEX IF NOT EXISTS IDX_PlayerId ON MatchRewards(PlayerId);
-                CREATE INDEX IF NOT EXISTS IDX_CreatedAt ON MatchRewards(CreatedAtUtc);";
-            await conn.ExecuteAsync(sql);
+                )";
+            await conn.ExecuteAsync(createTableSql);
+            
+            // Step 2: Add new columns if they don't exist (migration for existing tables)
+            var existingColumns = (await conn.QueryAsync<string>(
+                "SELECT name FROM pragma_table_info('MatchRewards')")).ToHashSet();
+            
+            _logger.ZLogInformation($"Existing columns: {string.Join(", ", existingColumns)}");
+            
+            var newColumns = new Dictionary<string, string>
+            {
+                ["GameStatus"] = "TEXT",
+                ["MachineExp"] = "INTEGER",
+                ["GradeRank"] = "TEXT",
+                ["DamageScore"] = "INTEGER",
+                ["TeamExpectationScore"] = "INTEGER",
+                ["SkillFulScore"] = "INTEGER"
+            };
+
+            foreach (var (columnName, columnType) in newColumns)
+            {
+                if (!existingColumns.Contains(columnName))
+                {
+                    _logger.ZLogInformation($"Adding missing column: {columnName}");
+                    await conn.ExecuteAsync($"ALTER TABLE MatchRewards ADD COLUMN {columnName} {columnType}");
+                    _logger.ZLogInformation($"Successfully added column {columnName}");
+                }
+            }
+            
+            // Step 3: Create indexes AFTER columns exist
+            await conn.ExecuteAsync("CREATE INDEX IF NOT EXISTS IDX_PlayerId ON MatchRewards(PlayerId)");
+            await conn.ExecuteAsync("CREATE INDEX IF NOT EXISTS IDX_CreatedAt ON MatchRewards(CreatedAtUtc)");
+            await conn.ExecuteAsync("CREATE INDEX IF NOT EXISTS IDX_GameStatus ON MatchRewards(GameStatus)");
+            
+            _logger.ZLogInformation($"Database initialized successfully");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to init DB");
+            throw;
         }
     }
 }

@@ -36,7 +36,10 @@ const latestMatch = ref<{
     kills: number
     deaths: number
     supports: number
+    gbGain: number
     timestamp: string
+    gameStatus: string | null
+    gradeRank: string | null
 } | null>(null)
 
 // === Helper ===
@@ -79,7 +82,10 @@ function startMockData() {
                     kills: latest.Kills,
                     deaths: latest.Deaths,
                     supports: latest.Supports,
-                    timestamp: new Date(latest.CreatedAtUtc).toLocaleString()
+                    gbGain: (latest.GBGain ?? 0) + (latest.TotalBonus ?? 0),
+                    timestamp: new Date(latest.CreatedAtUtc).toLocaleString(),
+                    gameStatus: latest.GameStatus ?? null,
+                    gradeRank: latest.GradeRank ?? null
                 }
             }
         }
@@ -119,9 +125,19 @@ async function pollData() {
     try {
         // Fetch pilot info
         pilotInfo.value = await api.getMe()
-        if (pilotInfo.value.personId && pilotInfo.value.personId !== currentPlayerId.value) {
-            currentPlayerId.value = pilotInfo.value.personId
-            await refreshStats()
+        const newPid = pilotInfo.value.personId
+
+        if (newPid && newPid > 0) {
+            // Always update currentPlayerId if we have a valid one
+            if (currentPlayerId.value !== newPid) {
+                console.log(`Player ID changed: ${currentPlayerId.value} -> ${newPid}`)
+                currentPlayerId.value = newPid
+            }
+
+            // Always refresh stats if we don't have any yet, or periodically
+            if (!stats.value || !combatLog.value || combatLog.value.length === 0) {
+                await refreshStats()
+            }
         }
 
         // Fetch roommates
@@ -143,7 +159,10 @@ async function refreshStats() {
                 kills: latest.Kills,
                 deaths: latest.Deaths,
                 supports: latest.Supports,
-                timestamp: new Date(latest.CreatedAtUtc).toLocaleString()
+                gbGain: (latest.GBGain ?? 0) + (latest.TotalBonus ?? 0),
+                timestamp: new Date(latest.CreatedAtUtc).toLocaleString(),
+                gameStatus: latest.GameStatus ?? null,
+                gradeRank: latest.GradeRank ?? null
             }
         }
     } catch (e) {
@@ -170,7 +189,10 @@ async function startSignalR() {
             kills: notification.kills ?? notification.Kills ?? 0,
             deaths: notification.deaths ?? notification.Deaths ?? 0,
             supports: notification.supports ?? notification.Supports ?? 0,
-            timestamp: new Date().toLocaleString()
+            gbGain: (notification.gbGain ?? notification.GBGain ?? 0) + (notification.totalBonus ?? notification.TotalBonus ?? 0),
+            timestamp: new Date().toLocaleString(),
+            gameStatus: notification.gameStatus ?? notification.GameStatus ?? null,
+            gradeRank: notification.gradeRank ?? notification.GradeRank ?? null
         }
 
         // If watching this player, refresh stats

@@ -211,6 +211,11 @@ public class PacketProcessorService : BackgroundService
                 _selfInformation.ClientConfig.IsInGame = false;
                 ReadBonus(methodPacket.MethodBody);
                 break;
+            case 1940:
+                _selfInformation.BombHistory.Clear();
+                _selfInformation.ClientConfig.IsInGame = false;
+                ReadRewardGrade(methodPacket.MethodBody);
+                break;
             //case 1858 or 1270:
             //    _selfInformation.BombHistory.Clear();
             //    _selfInformation.ClientConfig.IsInGame = false;
@@ -427,10 +432,33 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
      }
  }
 
+ private void ReadRewardGrade(ReadOnlySpan<byte> bytes)
+ {
+     var gradeReport = bytes.ReadStruct<RewardGrade>();
+     
+     var transformedGrade = RewardTransformations.ToGradeRank(gradeReport.Grade);
+     _logger.ZLogInformation($"Grade Player:{gradeReport.PlayerId} Grade:{RewardTransformations.GradeRankToString(transformedGrade)} Damage:{gradeReport.DamageScore} Team:{gradeReport.TeamExpectationScore} Skill:{gradeReport.SkillFulScore}");
+     
+     var safeGrade = new SafeRewardGrade
+     {
+         PlayerId = gradeReport.PlayerId,
+         Grade = transformedGrade,
+         DamageScore = gradeReport.DamageScore,
+         TeamExpectationScore = gradeReport.TeamExpectationScore,
+         SkillFulScore = gradeReport.SkillFulScore
+     };
+     
+     _rewardChannel.Writer.TryWrite(new RewardEvent 
+     { 
+         Timestamp = DateTime.UtcNow, 
+         Grade = safeGrade 
+     });
+ }
  private void ReadReport(ReadOnlySpan<byte> bytes)
  {
      var report = bytes.ReadStruct<RewardReport>();
-     _logger.ZLogInformation($"Report Player:{report.PlayerId} K:{report.Kills} D:{report.Deaths} S:{report.Supports} Point:{report.Points} Exp:{report.ExpGain} GB:{report.GBGain} MachineExp:{report.MachineAddedExp} Practice:{report.PracticeExpAdded}");
+     var gameStatus = RewardTransformations.ToGameStatus(report.WinOrLostOrDraw);
+     _logger.ZLogInformation($"Report Player[{RewardTransformations.GameStatusToString(gameStatus)}]:{report.PlayerId} K:{report.Kills} D:{report.Deaths} S:{report.Supports} Point:{report.Points} Exp:{report.ExpGain} GB:{report.GBGain} MachineAddedExp:{report.MachineAddedExp} MachineExp:{report.MachineExp} Practice:{report.PracticeExpAdded}");
      
      _rewardChannel.Writer.TryWrite(new RewardEvent 
      { 

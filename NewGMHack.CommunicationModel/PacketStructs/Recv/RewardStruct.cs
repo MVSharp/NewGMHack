@@ -5,7 +5,16 @@ using System.Text;
 
 namespace NewGMHack.CommunicationModel.PacketStructs.Recv
 {
-[StructLayout(LayoutKind.Explicit, Pack = 1)]
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct RewardGrade
+    {
+        public uint PlayerId;
+        public byte Grade; //01 = A+ ,02 =A , 03=B+,04=B ..... etc to  ,08 or else =F
+        public byte DamageScore;//傷害評分
+        public byte TeamExpectationScore;//團隊合作評分
+        public byte SkillFulScore;// 技術評分
+    }
+[StructLayout(    LayoutKind.Explicit, Pack = 1)]
 public struct RewardReport
 {
 	// 00..03
@@ -19,6 +28,7 @@ public struct RewardReport
 	// 16..19: 01 01 01 01 flags
 	//[FieldOffset(16)] public uint Flags;                    // 0x01010101
 
+	[FieldOffset(16)] public byte WinOrLostOrDraw;                //  02 is lost , 01 is won else draw?
 	// 20..21: 87 00
 	[FieldOffset(20)] public ushort ExpGain;                // 135
 

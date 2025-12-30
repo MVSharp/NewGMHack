@@ -25,6 +25,8 @@ public class VersionCheckService
     /// </summary>
     public static async Task<(bool Success, string? Message)> CheckVersionAsync()
     {
+
+        return (true, null);
 #if DEBUG
         // Skip version check in Debug mode
         return (true, null);
