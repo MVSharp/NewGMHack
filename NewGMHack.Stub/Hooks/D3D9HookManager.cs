@@ -39,10 +39,14 @@ namespace NewGMHack.Stub.Hooks
         private IHook<EndSceneDelegate>? _endSceneHook;
         private IHook<PresentDelegate>? _presentHook;
         private IHook<ResetDelegate>? _resetHook;
+        private IHook<DrawPrimitiveDelegate>? _drawPrimitiveHook;
+        private IHook<DrawIndexedPrimitiveDelegate>? _drawIndexedPrimitiveHook;
 
         private EndSceneDelegate? _originalEndScene;
         private PresentDelegate? _originalPresent;
         private ResetDelegate? _originalReset;
+        private DrawPrimitiveDelegate? _originalDrawPrimitive;
+        private DrawIndexedPrimitiveDelegate? _originalDrawIndexedPrimitive;
 
         private Device? _device;
         private bool _deviceInitialized;
@@ -56,6 +60,14 @@ namespace NewGMHack.Stub.Hooks
 
         [Function(CallingConventions.Stdcall)]
         private delegate int ResetDelegate(nint devicePtr, nint presentationParameters);
+
+        // DrawPrimitive(device, primitiveType, startVertex, primitiveCount)
+        [Function(CallingConventions.Stdcall)]
+        private delegate int DrawPrimitiveDelegate(nint devicePtr, int primitiveType, int startVertex, int primitiveCount);
+
+        // DrawIndexedPrimitive(device, primitiveType, baseVertexIndex, minVertexIndex, numVertices, startIndex, primitiveCount)
+        [Function(CallingConventions.Stdcall)]
+        private delegate int DrawIndexedPrimitiveDelegate(nint devicePtr, int primitiveType, int baseVertexIndex, uint minVertexIndex, uint numVertices, uint startIndex, uint primitiveCount);
 
         public void HookAll()
         {
@@ -71,7 +83,9 @@ namespace NewGMHack.Stub.Hooks
             HookMethod("EndScene", (int)Direct3DDevice9FunctionOrdinals.EndScene, new EndSceneDelegate(EndSceneHook), out _endSceneHook, out _originalEndScene);
             HookMethod("Present", (int)Direct3DDevice9FunctionOrdinals.Present, new PresentDelegate(PresentHook), out _presentHook, out _originalPresent);
             HookMethod("Reset", (int)Direct3DDevice9FunctionOrdinals.Reset, new ResetDelegate(ResetHook), out _resetHook, out _originalReset);
-            logger.LogInformation($"D3D9 hooks installed: EndScene, Present, Reset");
+            HookMethod("DrawPrimitive", (int)Direct3DDevice9FunctionOrdinals.DrawPrimitive, new DrawPrimitiveDelegate(DrawPrimitiveHook), out _drawPrimitiveHook, out _originalDrawPrimitive);
+            HookMethod("DrawIndexedPrimitive", (int)Direct3DDevice9FunctionOrdinals.DrawIndexedPrimitive, new DrawIndexedPrimitiveDelegate(DrawIndexedPrimitiveHook), out _drawIndexedPrimitiveHook, out _originalDrawIndexedPrimitive);
+            logger.LogInformation($"D3D9 hooks installed: EndScene, Present, Reset, DrawPrimitive, DrawIndexedPrimitive");
         }
 
         public void UnHookAll()
@@ -79,6 +93,8 @@ namespace NewGMHack.Stub.Hooks
             _endSceneHook?.Disable();
             _presentHook?.Disable();
             _resetHook?.Disable();
+            _drawPrimitiveHook?.Disable();
+            _drawIndexedPrimitiveHook?.Disable();
             logger.LogInformation($"D3D9 hooks disabled");
         }
 
@@ -184,6 +200,26 @@ namespace NewGMHack.Stub.Hooks
             }
 
             return result;
+        }
+
+        private int DrawPrimitiveHook(nint devicePtr, int primitiveType, int startVertex, int primitiveCount)
+        {
+            // Skip ALL rendering when BackGroundMode is enabled
+            if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.BackGroundMode) && (primitiveCount > 5 || startVertex > 4))
+            {
+                return 0; // D3D_OK - pretend success but don't render
+            }
+            return _originalDrawPrimitive?.Invoke(devicePtr, primitiveType, startVertex, primitiveCount) ?? 0;
+        }
+
+        private int DrawIndexedPrimitiveHook(nint devicePtr, int primitiveType, int baseVertexIndex, uint minVertexIndex, uint numVertices, uint startIndex, uint primitiveCount)
+        {
+            // Skip ALL rendering when BackGroundMode is enabled
+            if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.BackGroundMode) && (primitiveCount > 5 || startIndex > 4))
+            {
+                return 0; // D3D_OK - pretend success but don't render
+            }
+            return _originalDrawIndexedPrimitive?.Invoke(devicePtr, primitiveType, baseVertexIndex, minVertexIndex, numVertices, startIndex, primitiveCount) ?? 0;
         }
 
         private void GetD3D9Addresses()
