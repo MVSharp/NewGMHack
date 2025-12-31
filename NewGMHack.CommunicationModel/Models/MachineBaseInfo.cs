@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
-using System.Text;
+using MessagePack;
 
-namespace NewGMHack.Stub.MemoryScanner;
+namespace NewGMHack.CommunicationModel.Models;
 
 /// <summary>
 /// Raw struct read directly from memory. Maps to CE offsets.
@@ -52,7 +52,7 @@ public unsafe struct MachineBaseInfoStruct
     [FieldOffset(0x22C)] public short Attack;    // 2 bytes signed
     [FieldOffset(0x22E)] public short Defense;   // 2 bytes signed
     
-    [FieldOffset(0x23D)] public uint RadarRange;
+    [FieldOffset(0x23D)] public ushort RadarRange;
     [FieldOffset(0x23F)] public uint SkillID1;
     [FieldOffset(0x243)] public uint SkillID2;
     [FieldOffset(0x249)] public uint Weapon1Code;
@@ -68,72 +68,73 @@ public unsafe struct MachineBaseInfoStruct
 /// <summary>
 /// Transformed/friendly class for frontend display
 /// </summary>
+[MessagePackObject]
 public class MachineBaseInfo
 {
-    public uint MachineId { get; set; }
-    public string ChineseName { get; set; } = "";
-    public string EnglishName { get; set; } = "";
+    [Key(0)] public uint MachineId { get; set; }
+    [Key(1)] public string ChineseName { get; set; } = "";
+    [Key(2)] public string EnglishName { get; set; } = "";
     
-    public bool IsTransformable { get; set; }
-    public string Rank { get; set; } = "";  // C, B, A, S, ALL
-    public int Quality { get; set; }
-    public string CombatType { get; set; } = "";  // Near, Middle, Far
-    public int AttackSpeedLevel { get; set; }
-    public int Rarity { get; set; }
-    public int RespawnTimeSeconds { get; set; }
+    [Key(3)] public bool IsTransformable { get; set; }
+    [Key(4)] public string Rank { get; set; } = "";  // C, B, A, S, ALL
+    [Key(5)] public int Quality { get; set; }
+    [Key(6)] public string CombatType { get; set; } = "";  // Near, Middle, Far
+    [Key(7)] public int AttackSpeedLevel { get; set; }
+    [Key(8)] public int Rarity { get; set; }
+    [Key(9)] public int RespawnTimeSeconds { get; set; }
     
-    public uint TransformId { get; set; }
-    public bool HasTransform => TransformId != 0;
+    [Key(10)] public uint TransformId { get; set; }
+    [Key(11)] public bool HasTransform { get; set; }
     
-    public uint HP { get; set; }
-    public uint ShieldHP { get; set; }
-    public string ShieldType { get; set; } = "";  // ALL, Near, BZD, Ray
-    public int ShieldDeductionPercentage { get; set; }
+    [Key(12)] public uint HP { get; set; }
+    [Key(13)] public uint ShieldHP { get; set; }
+    [Key(14)] public string ShieldType { get; set; } = "";  // ALL, Near, BZD, Ray
+    [Key(15)] public int ShieldDeductionPercentage { get; set; }
     
     /// <summary>
     /// Shield direction: Front, ALL, Back, LeftRight, Left, Right, None
     /// </summary>
-    public string ShieldDirection { get; set; } = "";
+    [Key(16)] public string ShieldDirection { get; set; } = "";
     
-    public int BzdSpeed { get; set; }
-    public int MoveSpeed { get; set; }
-    public int ForwardSpeed { get; set; }
-    public int TrackSpeed { get; set; }
-    public int Agility { get; set; }
-    public int BoostRecoverySpeed { get; set; }
-    public int BoostConsumption { get; set; }
-    public int BoostCapacity { get; set; }
-    public float TrackAcceleration { get; set; }
+    [Key(17)] public int BzdSpeed { get; set; }
+    [Key(18)] public int MoveSpeed { get; set; }
+    [Key(19)] public int ForwardSpeed { get; set; }
+    [Key(20)] public int TrackSpeed { get; set; }
+    [Key(21)] public int Agility { get; set; }
+    [Key(22)] public int BoostRecoverySpeed { get; set; }
+    [Key(23)] public int BoostConsumption { get; set; }
+    [Key(24)] public int BoostCapacity { get; set; }
+    [Key(25)] public float TrackAcceleration { get; set; }
     
     /// <summary>Base attack value from 0x22C</summary>
-    public int Attack { get; set; }
+    [Key(26)] public int Attack { get; set; }
     
     /// <summary>Base defense value from 0x22E</summary>
-    public int Defense { get; set; }
+    [Key(27)] public int Defense { get; set; }
     
-    public uint RadarRange { get; set; }
-    public uint SkillID1 { get; set; }
-    public uint SkillID2 { get; set; }
-    public uint Weapon1Code { get; set; }
-    public uint Weapon2Code { get; set; }
-    public uint Weapon3Code { get; set; }
-    public uint SpecialAttackCode { get; set; }
+    [Key(28)] public uint RadarRange { get; set; }
+    [Key(29)] public uint SkillID1 { get; set; }
+    [Key(30)] public uint SkillID2 { get; set; }
+    [Key(31)] public uint Weapon1Code { get; set; }
+    [Key(32)] public uint Weapon2Code { get; set; }
+    [Key(33)] public uint Weapon3Code { get; set; }
+    [Key(34)] public uint SpecialAttackCode { get; set; }
     
-    public bool HasEndurance { get; set; }
-    public string MdrsFilePath { get; set; } = "";
+    [Key(35)] public bool HasEndurance { get; set; }
+    [Key(36)] public string MdrsFilePath { get; set; } = "";
     
     // Resolved skill and weapon info (populated after scanning)
-    public SkillBaseInfo? Skill1Info { get; set; }
-    public SkillBaseInfo? Skill2Info { get; set; }
-    public WeaponBaseInfo? Weapon1Info { get; set; }
-    public WeaponBaseInfo? Weapon2Info { get; set; }
-    public WeaponBaseInfo? Weapon3Info { get; set; }
-    public WeaponBaseInfo? SpecialAttack { get; set; }
+    [Key(37)] public SkillBaseInfo? Skill1Info { get; set; }
+    [Key(38)] public SkillBaseInfo? Skill2Info { get; set; }
+    [Key(39)] public WeaponBaseInfo? Weapon1Info { get; set; }
+    [Key(40)] public WeaponBaseInfo? Weapon2Info { get; set; }
+    [Key(41)] public WeaponBaseInfo? Weapon3Info { get; set; }
+    [Key(42)] public WeaponBaseInfo? SpecialAttack { get; set; }
     
     /// <summary>
     /// Transformed machine info (if HasTransform and TransformId != 0)
     /// </summary>
-    public MachineBaseInfo? TransformedMachine { get; set; }
+    [Key(43)] public MachineBaseInfo? TransformedMachine { get; set; }
     
     /// <summary>
     /// Transform raw struct to friendly class
@@ -169,6 +170,8 @@ public class MachineBaseInfo
             RespawnTimeSeconds = raw.RespawnTime,
             
             TransformId = raw.TransformId,
+            HasTransform = raw.TransformId != 0,
+            
             HP = raw.HP,
             ShieldHP = raw.ShieldHP,
             ShieldType = raw.ShieldType switch

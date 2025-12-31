@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Faster.Map.Concurrent;
 using NewGMHack.CommunicationModel.Models;
+using NewGMHack.CommunicationModel.Models;
 using NewGMHack.Stub.MemoryScanner;
 using NewGMHack.Stub.PacketStructs.Recv;
 using SharpDX;
@@ -27,7 +28,7 @@ namespace NewGMHack.Stub
     
     public class SelfInformation
     {
-        public Machine CurrentMachine { get; set; } = new();
+        //public Machine CurrentMachine { get; set; } = new();
         
         /// <summary>
         /// Processed machine model for frontend display

@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
+using MessagePack;
 
-namespace NewGMHack.Stub.MemoryScanner;
+namespace NewGMHack.CommunicationModel.Models;
 
 /// <summary>
 /// Raw struct for Skill data from memory scan.
@@ -48,69 +49,70 @@ public unsafe struct SkillBaseInfoStruct
 /// <summary>
 /// Transformed skill info for frontend display
 /// </summary>
+[MessagePackObject]
 public class SkillBaseInfo
 {
-    public uint SkillId { get; set; }
-    public string SkillName { get; set; } = "";
+    [Key(0)] public uint SkillId { get; set; }
+    [Key(1)] public string SkillName { get; set; } = "";
     
     /// <summary>
     /// HP activation condition: None, HpMeet, LastLife
     /// </summary>
-    public string HpActivateCondition { get; set; } = "";
+    [Key(2)] public string HpActivateCondition { get; set; } = "";
     
     /// <summary>
     /// Exact HP % to activate (0 = no requirement)
     /// </summary>
-    public int ExactHpActivatePercent { get; set; }
+    [Key(3)] public int ExactHpActivatePercent { get; set; }
     
-    public int Movement { get; set; }
-    public int ForwardSpeedPercent { get; set; }
-    public int UrgentEscape { get; set; }
-    public int AgilityPercent { get; set; }
+    [Key(4)] public int Movement { get; set; }
+    [Key(5)] public int ForwardSpeedPercent { get; set; }
+    [Key(6)] public int UrgentEscape { get; set; }
+    [Key(7)] public int AgilityPercent { get; set; }
     
     /// <summary>
     /// Boost recovery % bonus
     /// </summary>
-    public int BoostRecoveryPercent { get; set; }
+    [Key(8)] public int BoostRecoveryPercent { get; set; }
     
-    public int BoostCapacityIncrease { get; set; }
-    public int AttackIncrease { get; set; }
+    [Key(9)] public int BoostCapacityIncrease { get; set; }
+    [Key(10)] public int AttackIncrease { get; set; }
     
     /// <summary>
     /// Defense change (can be negative)
     /// </summary>
-    public int DefenseIncrease { get; set; }
+    [Key(11)] public int DefenseIncrease { get; set; }
     
-    public int RadarRangeIncrease { get; set; }
+    [Key(12)] public int RadarRangeIncrease { get; set; }
     
     /// <summary>
     /// SP accumulation speed increase (150 = 15%)
     /// </summary>
-    public float SpIncreaseSpeedPercent { get; set; }
+    [Key(13)] public float SpIncreaseSpeedPercent { get; set; }
     
     /// <summary>
     /// True = applies to self, False = applies to team
     /// </summary>
-    public bool AppliesToSelf { get; set; }
+    [Key(14)] public bool AppliesToSelf { get; set; }
     
-    public int WeaponReloadIncrease { get; set; }
+    [Key(15)] public int WeaponReloadIncrease { get; set; }
     
     /// <summary>
     /// Near-range damage reduction %
     /// </summary>
-    public float NearDamageReductionPercent { get; set; }
+    [Key(16)] public float NearDamageReductionPercent { get; set; }
     
     /// <summary>
     /// Mid-range damage reduction %
     /// </summary>
-    public float MidDamageReductionPercent { get; set; }
+    [Key(17)] public float MidDamageReductionPercent { get; set; }
     
     /// <summary>
     /// Melee damage increase
     /// </summary>
-    public int MeleeDamageIncrease { get; set; }
+    [Key(18)] public int MeleeDamageIncrease { get; set; }
     
-    public string Description { get; set; } = "";
+    [Key(19)] public string Description { get; set; } = "";
     
     /// <summary>
     /// Transform raw struct to friendly class

@@ -16,6 +16,7 @@ using NewGMHack.Stub.Hooks;
 using ZLinq;
 using ZLogger;
 using Microsoft.Extensions.DependencyInjection;
+using NewGMHack.Stub.MemoryScanner;
 
 namespace NewGMHack.Stub
 {
@@ -189,12 +190,7 @@ namespace NewGMHack.Stub
                     try
                     {
                         var machineModel = self.CurrentMachineModel;
-                        MachineBaseInfo? baseInfo = null;
-                        if (machineModel != null)
-                        {
-                            var gmMemory = sp.GetRequiredService<GmMemory>();
-                            baseInfo = await gmMemory.ScanMachineWithDetails(machineModel.MachineId, default);
-                        }
+                        var baseInfo = self.CurrentMachineBaseInfo;
 
                         response.Success = true;
                         response.Result = new MachineInfoResponse
@@ -207,7 +203,7 @@ namespace NewGMHack.Stub
                     {
                         response.Success = false;
                         response.ErrorMessage = ex.Message;
-                        logger.ZLogError(ex, "Error handling GetPlotInfo");
+                        logger.ZLogError(ex, $"Error handling GetPlotInfo");
                     }
                     await MessagePackSerializer.SerializeAsync(stream, response, _options);
                     break;

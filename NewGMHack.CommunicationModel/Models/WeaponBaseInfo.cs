@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
+using MessagePack;
 
-namespace NewGMHack.Stub.MemoryScanner;
+namespace NewGMHack.CommunicationModel.Models;
 
 /// <summary>
 /// Raw struct for Weapon data from memory scan.
@@ -40,34 +41,35 @@ public unsafe struct WeaponBaseInfoStruct
 /// <summary>
 /// Transformed weapon info for frontend display
 /// </summary>
+[MessagePackObject]
 public class WeaponBaseInfo
 {
-    public uint WeaponId { get; set; }
-    public string WeaponName { get; set; } = "";
+    [Key(0)] public uint WeaponId { get; set; }
+    [Key(1)] public string WeaponName { get; set; } = "";
     
     /// <summary>
     /// Weapon type: Near, Mid, Far
     /// </summary>
-    public string WeaponType { get; set; } = "";
+    [Key(2)] public string WeaponType { get; set; } = "";
     
-    public uint WeaponDamage { get; set; }
-    public int MissileSpeed { get; set; }
-    public uint WeaponRange { get; set; }
-    public int AimSpeed { get; set; }
-    public int AmmoCount { get; set; }
-    public int AmmoRecoverySpeed { get; set; }
-    public int KnockbackEffect { get; set; }
-    public int CoolTime { get; set; }
-    public int KnockdownPerHit { get; set; }
-    public int KnockdownThreshold { get; set; }
-    public bool HasPierce { get; set; }
-    public int PierceValue { get; set; }
-    public bool AllowUseWhenMove { get; set; }
+    [Key(3)] public uint WeaponDamage { get; set; }
+    [Key(4)] public int MissileSpeed { get; set; }
+    [Key(5)] public uint WeaponRange { get; set; }
+    [Key(6)] public int AimSpeed { get; set; }
+    [Key(7)] public int AmmoCount { get; set; }
+    [Key(8)] public int AmmoRecoverySpeed { get; set; }
+    [Key(9)] public int KnockbackEffect { get; set; }
+    [Key(10)] public int CoolTime { get; set; }
+    [Key(11)] public int KnockdownPerHit { get; set; }
+    [Key(12)] public int KnockdownThreshold { get; set; }
+    [Key(13)] public bool HasPierce { get; set; }
+    [Key(14)] public int PierceValue { get; set; }
+    [Key(15)] public bool AllowUseWhenMove { get; set; }
     
-    public float CollisionWidth { get; set; }
-    public float CollisionHeight { get; set; }
-    public float SplashRadius { get; set; }
-    public float SplashCoreRadius { get; set; }
+    [Key(16)] public float CollisionWidth { get; set; }
+    [Key(17)] public float CollisionHeight { get; set; }
+    [Key(18)] public float SplashRadius { get; set; }
+    [Key(19)] public float SplashCoreRadius { get; set; }
     
     /// <summary>
     /// Transform raw struct to friendly class

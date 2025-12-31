@@ -13,6 +13,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using ZLogger;
+using NewGMHack.CommunicationModel.Models;
 
 namespace NewGMHack.Stub.MemoryScanner
 {

@@ -11,6 +11,8 @@ using NewGMHack.Stub.Hooks;
 using NewGMHack.Stub.MemoryScanner;
 using NewGMHack.Stub.PacketStructs;
 using NewGMHack.Stub.PacketStructs.Recv;
+using NewGMHack.CommunicationModel.Models;
+using NewGMHack.CommunicationModel.PacketStructs;
 using SharpDX.Direct3D9;
 using ZLinq;
 using ZLogger;
@@ -29,6 +31,7 @@ public class PacketProcessorService : BackgroundService
     private readonly IBuffSplitter                   _buffSplitter;
     private readonly GmMemory                        gm;
     private readonly SelfInformation                 _selfInformation;
+    private readonly IpcNotificationService          _ipcService;
     private readonly Channel<(nint, List<Reborn>)>   _bombChannel;
     private readonly WinsockHookManager              _winsockHookManager;
 
@@ -37,7 +40,7 @@ public class PacketProcessorService : BackgroundService
     public PacketProcessorService(Channel<PacketContext> packetChannel, ILogger<PacketProcessorService> logger,
                                   IBuffSplitter buffSplitter, GmMemory gm, SelfInformation selfInformation,
                                   Channel<(nint, List<Reborn>)> bombChannel, IEnumerable<IHookManager> managers,
-                                  Channel<RewardEvent> rewardChannel)
+                                  Channel<RewardEvent> rewardChannel, IpcNotificationService ipcService)
     {
         _packetChannel      = packetChannel;
         _logger             = logger;
@@ -47,6 +50,7 @@ public class PacketProcessorService : BackgroundService
         _bombChannel        = bombChannel;
         _winsockHookManager = managers.OfType<WinsockHookManager>().First();
         _rewardChannel      = rewardChannel;
+        _ipcService         = ipcService;
     }
 
     private readonly Channel<RewardEvent> _rewardChannel;
@@ -182,14 +186,27 @@ public class PacketProcessorService : BackgroundService
                 _selfInformation.ClientConfig.IsInGame = false;
                 var changed = ReadChangedMachine(methodPacket.MethodBody);
                 _logger.ZLogInformation($"change condom detected:{changed.MachineId}");
-                
+
                 // Store both raw and processed machine data
-                _selfInformation.CurrentMachine = changed;
+                //_selfInformation.CurrentMachine = changed;
                 _selfInformation.CurrentMachineModel = MachineModel.FromRaw(changed);
                 
                 var slot = changed.Slot;
                 _selfInformation.PersonInfo.Slot = slot;
-                await ScanCondom(changed.MachineId,token:token);
+                var machineInfo = await ScanCondom(changed.MachineId, token: token);
+
+                if (machineInfo != null)
+                {
+                     // Notify Frontend via IPC -> SignalR
+                    _logger.ZLogInformation($"Sending MachineInfoUpdate for machine {changed.MachineId}");
+                    var response = new NewGMHack.CommunicationModel.IPC.Responses.MachineInfoResponse
+                    {
+                        MachineModel = _selfInformation.CurrentMachineModel,
+                        MachineBaseInfo = machineInfo
+                    };
+                    await _ipcService.SendMachineInfoUpdateAsync(response);
+                }
+
                 ChargeCondom(socket, slot);
                 break;
             case 1259: // get room list
@@ -675,7 +692,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         r.Slot = slot;
         _winsockHookManager.SendPacket(socket, r.ToByteArray().AsSpan());
     }
-    private async Task ScanCondom(UInt32 machineId, CancellationToken token)
+    private async Task<MachineBaseInfo?> ScanCondom(UInt32 machineId, CancellationToken token)
     {
         _logger.ZLogInformation($"Machine id begin scan: {machineId}");
         
@@ -683,7 +700,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         
         _logger.ZLogInformation($"Machine id scan completed: {machineId}");
         
-        if (machineInfo == null) return;
+        if (machineInfo == null) return null;
         
         lock (_lock)
         {
@@ -705,6 +722,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         }
 
         _logger.ZLogInformation($"Machine: {machineInfo.ChineseName} | W1:{machineInfo.Weapon1Code} | W2:{machineInfo.Weapon2Code} | W3:{machineInfo.Weapon3Code}");
+        return machineInfo;
     }
 
     private void AssignPersonId(ByteReader reader)

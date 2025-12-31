@@ -27,7 +27,7 @@ const props = defineProps<{
 const size = 100
 const cx = 130
 const cy = 130
-const maxValue = 100
+const maxValue = 256
 
 // 6 axes at 60° intervals, rotated 30° left (so Attack is top-left)
 const labels = ['Attack', 'Agility', 'HP', 'Defense', 'SP', 'Speed']
@@ -92,15 +92,17 @@ const totalStats = computed(() => {
 
 const basePolygon = computed(() => {
     const s = props.stats.base
-    return calcPoints([s.attack, s.agility, s.hp, s.defense, s.sp, s.speed])
+    const sp = s.sp || 0
+    return calcPoints([s.attack, s.agility, s.hp, s.defense, (sp * 2.0), s.speed])
 })
 
 const ocBasePolygon = computed(() => {
     const b = props.stats.base
     const o = props.stats.ocBase
+    const sp = (b.sp + o.sp) || 0
     return calcPoints([
         b.attack + o.attack, b.agility + o.agility, b.hp + o.hp,
-        b.defense + o.defense, b.sp + o.sp, b.speed + o.speed
+        b.defense + o.defense, sp * 2.0, b.speed + o.speed
     ])
 })
 
@@ -108,10 +110,11 @@ const ocBonusPolygon = computed(() => {
     const b = props.stats.base
     const o = props.stats.ocBase
     const e = props.stats.ocBonus
+    const sp = (b.sp + o.sp + e.sp) || 0
     return calcPoints([
         b.attack + o.attack + e.attack, b.agility + o.agility + e.agility,
         b.hp + o.hp + e.hp, b.defense + o.defense + e.defense,
-        b.sp + o.sp + e.sp, b.speed + o.speed + e.speed
+        sp * 2.0, b.speed + o.speed + e.speed
     ])
 })
 </script>

@@ -78,8 +78,8 @@ const formatStat = (val: number, suffix = '') => {
             <div v-if="skill.urgentEscape" class="stat text-cyan-400">Escape {{ formatStat(skill.urgentEscape) }}</div>
             
             <!-- Boost -->
-            <div v-if="skill.boostRecoveryPercent" class="stat text-yellow-400">BstRec {{ formatStat(skill.boostRecoveryPercent, '%') }}</div>
-            <div v-if="skill.boostCapacityIncrease" class="stat text-yellow-300">BstCap {{ formatStat(skill.boostCapacityIncrease) }}</div>
+            <div v-if="skill.boostRecoveryPercent" class="stat text-yellow-400">Boost Recovery {{ formatStat(skill.boostRecoveryPercent, '%') }}</div>
+            <div v-if="skill.boostCapacityIncrease" class="stat text-yellow-300">Boost Capacity {{ formatStat(skill.boostCapacityIncrease) }}</div>
             
             <!-- Support -->
             <div v-if="skill.radarRangeIncrease" class="stat text-teal-400">Radar {{ formatStat(skill.radarRangeIncrease) }}</div>

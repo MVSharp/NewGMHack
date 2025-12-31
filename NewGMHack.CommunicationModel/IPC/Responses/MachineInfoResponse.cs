@@ -10,6 +10,6 @@ namespace NewGMHack.CommunicationModel.IPC.Responses
     public class MachineInfoResponse
     {
         [Key(0)] public MachineModel? MachineModel { get; set; }
-        [Key(1)] public object? MachineBaseInfo { get; set; }  // Uses object to avoid circular reference with Stub
+        [Key(1)] public MachineBaseInfo? MachineBaseInfo { get; set; }
     }
 }

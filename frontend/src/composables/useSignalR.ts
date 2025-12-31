@@ -139,6 +139,7 @@ async function pollData() {
             if (currentPlayerId.value !== newPid) {
                 console.log(`Player ID changed: ${currentPlayerId.value} -> ${newPid}`)
                 currentPlayerId.value = newPid
+                await refreshStats()
             }
 
             // Always refresh stats if we don't have any yet, or periodically
@@ -150,8 +151,7 @@ async function pollData() {
         // Fetch roommates
         roommates.value = await api.getRoommates()
 
-        // Fetch machine info
-        machineInfo.value = await api.getMachineInfo()
+
     } catch (e) {
         console.error('Poll data error:', e)
     }
@@ -238,12 +238,17 @@ async function startSignalR() {
         }
     })
 
-    // UpdateRoommates - from old dashboard.js line 73
     conn.on('UpdateRoommates', (list: any[]) => {
         roommates.value = list.map(r => ({
             name: r.name ?? r.Name ?? 'Unknown',
             id: r.id ?? r.Id ?? 0
         }))
+    })
+
+    // UpdateMachineInfo
+    conn.on('UpdateMachineInfo', (info: any) => {
+        console.log('Machine Info Update:', info)
+        machineInfo.value = info
     })
 
     conn.onclose(() => {

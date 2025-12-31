@@ -106,9 +106,9 @@ const weapons = computed(() => [
                     <div class="grid grid-cols-3 gap-2 text-xs">
                         <div><span class="label">ID:</span> <span class="value">{{ currentMachine?.machineId ?? '--' }}</span></div>
                         <div><span class="label">Rank:</span> <span class="value-gold">{{ currentMachine?.rank ?? '--' }}</span></div>
-                        <div><span class="label">Quality:</span> <span class="value">{{ currentMachine?.quality ?? '--' }}</span></div>
+                        <div><span class="label">Quality:</span> <span class="value">{{ '⭐'.repeat(currentMachine?.quality || 0) }} ({{ currentMachine?.quality ?? 0 }})</span></div>
                         <div class="col-span-2"><span class="label">CN:</span> <span class="value">{{ currentMachine?.chineseName || '--' }}</span></div>
-                        <div><span class="label">Rarity:</span> <span class="value">{{ currentMachine?.rarity ?? '--' }}</span></div>
+                        <div><span class="label">Rarity:</span> <span class="value">{{ '⭐'.repeat(currentMachine?.rarity || 0) }} ({{ currentMachine?.rarity ?? 0 }})</span></div>
                         <div class="col-span-2"><span class="label">EN:</span> <span class="value">{{ currentMachine?.englishName || '--' }}</span></div>
                         <div><span class="label">Combat:</span> <span class="value-blue">{{ currentMachine?.combatType ?? '--' }}</span></div>
                     </div>
@@ -168,8 +168,8 @@ const weapons = computed(() => [
                         <div><span class="label">FwdSpeed:</span> <span class="value">{{ currentMachine.forwardSpeed }}</span></div>
                         <div><span class="label">MoveSpeed:</span> <span class="value">{{ currentMachine.moveSpeed }}</span></div>
                         <div><span class="label">BzdSpeed:</span> <span class="value">{{ currentMachine.bzdSpeed }}</span></div>
-                        <div><span class="label">Boost Cap:</span> <span class="value">{{ currentMachine.boostCapacity }}</span></div>
-                        <div><span class="label">Boost Rec:</span> <span class="value">{{ currentMachine.boostRecoverySpeed }}</span></div>
+                        <div><span class="label">Boost Capacity:</span> <span class="value">{{ currentMachine.boostCapacity }}</span></div>
+                        <div><span class="label">Boost Recovery:</span> <span class="value">{{ currentMachine.boostRecoverySpeed }}</span></div>
                         <div><span class="label">Boost Use:</span> <span class="value">{{ currentMachine.boostConsumption }}</span></div>
                         <div><span class="label">Radar:</span> <span class="value">{{ currentMachine.radarRange }}</span></div>
                         <div><span class="label">Respawn:</span> <span class="value">{{ currentMachine.respawnTimeSeconds }}s</span></div>
@@ -180,8 +180,8 @@ const weapons = computed(() => [
                     <!-- Shield Info -->
                     <div class="grid grid-cols-3 gap-2 text-xs mt-2 pt-2 border-t border-white/10">
                         <div><span class="label">Shield Type:</span> <span class="value">{{ currentMachine.shieldType || '--' }}</span></div>
-                        <div><span class="label">Shield Dir:</span> <span class="value">{{ currentMachine.shieldDirection || '--' }}</span></div>
-                        <div><span class="label">Shield %:</span> <span class="value">{{ currentMachine.shieldDeductionPercentage ?? '--' }}</span></div>
+                        <div><span class="label">Shield Dir:</span> <span class="value">🛡️ {{ currentMachine.shieldDirection || '--' }}</span></div>
+                        <div><span class="label">Shield %:</span> <span class="value">{{ currentMachine.shieldDeductionPercentage ? currentMachine.shieldDeductionPercentage + '%' : '--' }}</span></div>
                     </div>
                 </div>
 

@@ -1,3 +1,5 @@
+using MessagePack;
+using NewGMHack.CommunicationModel.PacketStructs;
 using NewGMHack.Stub.PacketStructs.Recv;
 
 namespace NewGMHack.CommunicationModel.Models;
@@ -6,45 +8,46 @@ namespace NewGMHack.CommunicationModel.Models;
 /// Processed machine model for frontend display.
 /// Maps from raw Machine struct with proper type conversions.
 /// </summary>
+[MessagePackObject]
 public class MachineModel
 {
-    public uint MachineId { get; set; }
-    public uint Slot { get; set; }
-    public byte Level { get; set; }
+    [Key(0)] public uint MachineId { get; set; }
+    [Key(1)] public uint Slot { get; set; }
+    [Key(2)] public byte Level { get; set; }
     
     /// <summary>
     /// 6 color values converted to web hex format (e.g., "#FF5500")
     /// </summary>
-    public string[] Colors { get; set; } = new string[6];
+    [Key(3)] public string[] Colors { get; set; } = new string[6];
     
-    public ushort BrushPolish { get; set; }
+    [Key(4)] public ushort BrushPolish { get; set; }
     
     /// <summary>
     /// Battery value (max 2000), expressed as percentage 0-100
     /// </summary>
-    public float BatteryPercent { get; set; }
+    [Key(5)] public float BatteryPercent { get; set; }
     
     /// <summary>
     /// Raw battery value (max 2000)
     /// </summary>
-    public float BatteryRaw { get; set; }
+    [Key(6)] public float BatteryRaw { get; set; }
     
-    public uint BattleCount { get; set; }
-    public uint ExtraSkillParts { get; set; }
+    [Key(7)] public uint BattleCount { get; set; }
+    [Key(8)] public uint ExtraSkillParts { get; set; }
     
     /// <summary>
     /// Converted from GameTimestamp to C# DateTime
     /// </summary>
-    public DateTime BuyInTime { get; set; }
+    [Key(9)] public DateTime BuyInTime { get; set; }
     
-    public uint CurrentExp { get; set; }
-    public byte OcMaxLevel { get; set; }
-    public bool IsLocked { get; set; }
+    [Key(10)] public uint CurrentExp { get; set; }
+    [Key(11)] public byte OcMaxLevel { get; set; }
+    [Key(12)] public bool IsLocked { get; set; }
     
-    public OcPartsModel Oc1Parts { get; set; } = new();
-    public OcPartsModel Oc2Parts { get; set; } = new();
-    public OcPointsModel OcBaseBonusPoints { get; set; } = new();
-    public OcPointsModel OcBonusExtraPoints { get; set; } = new();
+    [Key(13)] public OcPartsModel Oc1Parts { get; set; } = new();
+    [Key(14)] public OcPartsModel Oc2Parts { get; set; } = new();
+    [Key(15)] public OcPointsModel OcBaseBonusPoints { get; set; } = new();
+    [Key(16)] public OcPointsModel OcBonusExtraPoints { get; set; } = new();
     
     /// <summary>
     /// Maps a raw Machine struct to this model
@@ -111,12 +114,13 @@ public class MachineModel
     }
 }
 
+[MessagePackObject]
 public class OcPartsModel
 {
-    public ushort Part1 { get; set; }
-    public ushort Part2 { get; set; }
-    public ushort Part3 { get; set; }
-    public ushort Part4 { get; set; }
+    [Key(0)] public ushort Part1 { get; set; }
+    [Key(1)] public ushort Part2 { get; set; }
+    [Key(2)] public ushort Part3 { get; set; }
+    [Key(3)] public ushort Part4 { get; set; }
     
     public static OcPartsModel FromRaw(OcParts raw) => new()
     {
@@ -127,18 +131,20 @@ public class OcPartsModel
     };
 }
 
+[MessagePackObject]
 public class OcPointsModel
 {
-    public byte Speed { get; set; }
-    public byte Hp { get; set; }
-    public byte Attack { get; set; }
-    public byte Defense { get; set; }
-    public byte Agility { get; set; }
-    public byte Special { get; set; }
+    [Key(0)] public byte Speed { get; set; }
+    [Key(1)] public byte Hp { get; set; }
+    [Key(2)] public byte Attack { get; set; }
+    [Key(3)] public byte Defense { get; set; }
+    [Key(4)] public byte Agility { get; set; }
+    [Key(5)] public byte Special { get; set; }
     
     /// <summary>
     /// Total of all OC points
     /// </summary>
+    [IgnoreMember]
     public int Total => Speed + Hp + Attack + Defense + Agility + Special;
     
     public static OcPointsModel FromRaw(OcPoints raw) => new()

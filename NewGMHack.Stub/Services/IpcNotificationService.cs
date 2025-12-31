@@ -45,4 +45,25 @@ public class IpcNotificationService
             // _logger.LogWarning($"Failed to send IPC notification: {ex.Message}");
         }
     }
+    public async Task SendMachineInfoUpdateAsync(object machineInfo)
+    {
+        try
+        {
+            using var stream = _streamManager.GetStream();
+            
+            var request = new DynamicOperationRequest
+            {
+                Operation = Operation.MachineInfoUpdate,
+                Parameters = machineInfo 
+            };
+
+            await MessagePackSerializer.SerializeAsync(stream, request, _options);
+            
+            await _rpcBuffer.RemoteRequestAsync(stream.ToArray(), 500); 
+        }
+        catch (Exception ex)
+        {
+            // _logger.LogWarning($"Failed to send IPC notification: {ex.Message}");
+        }
+    }
 }

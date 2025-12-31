@@ -19,6 +19,7 @@ namespace NewGMHack.CommunicationModel.IPC
         RewardNotification,
         GetMachine,
         GetMachineInfo,
+        MachineInfoUpdate,
     }
 
     [MessagePackObject]

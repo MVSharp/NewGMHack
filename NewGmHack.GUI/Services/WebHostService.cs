@@ -112,10 +112,10 @@ namespace NewGmHack.GUI.Services
                                             var sql = @"
                                                 SELECT 
                                                     COUNT(*) as Matches,
-                                                    SUM(CASE WHEN GameStatus = 'Win' THEN 1 ELSE 0 END) as Wins,
-                                                    SUM(CASE WHEN GameStatus = 'Lost' THEN 1 ELSE 0 END) as Losses,
-                                                    SUM(CASE WHEN GameStatus = 'Draw' THEN 1 ELSE 0 END) as Draws,
-                                                    ROUND(100.0 * SUM(CASE WHEN GameStatus = 'Win' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2) as WinRate,
+                                                    ifnull(SUM(CASE WHEN GameStatus = 'Win' THEN 1 ELSE 0 END), 0) as Wins,
+                                                    ifnull(SUM(CASE WHEN GameStatus = 'Lost' THEN 1 ELSE 0 END), 0) as Losses,
+                                                    ifnull(SUM(CASE WHEN GameStatus = 'Draw' THEN 1 ELSE 0 END), 0) as Draws,
+                                                    ROUND(100.0 * ifnull(SUM(CASE WHEN GameStatus = 'Win' THEN 1 ELSE 0 END), 0) / NULLIF(COUNT(*), 0), 2) as WinRate,
                                                     SUM(ifnull(Points,0)) as TotalPoints,
                                                     SUM(ifnull(Kills,0)) as TotalKills,
                                                     SUM(ifnull(Deaths,0)) as TotalDeaths,
@@ -125,9 +125,9 @@ namespace NewGmHack.GUI.Services
                                                     SUM(ifnull(MachineAddedExp,0)) as TotalMachineAddedExp,
                                                     SUM(ifnull(MachineExp,0)) as TotalMachineExp,
                                                     SUM(ifnull(Bonus1,0) + ifnull(Bonus2,0) + ifnull(Bonus3,0) + ifnull(Bonus4,0) + ifnull(Bonus5,0) + ifnull(Bonus6,0) + ifnull(Bonus7,0) + ifnull(Bonus8,0)) as TotalBonusGB,
-                                                    AVG(ifnull(DamageScore,0)) as AvgDamageScore,
-                                                    AVG(ifnull(TeamExpectationScore,0)) as AvgTeamScore,
-                                                    AVG(ifnull(SkillFulScore,0)) as AvgSkillScore,
+                                                    ifnull(AVG(ifnull(DamageScore,0)), 0) as AvgDamageScore,
+                                                    ifnull(AVG(ifnull(TeamExpectationScore,0)), 0) as AvgTeamScore,
+                                                    ifnull(AVG(ifnull(SkillFulScore,0)), 0) as AvgSkillScore,
                                                     MIN(CreatedAtUtc) as FirstSortieDate,
                                                     MAX(CreatedAtUtc) as LastSortieDate
                                                 FROM MatchRewards 
@@ -137,11 +137,11 @@ namespace NewGmHack.GUI.Services
                                             var sqlHourly = @"
                                                 SELECT 
                                                     COUNT(*) as MatchesLastHour,
-                                                    SUM(CASE WHEN GameStatus = 'Win' THEN 1 ELSE 0 END) as WinsLastHour,
-                                                    SUM(CASE WHEN GameStatus = 'Lost' THEN 1 ELSE 0 END) as LossesLastHour,
-                                                    SUM(GBGain) as GBGainLastHour,
-                                                    SUM(MachineAddedExp) as MachineExpLastHour,
-                                                    SUM(ifnull(Bonus1,0) + ifnull(Bonus2,0) + ifnull(Bonus3,0) + ifnull(Bonus4,0) + ifnull(Bonus5,0) + ifnull(Bonus6,0) + ifnull(Bonus7,0) + ifnull(Bonus8,0)) as BonusLastHour
+                                                    ifnull(SUM(CASE WHEN GameStatus = 'Win' THEN 1 ELSE 0 END), 0) as WinsLastHour,
+                                                    ifnull(SUM(CASE WHEN GameStatus = 'Lost' THEN 1 ELSE 0 END), 0) as LossesLastHour,
+                                                    ifnull(SUM(GBGain), 0) as GBGainLastHour,
+                                                    ifnull(SUM(MachineAddedExp), 0) as MachineExpLastHour,
+                                                    ifnull(SUM(ifnull(Bonus1,0) + ifnull(Bonus2,0) + ifnull(Bonus3,0) + ifnull(Bonus4,0) + ifnull(Bonus5,0) + ifnull(Bonus6,0) + ifnull(Bonus7,0) + ifnull(Bonus8,0)), 0) as BonusLastHour
                                                 FROM MatchRewards
                                                 WHERE PlayerId = @PlayerId AND datetime(CreatedAtUtc) >= datetime('now', '-1 hour')";
                                             hourly = await conn.QuerySingleOrDefaultAsync(sqlHourly, new { PlayerId = playerId });
