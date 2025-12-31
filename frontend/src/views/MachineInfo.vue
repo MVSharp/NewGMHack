@@ -127,6 +127,7 @@ const weapons = computed(() => [
                         <div><span class="label">EXP:</span> <span class="value">{{ machineModel.currentExp ?? '--' }}</span></div>
                         <div><span class="label">Polish:</span> <span class="value">{{ machineModel.brushPolish ?? '--' }}</span></div>
                         <div><span class="label">Extra Parts:</span> <span class="value">{{ machineModel.extraSkillParts ?? '--' }}</span></div>
+                        <div class="col-span-3"><span class="label">Buy In Time:</span> <span class="value">{{ machineModel.buyInTime ? new Date(machineModel.buyInTime).toLocaleString() : '--' }}</span></div>
                     </div>
                     <!-- Colors -->
                     <div class="mt-3" v-if="machineModel.colors">

@@ -205,6 +205,16 @@ public class PacketProcessorService : BackgroundService
                         MachineBaseInfo = machineInfo
                     };
                     await _ipcService.SendMachineInfoUpdateAsync(response);
+                    
+                    try 
+                    {
+                        var json = System.Text.Json.JsonSerializer.Serialize(response, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                        _logger.ZLogInformation($"[MachineInfoUpdate] Payload: {json}");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.ZLogError(ex, $"Failed to log MachineInfoUpdate payload");
+                    }
                 }
 
                 ChargeCondom(socket, slot);
