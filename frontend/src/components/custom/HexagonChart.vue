@@ -34,7 +34,7 @@ const labels = ['Attack', 'Agility', 'HP', 'Defense', 'SP', 'Speed']
 const statKeys = ['attack', 'agility', 'hp', 'defense', 'sp', 'speed'] as const
 
 // Angles in radians
-const angles = [
+const hexAngles: number[] = [
     -120, // Attack
     -60,  // Agility
     0,    // HP
@@ -46,8 +46,8 @@ const angles = [
 function calcPoints(statValues: number[]): string {
     return statValues.map((val, i) => {
         const r = Math.min(val / maxValue, 1) * size
-        const x = cx + r * Math.cos(angles[i])
-        const y = cy + r * Math.sin(angles[i])
+        const x = cx + r * Math.cos(hexAngles[i]!)
+        const y = cy + r * Math.sin(hexAngles[i]!)
         return `${x},${y}`
     }).join(' ')
 }
@@ -56,14 +56,14 @@ const labelPositions = computed(() => {
     const labelRadius = size + 18
     return labels.map((label, i) => ({
         label,
-        x: cx + labelRadius * Math.cos(angles[i]),
-        y: cy + labelRadius * Math.sin(angles[i])
+        x: cx + labelRadius * Math.cos(hexAngles[i]!),
+        y: cy + labelRadius * Math.sin(hexAngles[i]!)
     }))
 })
 
 const gridPoints = computed(() => {
     return [0.25, 0.5, 0.75, 1].map(scale => {
-        return angles.map(a => {
+        return hexAngles.map(a => {
             const r = scale * size
             return `${cx + r * Math.cos(a)},${cy + r * Math.sin(a)}`
         }).join(' ')
@@ -71,7 +71,7 @@ const gridPoints = computed(() => {
 })
 
 const axisLines = computed(() => {
-    return angles.map(a => ({
+    return hexAngles.map(a => ({
         x2: cx + size * Math.cos(a),
         y2: cy + size * Math.sin(a)
     }))

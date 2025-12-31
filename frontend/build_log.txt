@@ -1,0 +1,13 @@
+
+> frontend@0.0.0 build C:\Users\Michael.Van\source\repos\MVSharp\NewGMHack\NewGMHack\frontend
+> vue-tsc -b && vite build --mode production
+
+src/components/custom/HexagonChart.vue(49,37): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/components/custom/HexagonChart.vue(50,37): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/components/custom/HexagonChart.vue(59,40): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/components/custom/HexagonChart.vue(60,40): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+ΓÇëELIFECYCLEΓÇë Command failed with exit code 2.
