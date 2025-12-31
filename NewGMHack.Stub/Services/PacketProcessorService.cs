@@ -675,26 +675,36 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         r.Slot = slot;
         _winsockHookManager.SendPacket(socket, r.ToByteArray().AsSpan());
     }
-    private async Task ScanCondom(UInt32 machineId,CancellationToken token)
+    private async Task ScanCondom(UInt32 machineId, CancellationToken token)
     {
-        _logger
-           .ZLogInformation($"Machine id begin scan: {machineId} ");
-        var w =  await gm.Scan(machineId,token);
-
-        _logger
-           .ZLogInformation($"Machine id  scan completed: {machineId} ");
-        if (w is { w1: 0, w2: 0, w3: 0 }) return;
+        _logger.ZLogInformation($"Machine id begin scan: {machineId}");
+        
+        var machineInfo = await gm.ScanMachineWithDetails(machineId, token);
+        
+        _logger.ZLogInformation($"Machine id scan completed: {machineId}");
+        
+        if (machineInfo == null) return;
+        
         lock (_lock)
         {
             _selfInformation.PersonInfo.CondomId = machineId;
-            if(!string.IsNullOrEmpty(w.gname)) _selfInformation.PersonInfo.CondomName = w.gname;
-            if (w.w1 != 0) _selfInformation.PersonInfo.Weapon1 = (uint)w.w1;
-            if (w.w2 != 0) _selfInformation.PersonInfo.Weapon2 = (uint)w.w2;
-            if (w.w3 != 0) _selfInformation.PersonInfo.Weapon3 = (uint)w.w3;
+            if (!string.IsNullOrEmpty(machineInfo.ChineseName)) 
+                _selfInformation.PersonInfo.CondomName = machineInfo.ChineseName;
+            else if (!string.IsNullOrEmpty(machineInfo.EnglishName))
+                _selfInformation.PersonInfo.CondomName = machineInfo.EnglishName;
+                
+            if (machineInfo.Weapon1Code != 0) 
+                _selfInformation.PersonInfo.Weapon1 = machineInfo.Weapon1Code;
+            if (machineInfo.Weapon2Code != 0) 
+                _selfInformation.PersonInfo.Weapon2 = machineInfo.Weapon2Code;
+            if (machineInfo.Weapon3Code != 0) 
+                _selfInformation.PersonInfo.Weapon3 = machineInfo.Weapon3Code;
+                
+            // Store the full machine info for API access
+            _selfInformation.CurrentMachineBaseInfo = machineInfo;
         }
 
-        _logger
-           .ZLogInformation($"machine id : {machineId} | weapon1 : {w.w1} | weapon2 : {w.w2} | weapon3 : {w.w3}");
+        _logger.ZLogInformation($"Machine: {machineInfo.ChineseName} | W1:{machineInfo.Weapon1Code} | W2:{machineInfo.Weapon2Code} | W3:{machineInfo.Weapon3Code}");
     }
 
     private void AssignPersonId(ByteReader reader)

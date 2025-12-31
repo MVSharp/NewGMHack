@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Faster.Map.Concurrent;
 using NewGMHack.CommunicationModel.Models;
+using NewGMHack.Stub.MemoryScanner;
 using NewGMHack.Stub.PacketStructs.Recv;
 using SharpDX;
 
@@ -32,6 +33,11 @@ namespace NewGMHack.Stub
         /// Processed machine model for frontend display
         /// </summary>
         public MachineModel? CurrentMachineModel { get; set; }
+        
+        /// <summary>
+        /// Full machine base info from memory scan (includes skills, weapons, transform)
+        /// </summary>
+        public MachineBaseInfo? CurrentMachineBaseInfo { get; set; }
         
         public Info                    PersonInfo   { get; set; } = new();
         public ClientConfig            ClientConfig { get; set; } = new();
