@@ -172,6 +172,16 @@ namespace NewGMHack.Stub
                     await MessagePackSerializer.SerializeAsync(stream, response, _options);
                     break;
                 }
+                case Operation.GetMachine:
+                {
+                    var response = new DynamicOperationResponse<MachineModel?>
+                    {
+                        Success = true,
+                        Result = self.CurrentMachineModel
+                    };
+                    await MessagePackSerializer.SerializeAsync(stream, response, _options);
+                    break;
+                }
                 case Operation.None:
                 default:
                 {

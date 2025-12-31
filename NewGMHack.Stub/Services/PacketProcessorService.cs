@@ -180,8 +180,13 @@ public class PacketProcessorService : BackgroundService
             //     break;
             case 1246 or 2535:
                 _selfInformation.ClientConfig.IsInGame = false;
-                var changed   = reader.ReadChangedMachine();
+                var changed = ReadChangedMachine(methodPacket.MethodBody);
                 _logger.ZLogInformation($"change condom detected:{changed.MachineId}");
+                
+                // Store both raw and processed machine data
+                _selfInformation.CurrentMachine = changed;
+                _selfInformation.CurrentMachineModel = MachineModel.FromRaw(changed);
+                
                 var slot = changed.Slot;
                 _selfInformation.PersonInfo.Slot = slot;
                 await ScanCondom(changed.MachineId,token:token);
@@ -288,6 +293,12 @@ public class PacketProcessorService : BackgroundService
             default:
                 break;
         }
+    }
+
+    private Machine ReadChangedMachine(ReadOnlyMemory<byte> methodPacketMethodBody)
+    {
+        var changed = methodPacketMethodBody.Span.ReadStruct<GetChangedMachine>();
+        return changed.Machine;
     }
 
     private void ReadDeads1506(ReadOnlyMemory<byte> methodPacketMethodBody)

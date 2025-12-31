@@ -46,6 +46,11 @@ namespace NewGmHack.GUI
         {
             return SendRequestAsync<List<Roommate>>(Operation.GetRoomInfo);
         }
+        
+        public Task<MachineModel?> GetCurrentMachine()
+        {
+            return SendRequestAsync<MachineModel?>(Operation.GetMachine);
+        }
     }
 
     public class RemoteHandlerBase(RpcBuffer master)

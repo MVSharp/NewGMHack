@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Faster.Map.Concurrent;
 using NewGMHack.CommunicationModel.Models;
+using NewGMHack.Stub.PacketStructs.Recv;
 using SharpDX;
 
 namespace NewGMHack.Stub
@@ -25,6 +26,13 @@ namespace NewGMHack.Stub
     
     public class SelfInformation
     {
+        public Machine CurrentMachine { get; set; } = new();
+        
+        /// <summary>
+        /// Processed machine model for frontend display
+        /// </summary>
+        public MachineModel? CurrentMachineModel { get; set; }
+        
         public Info                    PersonInfo   { get; set; } = new();
         public ClientConfig            ClientConfig { get; set; } = new();
         public ConcurrentBag<Roommate> Roommates    { get; set; } = [];
