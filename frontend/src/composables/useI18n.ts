@@ -73,7 +73,8 @@ const translations: Record<Language, Record<string, string>> = {
         offline: 'OFFLINE',
         updating: 'UPDATING...',
         refresh: 'REFRESH',
-        loading_modules: 'LOADING MODULES...'
+        loading_modules: 'LOADING MODULES...',
+        machine_info: 'MACHINE INFO'
     },
     'zh-CN': {
         title: 'SD渣男 - Michael Van',
@@ -141,7 +142,8 @@ const translations: Record<Language, Record<string, string>> = {
         offline: '离线',
         updating: '更新中...',
         refresh: '刷新',
-        loading_modules: '加载模块中...'
+        loading_modules: '加载模块中...',
+        machine_info: '机体信息'
     },
     'zh-TW': {
         title: 'SD渣男 - Michael Van',
@@ -209,7 +211,8 @@ const translations: Record<Language, Record<string, string>> = {
         offline: '離線',
         updating: '更新中...',
         refresh: '刷新',
-        loading_modules: '載入模組中...'
+        loading_modules: '載入模組中...',
+        machine_info: '機體資訊'
     }
 }
 

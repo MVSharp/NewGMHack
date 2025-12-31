@@ -15,10 +15,11 @@ using NewGMHack.CommunicationModel.Models;
 using NewGMHack.Stub.Hooks;
 using ZLinq;
 using ZLogger;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace NewGMHack.Stub
 {
-    internal class RemoteHandler(SelfInformation self, ILogger<RemoteHandler> logger , Channel<ReadOnlyMemory<byte>> packetChannel)
+    internal class RemoteHandler(SelfInformation self, ILogger<RemoteHandler> logger , Channel<ReadOnlyMemory<byte>> packetChannel, IServiceProvider sp)
     {
         private readonly RecyclableMemoryStreamManager recyclableMemoryStreamManager = new();
 
@@ -179,6 +180,35 @@ namespace NewGMHack.Stub
                         Success = true,
                         Result = self.CurrentMachineModel
                     };
+                    await MessagePackSerializer.SerializeAsync(stream, response, _options);
+                    break;
+                }
+                case Operation.GetMachineInfo:
+                {
+                    var response = new DynamicOperationResponse<MachineInfoResponse>();
+                    try
+                    {
+                        var machineModel = self.CurrentMachineModel;
+                        MachineBaseInfo? baseInfo = null;
+                        if (machineModel != null)
+                        {
+                            var gmMemory = sp.GetRequiredService<GmMemory>();
+                            baseInfo = await gmMemory.ScanMachineWithDetails(machineModel.MachineId, default);
+                        }
+
+                        response.Success = true;
+                        response.Result = new MachineInfoResponse
+                        {
+                            MachineModel = machineModel,
+                            MachineBaseInfo = baseInfo
+                        };
+                    }
+                    catch (Exception ex)
+                    {
+                        response.Success = false;
+                        response.ErrorMessage = ex.Message;
+                        logger.ZLogError(ex, "Error handling GetPlotInfo");
+                    }
                     await MessagePackSerializer.SerializeAsync(stream, response, _options);
                     break;
                 }

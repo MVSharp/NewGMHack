@@ -18,6 +18,7 @@ namespace NewGMHack.CommunicationModel.IPC
         GetRoomInfo,
         RewardNotification,
         GetMachine,
+        GetMachineInfo,
     }
 
     [MessagePackObject]

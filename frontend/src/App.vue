@@ -6,6 +6,7 @@ import Dashboard from '@/views/Dashboard.vue'
 import Features from '@/views/Features.vue'
 import Pilot from '@/views/Pilot.vue'
 import Lobby from '@/views/Lobby.vue'
+import MachineInfo from '@/views/MachineInfo.vue'
 import { useTabs, TabNames } from '@/composables/useTabs'
 import { useSignalR } from '@/composables/useSignalR'
 
@@ -18,6 +19,7 @@ const currentView = computed(() => {
         case TabNames.Features: return Features
         case TabNames.Pilot: return Pilot
         case TabNames.Lobby: return Lobby
+        case TabNames.MachineInfo: return MachineInfo
         default: return Dashboard
     }
 })

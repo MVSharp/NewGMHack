@@ -299,6 +299,14 @@ namespace NewGmHack.GUI.Services
                                     var machine = await handler.GetCurrentMachine();
                                     return Results.Ok(machine);
                                 });
+
+                                // GET /api/machineinfo - returns complete machine info (MachineModel + MachineBaseInfo)
+                                endpoints.MapGet("/api/machineinfo", async (RemoteHandler handler) =>
+                                {
+                                    if (!_mainViewModel.IsConnected) return Results.Ok(new { });
+                                    var machineInfo = await handler.GetMachineInfo();
+                                    return Results.Ok(machineInfo);
+                                });
                                 
                                 // INJECTION ENDPOINTS
                                 endpoints.MapPost("/api/inject", async () => 

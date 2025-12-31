@@ -29,6 +29,7 @@ const roommates = ref<Roommate[]>([])
 const combatLog = ref<HistoryItem[]>([])
 const stats = ref<PlayerStats | null>(null)
 const appVersion = ref('1.0.0.0')
+const machineInfo = ref<any>(null)  // MachineInfo data
 
 // Latest match display
 const latestMatch = ref<{
@@ -70,6 +71,11 @@ function startMockData() {
         roommates.value = await api.getRoommates()
     }, 3000))
 
+    // Mock MachineInfo
+    mockIntervals.push(window.setInterval(async () => {
+        machineInfo.value = await api.getMachineInfo()
+    }, 2000))
+
     // Mock Stats & History
     mockIntervals.push(window.setInterval(async () => {
         if (currentPlayerId.value > 0) {
@@ -97,6 +103,7 @@ function startMockData() {
         combatLog.value = await api.getHistory(currentPlayerId.value || 12345)
         pilotInfo.value = await api.getMe()
         roommates.value = await api.getRoommates()
+        machineInfo.value = await api.getMachineInfo()
         if (pilotInfo.value?.personId) {
             currentPlayerId.value = pilotInfo.value.personId
         }
@@ -142,6 +149,9 @@ async function pollData() {
 
         // Fetch roommates
         roommates.value = await api.getRoommates()
+
+        // Fetch machine info
+        machineInfo.value = await api.getMachineInfo()
     } catch (e) {
         console.error('Poll data error:', e)
     }
@@ -345,6 +355,7 @@ export function useSignalR() {
         latestMatch,
         dateRange,
         appVersion,
+        machineInfo,
 
         // Actions
         start,

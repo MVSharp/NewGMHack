@@ -48,6 +48,10 @@ public unsafe struct MachineBaseInfoStruct
     [FieldOffset(0x224)] public byte BoostConsumption;
     [FieldOffset(0x226)] public byte BoostCapacity;
     [FieldOffset(0x228)] public float TrackAcceleration;
+    
+    [FieldOffset(0x22C)] public short Attack;    // 2 bytes signed
+    [FieldOffset(0x22E)] public short Defense;   // 2 bytes signed
+    
     [FieldOffset(0x23D)] public uint RadarRange;
     [FieldOffset(0x23F)] public uint SkillID1;
     [FieldOffset(0x243)] public uint SkillID2;
@@ -100,6 +104,12 @@ public class MachineBaseInfo
     public int BoostConsumption { get; set; }
     public int BoostCapacity { get; set; }
     public float TrackAcceleration { get; set; }
+    
+    /// <summary>Base attack value from 0x22C</summary>
+    public int Attack { get; set; }
+    
+    /// <summary>Base defense value from 0x22E</summary>
+    public int Defense { get; set; }
     
     public uint RadarRange { get; set; }
     public uint SkillID1 { get; set; }
@@ -192,6 +202,9 @@ public class MachineBaseInfo
             BoostConsumption = raw.BoostConsumption,
             BoostCapacity = raw.BoostCapacity,
             TrackAcceleration = raw.TrackAcceleration,
+            
+            Attack = raw.Attack,
+            Defense = raw.Defense,
             
             RadarRange = raw.RadarRange,
             SkillID1 = raw.SkillID1,

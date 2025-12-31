@@ -51,6 +51,11 @@ namespace NewGmHack.GUI
         {
             return SendRequestAsync<MachineModel?>(Operation.GetMachine);
         }
+        
+        public Task<MachineInfoResponse?> GetMachineInfo()
+        {
+            return SendRequestAsync<MachineInfoResponse?>(Operation.GetMachineInfo);
+        }
     }
 
     public class RemoteHandlerBase(RpcBuffer master)

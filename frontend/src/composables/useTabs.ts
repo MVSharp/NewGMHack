@@ -4,7 +4,8 @@ export const TabNames = {
     Dashboard: 'Dashboard',
     Features: 'Features',
     Pilot: 'Pilot',
-    Lobby: 'Lobby'
+    Lobby: 'Lobby',
+    MachineInfo: 'MachineInfo'
 } as const
 
 export type TabName = typeof TabNames[keyof typeof TabNames]

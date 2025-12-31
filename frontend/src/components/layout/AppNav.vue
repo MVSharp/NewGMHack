@@ -8,6 +8,7 @@ const { t } = useI18n()
 const tabs = [
     { name: TabNames.Dashboard, labelKey: 'dashboard' },
     { name: TabNames.Features, labelKey: 'features' },
+    { name: TabNames.MachineInfo, labelKey: 'machine_info' },
     { name: TabNames.Pilot, labelKey: 'pilot' },
     { name: TabNames.Lobby, labelKey: 'lobby' }
 ]

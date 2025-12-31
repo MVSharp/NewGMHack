@@ -43,8 +43,8 @@ public class MachineModel
     
     public OcPartsModel Oc1Parts { get; set; } = new();
     public OcPartsModel Oc2Parts { get; set; } = new();
-    public OcPointsModel OcBasePoints { get; set; } = new();
-    public OcPointsModel OcBonusPoints { get; set; } = new();
+    public OcPointsModel OcBaseBonusPoints { get; set; } = new();
+    public OcPointsModel OcBonusExtraPoints { get; set; } = new();
     
     /// <summary>
     /// Maps a raw Machine struct to this model
@@ -67,8 +67,8 @@ public class MachineModel
             IsLocked = raw.Lock != 0,
             Oc1Parts = OcPartsModel.FromRaw(raw.Oc1Parts),
             Oc2Parts = OcPartsModel.FromRaw(raw.Oc2Parts),
-            OcBasePoints = OcPointsModel.FromRaw(raw.OcBasePoints),
-            OcBonusPoints = OcPointsModel.FromRaw(raw.OcBonusPoints)
+            OcBaseBonusPoints = OcPointsModel.FromRaw(raw.OcBasePoints),
+            OcBonusExtraPoints = OcPointsModel.FromRaw(raw.OcBonusPoints)
         };
         
         // Convert colors to hex strings
