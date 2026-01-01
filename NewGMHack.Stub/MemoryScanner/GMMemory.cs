@@ -518,25 +518,20 @@ namespace NewGMHack.Stub.MemoryScanner
 
         private static byte[] BuildSkillPattern(uint skillId)
         {
-            return new byte[]
-            {
-                (byte)(skillId & 0xFF),
-                (byte)((skillId >> 8) & 0xFF),
-                (byte)((skillId >> 16) & 0xFF),
-                0x00,
-                0x00
-            };
+            // SkillId is a uint (4 bytes), use BitConverter for correct little-endian
+            return BitConverter.GetBytes(skillId);
         }
 
         private static byte[] BuildWeaponPattern(uint weaponId)
         {
+            // WeaponId is a uint (4 bytes), so we need to match all 4 bytes
+            var idBytes = BitConverter.GetBytes(weaponId);
             return new byte[]
             {
-                (byte)(weaponId & 0xFF),
-                (byte)((weaponId >> 8) & 0xFF),
-                0x00,
-                0x00,
-                0x00
+                idBytes[0],  // Low byte
+                idBytes[1],
+                idBytes[2],
+                idBytes[3]   // High byte (usually 0x00 for typical IDs)
             };
         }
         
