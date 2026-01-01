@@ -20,10 +20,10 @@ public unsafe struct SkillBaseInfoStruct
     [FieldOffset(0x069)] public byte HpActivate;          // 0=NoNeed, 2=HpMeet, 4=LastLife, 6=LastLife
     [FieldOffset(0x06A)] public byte ExactHpActivatePercent; // 0=NoNeed, else %
     
-    [FieldOffset(0x0D0)] public byte Movement;
-    [FieldOffset(0x0D2)] public byte ForwardSpeedPercent;
-    [FieldOffset(0x0D4)] public byte UrgentEscape;
-    [FieldOffset(0x0D6)] public byte AgilityPercent;
+    [FieldOffset(0x0D0)] public ushort Movement;
+    [FieldOffset(0x0D2)] public ushort ForwardSpeedPercent;
+    [FieldOffset(0x0D4)] public ushort UrgentEscape;
+    [FieldOffset(0x0D6)] public ushort AgilityPercent;
     
     // 0xDA - Boost recovery: 3F80=50%, 4000=100%, 3F00=25%, C0=75%
     [FieldOffset(0x0DA)] public uint BoostRecoveryRaw;
@@ -41,6 +41,8 @@ public unsafe struct SkillBaseInfoStruct
     [FieldOffset(0x10A)] public ushort NearDamageReduction;  // 近距离减伤
     [FieldOffset(0x110)] public ushort MidDamageReductionRaw; // 3E80=25.6%, 3F00=50%, 4C=12.5%
     [FieldOffset(0x122)] public ushort MeleeDamageIncrease;   // 近战伤害增加
+    
+    [FieldOffset(0x134)] public fixed char AuraEffect[16];
     
     // 0x1E1 - Description unicode string, 60 chars (fits within 0x300 buffer)
     [FieldOffset(0x1E1)] public fixed char Description[60];
@@ -112,7 +114,9 @@ public class SkillBaseInfo
     /// </summary>
     [Key(18)] public int MeleeDamageIncrease { get; set; }
     
-    [Key(19)] public string Description { get; set; } = "";
+    [Key(19)] public string AuraEffect { get; set; } = "";
+
+    [Key(20)] public string Description { get; set; } = "";
     
     /// <summary>
     /// Transform raw struct to friendly class
@@ -161,6 +165,8 @@ public class SkillBaseInfo
             NearDamageReductionPercent = DecodePercentValue16(raw.NearDamageReduction),
             MidDamageReductionPercent = DecodePercentValue16(raw.MidDamageReductionRaw),
             MeleeDamageIncrease = raw.MeleeDamageIncrease,
+            
+            AuraEffect = GetFixedString(raw.AuraEffect, 16),
             
             Description = GetFixedString(raw.Description, 60)
         };

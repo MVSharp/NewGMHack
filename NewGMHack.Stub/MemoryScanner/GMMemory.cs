@@ -87,7 +87,7 @@ namespace NewGMHack.Stub.MemoryScanner
 
         private const int MACHINE_BUFFER_SIZE = 0x290; // 656 bytes (matches MachineBaseInfoStruct)
         private const int SKILL_BUFFER_SIZE   = 0x300; // 768 bytes (matches SkillBaseInfoStruct)
-        private const int WEAPON_BUFFER_SIZE  = 0xB0;  // 176 bytes
+        private const int WEAPON_BUFFER_SIZE  = 0x140;  // 320 bytes
 
         #endregion
 
@@ -396,6 +396,8 @@ namespace NewGMHack.Stub.MemoryScanner
             // Validation: skill name must not be blank
             if (string.IsNullOrWhiteSpace(info.SkillName)) return null;
             if (string.IsNullOrEmpty(info.Description)) return null;
+            if(!string.IsNullOrEmpty(info.AuraEffect) && !info.AuraEffect.StartsWith(@"fxrs\",StringComparison.OrdinalIgnoreCase))
+            if (info.ExactHpActivatePercent > 100) return null;
             if (info.AttackIncrease         > 255 || info.DefenseIncrease > 255 || info.AgilityPercent > 100 ||
                 info.ExactHpActivatePercent > 100) return null;
 
@@ -414,7 +416,9 @@ namespace NewGMHack.Stub.MemoryScanner
             
             // Validation: WeaponType == 0 or > 10 is invalid
             if (raw.WeaponType == 0 || raw.WeaponType > 10) return null;
-            
+            if (!string.IsNullOrEmpty(info.TraceEffect) && !info.TraceEffect.StartsWith(@"fxrs\",StringComparison.OrdinalIgnoreCase)) return null;
+            if (!string.IsNullOrEmpty(info.AttackEffect) && !info.AttackEffect.StartsWith(@"fxrs\",StringComparison.OrdinalIgnoreCase)) return null;
+            if (!string.IsNullOrEmpty(info.AttackSound)  && !info.AttackSound.StartsWith(@"sdrs\",StringComparison.OrdinalIgnoreCase)) return null;
             // Validation: KnockdownPerHit > KnockdownThreshold is invalid
             if (raw.KnockdownPerHit > raw.KnockdownThreshold && raw.KnockdownThreshold != 0) return null;
             

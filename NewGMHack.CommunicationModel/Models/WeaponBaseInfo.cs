@@ -9,7 +9,7 @@ namespace NewGMHack.CommunicationModel.Models;
 /// Example: 28751 (0x704F) -> 4F 70 00 00 00 ?? ??
 /// Total size: 0xB0 (176 bytes) to cover all fields
 /// </summary>
-[StructLayout(LayoutKind.Explicit, Size = 0xB0, CharSet = CharSet.Unicode)]
+[StructLayout(LayoutKind.Explicit, Size = 0x140, CharSet = CharSet.Unicode)]
 public unsafe struct WeaponBaseInfoStruct
 {
     [FieldOffset(0x000)] public uint WeaponId;
@@ -36,6 +36,10 @@ public unsafe struct WeaponBaseInfoStruct
     [FieldOffset(0x09A)] public float CollisionHeight;
     [FieldOffset(0x09E)] public float SplashRadius;
     [FieldOffset(0x0A2)] public float SplashCoreRadius;
+    
+    [FieldOffset(0x0A4)] public fixed char TraceEffect[16];
+    [FieldOffset(0x0E0)] public fixed char AttackEffect[16];
+    [FieldOffset(0x120)] public fixed char AttackSound[16];
 }
 
 /// <summary>
@@ -70,6 +74,10 @@ public class WeaponBaseInfo
     [Key(17)] public float CollisionHeight { get; set; }
     [Key(18)] public float SplashRadius { get; set; }
     [Key(19)] public float SplashCoreRadius { get; set; }
+    
+    [Key(20)] public string TraceEffect { get; set; } = "";
+    [Key(21)] public string AttackEffect { get; set; } = "";
+    [Key(22)] public string AttackSound { get; set; } = "";
     
     /// <summary>
     /// Transform raw struct to friendly class
@@ -106,7 +114,11 @@ public class WeaponBaseInfo
             CollisionWidth = raw.CollisionWidth,
             CollisionHeight = raw.CollisionHeight,
             SplashRadius = raw.SplashRadius,
-            SplashCoreRadius = raw.SplashCoreRadius
+            SplashCoreRadius = raw.SplashCoreRadius,
+            
+            TraceEffect = GetFixedString(raw.TraceEffect, 16),
+            AttackEffect = GetFixedString(raw.AttackEffect, 16),
+            AttackSound = GetFixedString(raw.AttackSound, 16)
         };
     }
     
