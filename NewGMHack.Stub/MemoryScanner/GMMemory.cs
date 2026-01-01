@@ -4,57 +4,32 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Numerics;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Runtime.Intrinsics;
-using System.Runtime.Intrinsics.X86;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using ZLogger;
 using NewGMHack.CommunicationModel.Models;
+using NewGMHack.Stub.Services.Scanning;
 
 namespace NewGMHack.Stub.MemoryScanner
 {
-    /// <summary>
-    /// Fast memory scanner using SIMD (Vector&lt;byte&gt;) for pattern matching
-    /// </summary>
-    public class GmMemory(ILogger<GmMemory> logger)
+    public class GmMemory
     {
-        #region Win32 APIs
+        private readonly ILogger<GmMemory> logger;
+        private readonly IMemoryScanner _scanner;
 
         [DllImport("kernel32.dll", SetLastError = true)]
         static extern bool ReadProcessMemory(
             IntPtr hProcess, IntPtr     lpBaseAddress, [Out] byte[] lpBuffer,
             int    dwSize,   out IntPtr lpNumberOfBytesRead);
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool VirtualQueryEx(
-            IntPtr                       hProcess, IntPtr lpAddress,
-            out MEMORY_BASIC_INFORMATION lpBuffer, uint   dwLength);
-
-        [StructLayout(LayoutKind.Sequential)]
-        struct MEMORY_BASIC_INFORMATION
+        public GmMemory(ILogger<GmMemory> logger, IMemoryScanner scanner)
         {
-            public IntPtr BaseAddress;
-            public IntPtr AllocationBase;
-            public uint   AllocationProtect;
-            public IntPtr RegionSize;
-            public uint   State;
-            public uint   Protect;
-            public uint   Type;
+            this.logger = logger;
+            _scanner = scanner;
         }
-
-        private const uint MEM_COMMIT             = 0x1000;
-        private const uint MEM_PRIVATE            = 0x20000;  // Private memory (not mapped/image)
-        private const uint MEM_IMAGE              = 0x1000000; // Memory mapped from image
-        private const uint PAGE_READWRITE         = 0x04;
-        private const uint PAGE_READONLY          = 0x02;
-        private const uint PAGE_EXECUTE_READ      = 0x20;
-        private const uint PAGE_EXECUTE_READWRITE = 0x40;
-
-        #endregion
 
         #region Caches
 
@@ -73,7 +48,6 @@ namespace NewGMHack.Stub.MemoryScanner
             _weaponCache.Clear();
         }
 
-        // Cache getters for API access
         public MachineBaseInfo? GetCachedMachine(uint id) => _machineCache.TryGetValue(id, out var v) ? v : null;
         public SkillBaseInfo? GetCachedSkill(uint id) => _skillCache.TryGetValue(id, out var v) ? v : null;
         public WeaponBaseInfo? GetCachedWeapon(uint id) => _weaponCache.TryGetValue(id, out var v) ? v : null;
@@ -85,17 +59,14 @@ namespace NewGMHack.Stub.MemoryScanner
 
         #region Buffer Sizes
 
-        private const int MACHINE_BUFFER_SIZE = 0x290; // 656 bytes (matches MachineBaseInfoStruct)
-        private const int SKILL_BUFFER_SIZE   = 0x300; // 768 bytes (matches SkillBaseInfoStruct)
-        private const int WEAPON_BUFFER_SIZE  = 0x140;  // 320 bytes
+        private const int MACHINE_BUFFER_SIZE = 0x290;
+        private const int SKILL_BUFFER_SIZE   = 0x300;
+        private const int WEAPON_BUFFER_SIZE  = 0x140; 
 
         #endregion
 
         #region Public Scan Methods
 
-        /// <summary>
-        /// Scan for machine info by ID
-        /// </summary>
         public async Task<MachineBaseInfo?> ScanMachine(uint id, CancellationToken token)
         {
             if (id == 0) return null;
@@ -105,9 +76,11 @@ namespace NewGMHack.Stub.MemoryScanner
                 return cached;
             }
 
+            var (pattern, mask) = BuildMachinePattern(id);
             var result = await ScanGeneric(
                                            id,
-                                           BuildMachinePattern(id),
+                                           pattern,
+                                           mask,
                                            MACHINE_BUFFER_SIZE,
                                            ValidateMachineData,
                                            ParseMachineData,
@@ -123,9 +96,6 @@ namespace NewGMHack.Stub.MemoryScanner
             return result;
         }
 
-        /// <summary>
-        /// Scan for skill info by ID
-        /// </summary>
         public async Task<SkillBaseInfo?> ScanSkill(uint skillId, CancellationToken token)
         {
             if (skillId == 0) return null;
@@ -138,6 +108,7 @@ namespace NewGMHack.Stub.MemoryScanner
             var result = await ScanGeneric(
                                            skillId,
                                            BuildSkillPattern(skillId),
+                                           null, // Exact match
                                            SKILL_BUFFER_SIZE,
                                            ValidateSkillData,
                                            ParseSkillData,
@@ -153,9 +124,6 @@ namespace NewGMHack.Stub.MemoryScanner
             return result;
         }
 
-        /// <summary>
-        /// Scan for weapon info by ID
-        /// </summary>
         public async Task<WeaponBaseInfo?> ScanWeapon(uint weaponId, CancellationToken token)
         {
             if (weaponId == 0) return null;
@@ -168,6 +136,7 @@ namespace NewGMHack.Stub.MemoryScanner
             var result = await ScanGeneric(
                                            weaponId,
                                            BuildWeaponPattern(weaponId),
+                                           null, // Exact match
                                            WEAPON_BUFFER_SIZE,
                                            ValidateWeaponData,
                                            ParseWeaponData,
@@ -183,32 +152,24 @@ namespace NewGMHack.Stub.MemoryScanner
             return result;
         }
 
-        /// <summary>
-        /// Scan for machine and also populate skill, weapon, and transform info
-        /// </summary>
         public async Task<MachineBaseInfo?> ScanMachineWithDetails(uint id, CancellationToken token)
         {
             var machineInfo = await ScanMachine(id, token);
             if (machineInfo == null) return null;
 
-            // Run skill and weapon scans in parallel for the base machine
             var skillTask = AssignSkillsAsync(machineInfo, token);
             var weaponTask = AssignWeaponsAsync(machineInfo, token);
 
             await Task.WhenAll(skillTask, weaponTask);
 
-            // Scan transformed machine (prevent duplicate if TransformId+1 == MachineId)
             if (machineInfo.HasTransform && machineInfo.TransformId != 0 &&
                 machineInfo.TransformId + 1 != machineInfo.MachineId)
             {
                 machineInfo.TransformedMachine = await ScanMachine(machineInfo.TransformId, token);
                 if (machineInfo.TransformedMachine is not null)
                 {
-                    // Copy skills from base
                     machineInfo.TransformedMachine.Skill1Info = machineInfo.Skill1Info;
                     machineInfo.TransformedMachine.Skill2Info = machineInfo.Skill2Info;
-
-                    // Scan weapons for transformed
                     await AssignWeaponsAsync(machineInfo.TransformedMachine, token);
                 }
             }
@@ -263,6 +224,7 @@ namespace NewGMHack.Stub.MemoryScanner
         private async Task<T?> ScanGeneric<T>(
             uint                                 id,
             byte[]                               pattern,
+            string?                              mask,
             int                                  bufferSize,
             Func<ReadOnlySpan<byte>, uint, bool> validateRaw,
             Func<ReadOnlySpan<byte>, T?>         parseData,
@@ -281,9 +243,12 @@ namespace NewGMHack.Stub.MemoryScanner
                 }
 
                 var sw        = Stopwatch.StartNew();
-                var addresses = await Task.Run(() => ScanProcessMemorySIMD(process, pattern), token);
+                
+                // Use the injected memory scanner
+                var addresses = await _scanner.ScanAsync(process, pattern, mask, token);
+                
                 sw.Stop();
-                logger.ZLogInformation($"Scan{typeName} SIMD found {addresses.Count} addresses in {sw.ElapsedMilliseconds}ms");
+                logger.ZLogInformation($"Scan{typeName} found {addresses.Count} addresses in {sw.ElapsedMilliseconds}ms");
 
                 if (addresses.Count == 0)
                 {
@@ -304,10 +269,8 @@ namespace NewGMHack.Stub.MemoryScanner
 
                         var span = pooledBuffer.AsSpan(0, bufferSize);
 
-                        // Validate raw data
                         if (!validateRaw(span, id)) continue;
 
-                        // Parse and validate transformed data
                         var result = parseData(span);
                         if (result == null) continue;
 
@@ -343,7 +306,6 @@ namespace NewGMHack.Stub.MemoryScanner
         private static bool ValidateSkillData(ReadOnlySpan<byte> data, uint expectedId)
         {
             var raw = MemoryMarshal.Read<SkillBaseInfoStruct>(data);
-            // Match lower 24 bits
             if ((raw.SkillId & 0x00FFFFFF) != (expectedId & 0x00FFFFFF)) return false;
             return true;
         }
@@ -351,7 +313,6 @@ namespace NewGMHack.Stub.MemoryScanner
         private static bool ValidateWeaponData(ReadOnlySpan<byte> data, uint expectedId)
         {
             var raw = MemoryMarshal.Read<WeaponBaseInfoStruct>(data);
-            // Match lower 16 bits
             if ((raw.WeaponId & 0x0000FFFF) != (expectedId & 0x0000FFFF)) return false;
             return true;
         }
@@ -365,25 +326,15 @@ namespace NewGMHack.Stub.MemoryScanner
             var raw  = MemoryMarshal.Read<MachineBaseInfoStruct>(data);
             var info = MachineBaseInfo.FromRaw(raw);
 
-            // Validation: name or MdrsFilePath must not be blank
             if (string.IsNullOrWhiteSpace(info.ChineseName) && string.IsNullOrWhiteSpace(info.EnglishName))
                 return null;
 
-            // Validation: MdrsFilePath must start with "mdrs\\" and end with ".mod" after trim
             var path = info.MdrsFilePath?.Trim() ?? "";
             if (string.IsNullOrWhiteSpace(path)) return null;
             if (!path.StartsWith("mdrs\\", StringComparison.OrdinalIgnoreCase)) return null;
-            //if (!path.EndsWith(".mod", StringComparison.OrdinalIgnoreCase)) return null;
 
-            // Validation: SkillID and Weapon codes must be <= 99999
-            const uint MAX_ID = 99999;
             if (info.Weapon1Code == 0 && info is { Weapon2Code: 0, Weapon3Code: 0 }) return null;
             if (info is { SkillID1 : 0, SkillID2 : 0 }) return null;
-            //if ((info.Weapon1Code != 0 && info.Weapon2Code != 0 && info.Weapon1Code + 1 != info.Weapon2Code) ||
-            //    (info.Weapon2Code != 0 && info.Weapon3Code != 0 && info.Weapon2Code + 1 != info.Weapon3Code))
-            //    return null;
-            //if (info.SkillID1    > MAX_ID || info.SkillID2    > MAX_ID) return null;
-            //if (info.Weapon1Code > MAX_ID || info.Weapon2Code > MAX_ID || info.Weapon3Code > MAX_ID) return null;
 
             return info;
         }
@@ -393,10 +344,9 @@ namespace NewGMHack.Stub.MemoryScanner
             var raw  = MemoryMarshal.Read<SkillBaseInfoStruct>(data);
             var info = SkillBaseInfo.FromRaw(raw);
 
-            // Validation: skill name must not be blank
             if (string.IsNullOrWhiteSpace(info.SkillName)) return null;
             if (string.IsNullOrEmpty(info.Description)) return null;
-            if(!string.IsNullOrEmpty(info.AuraEffect) && !info.AuraEffect.StartsWith(@"fxrs\",StringComparison.OrdinalIgnoreCase))
+            if(!string.IsNullOrEmpty(info.AuraEffect) && !info.AuraEffect.StartsWith(@"fxrs\",StringComparison.OrdinalIgnoreCase))return null;
             if (info.ExactHpActivatePercent > 100) return null;
             if (info.AttackIncrease         > 255 || info.DefenseIncrease > 255 || info.AgilityPercent > 100 ||
                 info.ExactHpActivatePercent > 100) return null;
@@ -411,15 +361,11 @@ namespace NewGMHack.Stub.MemoryScanner
             var raw = MemoryMarshal.Read<WeaponBaseInfoStruct>(data);
             var info = WeaponBaseInfo.FromRaw(raw);
             
-            // Validation: weapon name must not be blank
             if (string.IsNullOrWhiteSpace(info.WeaponName)) return null;
-            
-            // Validation: WeaponType == 0 or > 10 is invalid
             if (raw.WeaponType == 0 || raw.WeaponType > 10) return null;
             if (!string.IsNullOrEmpty(info.TraceEffect) && !info.TraceEffect.StartsWith(@"fxrs\",StringComparison.OrdinalIgnoreCase)) return null;
             if (!string.IsNullOrEmpty(info.AttackEffect) && !info.AttackEffect.StartsWith(@"fxrs\",StringComparison.OrdinalIgnoreCase)) return null;
             if (!string.IsNullOrEmpty(info.AttackSound)  && !info.AttackSound.StartsWith(@"sdrs\",StringComparison.OrdinalIgnoreCase)) return null;
-            // Validation: KnockdownPerHit > KnockdownThreshold is invalid
             if (raw.KnockdownPerHit > raw.KnockdownThreshold && raw.KnockdownThreshold != 0) return null;
             
             return info;
@@ -452,24 +398,34 @@ namespace NewGMHack.Stub.MemoryScanner
         #region Pattern Builders
         
         /// <summary>
-        /// Machine pattern: 4-byte little-endian + 00 00
+        /// Machine pattern: 4-byte little-endian + WILDCARDS + mdrs signature
         /// </summary>
-        private static byte[] BuildMachinePattern(uint id)
+        private static (byte[] pattern, string mask) BuildMachinePattern(uint id)
         {
-            string hex = id.ToString("X").PadLeft(4, '0');
-            return new byte[]
-            {
-                Convert.ToByte(hex.Substring(2, 2), 16),
-                Convert.ToByte(hex.Substring(0, 2), 16),
-                0x00,
-                0x00
+            // Total size needed: offset (0x264) + signature length (10) = 622 bytes
+            int totalSize = 0x264 + 10;
+            var patternBytes = new byte[totalSize];
+            var maskChars = new char[totalSize];
+
+            // Initialize mask with wildcards
+            for (int i = 0; i < totalSize; i++) maskChars[i] = '?';
+
+            // 1. ID at offset 0 (4 bytes)
+            var idBytes = BitConverter.GetBytes(id);
+            Array.Copy(idBytes, 0, patternBytes, 0, 4);
+            for (int i = 0; i < 4; i++) maskChars[i] = 'x';
+
+            // 2. Signature "mdrs\" at offset 0x264
+            var mdrsSig = new byte[] 
+            { 
+                0x6D, 0x00, 0x64, 0x00, 0x72, 0x00, 0x73, 0x00, 0x5C, 0x00 
             };
+            Array.Copy(mdrsSig, 0, patternBytes, 0x264, mdrsSig.Length);
+            for (int i = 0; i < mdrsSig.Length; i++) maskChars[0x264 + i] = 'x';
+
+            return (patternBytes, new string(maskChars));
         }
 
-        /// <summary>
-        /// Skill pattern: 3-byte little-endian + 00 00
-        /// Example: 70121 (0x011189) -> E9 11 01 00 00
-        /// </summary>
         private static byte[] BuildSkillPattern(uint skillId)
         {
             return new byte[]
@@ -482,10 +438,6 @@ namespace NewGMHack.Stub.MemoryScanner
             };
         }
 
-        /// <summary>
-        /// Weapon pattern: 2-byte little-endian + 00 00 00
-        /// Example: 28751 (0x704F) -> 4F 70 00 00 00
-        /// </summary>
         private static byte[] BuildWeaponPattern(uint weaponId)
         {
             return new byte[]
@@ -496,125 +448,6 @@ namespace NewGMHack.Stub.MemoryScanner
                 0x00,
                 0x00
             };
-        }
-        
-        #endregion
-
-        #region SIMD Memory Scan
-        
-        private List<long> ScanProcessMemorySIMD(Process process, byte[] pattern)
-        {
-            var results = new List<long>();
-            var bufferPool = ArrayPool<byte>.Shared;
-            
-            IntPtr address = IntPtr.Zero;
-            IntPtr maxAddress = (IntPtr)0x7FFFFFFF;
-
-            byte firstByte = pattern[0];
-            int patternLength = pattern.Length;
-
-            while (address.ToInt64() < maxAddress.ToInt64())
-            {
-                if (!VirtualQueryEx(process.Handle, address, out var mbi, (uint)Marshal.SizeOf<MEMORY_BASIC_INFORMATION>()))
-                    break;
-                
-                bool isValidType = (mbi.Type == MEM_PRIVATE || mbi.Type == MEM_IMAGE);
-                if (mbi.State == MEM_COMMIT && isValidType && IsReadable(mbi.Protect))
-                {
-                    int regionSize = (int)mbi.RegionSize.ToInt64();
-                    
-                    if (regionSize > 0 && regionSize <= 32 * 1024 * 1024)
-                    {
-                        byte[] buffer = bufferPool.Rent(regionSize);
-                        try
-                        {
-                            if (ReadProcessMemory(process.Handle, mbi.BaseAddress, buffer, regionSize, out var bytesRead))
-                            {
-                                int actualSize = (int)bytesRead.ToInt64();
-                                if (actualSize >= patternLength)
-                                {
-                                    var matches = FindPatternSIMD(buffer.AsSpan(0, actualSize), pattern, firstByte);
-                                    foreach (var offset in matches)
-                                    {
-                                        results.Add(mbi.BaseAddress.ToInt64() + offset);
-                                    }
-                                }
-                            }
-                        }
-                        finally
-                        {
-                            bufferPool.Return(buffer);
-                        }
-                    }
-                }
-
-                address = (IntPtr)(mbi.BaseAddress.ToInt64() + mbi.RegionSize.ToInt64());
-                if (mbi.RegionSize == IntPtr.Zero) break;
-            }
-
-            return results;
-        }
-
-        private static List<int> FindPatternSIMD(ReadOnlySpan<byte> data, byte[] pattern, byte firstByte)
-        {
-            var results = new List<int>();
-            int patternLength = pattern.Length;
-            int dataLength = data.Length;
-            int vectorSize = Vector<byte>.Count;
-            
-            if (dataLength < patternLength) return results;
-
-            Vector<byte> searchVector = new Vector<byte>(firstByte);
-            
-            int i = 0;
-            int limit = dataLength - patternLength;
-            int vectorLimit = limit - vectorSize + 1;
-
-            while (i < vectorLimit)
-            {
-                var chunk = new Vector<byte>(data.Slice(i, vectorSize));
-                var equals = Vector.Equals(chunk, searchVector);
-                
-                if (equals != Vector<byte>.Zero)
-                {
-                    for (int j = 0; j < vectorSize && i + j <= limit; j++)
-                    {
-                        if (data[i + j] == firstByte && MatchPattern(data.Slice(i + j), pattern))
-                        {
-                            results.Add(i + j);
-                        }
-                    }
-                }
-                i += vectorSize;
-            }
-
-            while (i <= limit)
-            {
-                if (data[i] == firstByte && MatchPattern(data.Slice(i), pattern))
-                {
-                    results.Add(i);
-                }
-                i++;
-            }
-
-            return results;
-        }
-
-        private static bool MatchPattern(ReadOnlySpan<byte> data, byte[] pattern)
-        {
-            for (int i = 0; i < pattern.Length; i++)
-            {
-                if (data[i] != pattern[i]) return false;
-            }
-            return true;
-        }
-
-        private static bool IsReadable(uint protect)
-        {
-            return protect == PAGE_READONLY ||
-                   protect == PAGE_READWRITE ||
-                   protect == PAGE_EXECUTE_READ ||
-                   protect == PAGE_EXECUTE_READWRITE;
         }
         
         #endregion

@@ -13,6 +13,7 @@ using NewGMHack.Stub.Hooks;
 using NewGMHack.Stub.MemoryScanner;
 using NewGMHack.Stub.PacketStructs.Recv;
 using NewGMHack.Stub.Services;
+using NewGMHack.Stub.Services.Scanning;
 using NewGMHack.Stub.Models;
 using Reloaded.Hooks;
 using Reloaded.Hooks.Definitions;
@@ -89,6 +90,7 @@ namespace NewGMHack.Stub
                                        //services.AddSingleton<FullAoBScanner>();
                                        services.AddTransient<IBuffSplitter, BuffSplitter>();
                                        services.AddSingleton<IHostedService, MainHookService>();
+                                       services.AddSingleton<IMemoryScanner, SimdMemoryScanner>();
                                        services.AddSingleton<IHostedService, EntityScannerService>();
                                        services.AddSingleton<IHostedService, BombHistoryServices>(); //BUG it locked my services
                                        //services.AddHostedService<MainHookService>();
