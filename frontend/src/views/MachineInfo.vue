@@ -23,8 +23,8 @@ const showTransform = ref(false)
 
 // Current machine data (normal or transformed)
 const currentMachine = computed(() => {
-    if (showTransform.value && machineBaseInfo.value?.transformedMachine) {
-        return machineBaseInfo.value.transformedMachine
+    if (showTransform.value && machineBaseInfo.value?.TransformedMachine) {
+        return machineBaseInfo.value.TransformedMachine
     }
     return machineBaseInfo.value
 })
@@ -32,52 +32,52 @@ const currentMachine = computed(() => {
 // Computed hex values from MachineBaseInfo + OC points
 const hexStats = computed(() => {
     const base = currentMachine.value
-    const ocBase = machineInfo.value?.machineModel?.ocBasePoints
-    const ocBonus = machineInfo.value?.machineModel?.ocBonusPoints
-    const specialAtk = base?.specialAttack
+    const ocBase = machineModel.value?.OcBaseBonusPoints
+    const ocBonus = machineModel.value?.OcBonusExtraPoints
+    const specialAtk = base?.SpecialAttack
 
     return {
         base: {
-            attack: base?.attack ?? 0,
-            agility: (base?.agility ?? 0) * 2,
-            hp: (base?.hp ?? 0) * 0.01,
-            defense: base?.defense ?? 0,
-            sp: (specialAtk?.weaponDamage ?? 0) * 0.01,
-            speed: (base?.forwardSpeed ?? 0) * 2
+            attack: base?.Attack ?? 0,
+            agility: (base?.Agility ?? 0) * 2,
+            hp: (base?.HP ?? 0) * 0.01,
+            defense: base?.Defense ?? 0,
+            sp: (specialAtk?.WeaponDamage ?? 0) * 0.01,
+            speed: (base?.ForwardSpeed ?? 0) * 2
         },
         ocBase: {
-            attack: ocBase?.attack ?? 0,
-            agility: ocBase?.agility ?? 0,
-            hp: ocBase?.hp ?? 0,
-            defense: ocBase?.defense ?? 0,
-            sp: ocBase?.special ?? 0,
-            speed: ocBase?.speed ?? 0
+            attack: ocBase?.Attack ?? 0,
+            agility: ocBase?.Agility ?? 0,
+            hp: ocBase?.Hp ?? 0,
+            defense: ocBase?.Defense ?? 0,
+            sp: ocBase?.Special ?? 0,
+            speed: ocBase?.Speed ?? 0
         },
         ocBonus: {
-            attack: ocBonus?.attack ?? 0,
-            agility: ocBonus?.agility ?? 0,
-            hp: ocBonus?.hp ?? 0,
-            defense: ocBonus?.defense ?? 0,
-            sp: ocBonus?.special ?? 0,
-            speed: ocBonus?.speed ?? 0
+            attack: ocBonus?.Attack ?? 0,
+            agility: ocBonus?.Agility ?? 0,
+            hp: ocBonus?.Hp ?? 0,
+            defense: ocBonus?.Defense ?? 0,
+            sp: ocBonus?.Special ?? 0,
+            speed: ocBonus?.Speed ?? 0
         }
     }
 })
 
-const machineModel = computed(() => machineInfo.value?.machineModel)
-const machineBaseInfo = computed(() => machineInfo.value?.machineBaseInfo)
-const hasTransform = computed(() => machineBaseInfo.value?.hasTransform ?? false)
+const machineModel = computed(() => machineInfo.value?.MachineModel)
+const machineBaseInfo = computed(() => machineInfo.value?.MachineBaseInfo)
+const hasTransform = computed(() => machineBaseInfo.value?.HasTransform ?? false)
 
 const skills = computed(() => [
-    currentMachine.value?.skill1Info,
-    currentMachine.value?.skill2Info
+    currentMachine.value?.Skill1Info,
+    currentMachine.value?.Skill2Info
 ].filter(Boolean))
 
 const weapons = computed(() => [
-    currentMachine.value?.weapon1Info,
-    currentMachine.value?.weapon2Info,
-    currentMachine.value?.weapon3Info,
-    currentMachine.value?.specialAttack
+    currentMachine.value?.Weapon1Info,
+    currentMachine.value?.Weapon2Info,
+    currentMachine.value?.Weapon3Info,
+    currentMachine.value?.SpecialAttack
 ].filter(Boolean))
 </script>
 
@@ -104,13 +104,13 @@ const weapons = computed(() => [
                 <div class="info-card">
                     <h3 class="section-title">Machine Overview</h3>
                     <div class="grid grid-cols-3 gap-2 text-xs">
-                        <div><span class="label">ID:</span> <span class="value">{{ currentMachine?.machineId ?? '--' }}</span></div>
-                        <div><span class="label">Rank:</span> <span class="value-gold">{{ currentMachine?.rank ?? '--' }}</span></div>
-                        <div><span class="label">Quality:</span> <span class="value">{{ '⭐'.repeat(currentMachine?.quality || 0) }} ({{ currentMachine?.quality ?? 0 }})</span></div>
-                        <div class="col-span-2"><span class="label">CN:</span> <span class="value">{{ currentMachine?.chineseName || '--' }}</span></div>
-                        <div><span class="label">Rarity:</span> <span class="value">{{ '⭐'.repeat(currentMachine?.rarity || 0) }} ({{ currentMachine?.rarity ?? 0 }})</span></div>
-                        <div class="col-span-2"><span class="label">EN:</span> <span class="value">{{ currentMachine?.englishName || '--' }}</span></div>
-                        <div><span class="label">Combat:</span> <span class="value-blue">{{ currentMachine?.combatType ?? '--' }}</span></div>
+                        <div><span class="label">ID:</span> <span class="value">{{ currentMachine?.MachineId ?? '--' }}</span></div>
+                        <div><span class="label">Rank:</span> <span class="value-gold">{{ currentMachine?.Rank ?? '--' }}</span></div>
+                        <div><span class="label">Quality:</span> <span class="value">{{ '⭐'.repeat(currentMachine?.Quality || 0) }} ({{ currentMachine?.Quality ?? 0 }})</span></div>
+                        <div class="col-span-2"><span class="label">CN:</span> <span class="value">{{ currentMachine?.ChineseName || '--' }}</span></div>
+                        <div><span class="label">Rarity:</span> <span class="value">{{ '⭐'.repeat(currentMachine?.Rarity || 0) }} ({{ currentMachine?.Rarity ?? 0 }})</span></div>
+                        <div class="col-span-2"><span class="label">EN:</span> <span class="value">{{ currentMachine?.EnglishName || '--' }}</span></div>
+                        <div><span class="label">Combat:</span> <span class="value-blue">{{ currentMachine?.CombatType ?? '--' }}</span></div>
                     </div>
                 </div>
 
@@ -118,26 +118,26 @@ const weapons = computed(() => [
                 <div class="info-card" v-if="machineModel">
                     <h3 class="section-title">User Machine Data</h3>
                     <div class="grid grid-cols-3 gap-2 text-xs">
-                        <div><span class="label">Slot:</span> <span class="value">{{ machineModel.slot }}</span></div>
-                        <div><span class="label">Level:</span> <span class="value">{{ machineModel.level }}</span></div>
-                        <div><span class="label">OC Max:</span> <span class="value">{{ machineModel.ocMaxLevel ?? '--' }}</span></div>
-                        <div><span class="label">Battles:</span> <span class="value">{{ machineModel.battleCount }}</span></div>
-                        <div><span class="label">Battery:</span> <span class="value">{{ machineModel.batteryPercent?.toFixed(1) }}%</span></div>
-                        <div><span class="label">Locked:</span> <span :class="machineModel.isLocked ? 'text-red-400' : 'text-green-400'">{{ machineModel.isLocked ? 'Yes' : 'No' }}</span></div>
-                        <div><span class="label">EXP:</span> <span class="value">{{ machineModel.currentExp ?? '--' }}</span></div>
-                        <div><span class="label">Polish:</span> <span class="value">{{ machineModel.brushPolish ?? '--' }}</span></div>
-                        <div><span class="label">Extra Parts:</span> <span class="value">{{ machineModel.extraSkillParts ?? '--' }}</span></div>
-                        <div class="col-span-3"><span class="label">Buy In Time:</span> <span class="value">{{ machineModel.buyInTime ? new Date(machineModel.buyInTime).toLocaleString() : '--' }}</span></div>
+                        <div><span class="label">Slot:</span> <span class="value">{{ machineModel.Slot }}</span></div>
+                        <div><span class="label">Level:</span> <span class="value">{{ machineModel.Level }}</span></div>
+                        <div><span class="label">OC Max:</span> <span class="value">{{ machineModel.OcMaxLevel ?? '--' }}</span></div>
+                        <div><span class="label">Battles:</span> <span class="value">{{ machineModel.BattleCount }}</span></div>
+                        <div><span class="label">Battery:</span> <span class="value">{{ machineModel.BatteryPercent?.toFixed(1) }}%</span></div>
+                        <div><span class="label">Locked:</span> <span :class="machineModel.IsLocked ? 'text-red-400' : 'text-green-400'">{{ machineModel.IsLocked ? 'Yes' : 'No' }}</span></div>
+                        <div><span class="label">EXP:</span> <span class="value">{{ machineModel.CurrentExp ?? '--' }}</span></div>
+                        <div><span class="label">Polish:</span> <span class="value">{{ machineModel.BrushPolish ?? '--' }}</span></div>
+                        <div><span class="label">Extra Parts:</span> <span class="value">{{ machineModel.ExtraSkillParts ?? '--' }}</span></div>
+                        <div class="col-span-3"><span class="label">Buy In Time:</span> <span class="value">{{ machineModel.BuyInTime ? new Date(machineModel.BuyInTime).toLocaleString() : '--' }}</span></div>
                     </div>
                     <!-- Colors -->
-                    <div class="mt-3" v-if="machineModel.colors">
+                    <div class="mt-3" v-if="machineModel.Colors">
                         <span class="label text-xs">Colors:</span>
-                        <ColorStrip :colors="machineModel.colors" class="mt-1" />
+                        <ColorStrip :colors="machineModel.Colors" class="mt-1" />
                     </div>
                     <!-- OC Parts -->
                     <div class="grid grid-cols-2 gap-3 mt-3">
-                        <div><span class="label text-xs">OC Set 1:</span><OcPartsDisplay :parts="machineModel.oc1Parts" class="mt-1" /></div>
-                        <div><span class="label text-xs">OC Set 2:</span><OcPartsDisplay :parts="machineModel.oc2Parts" class="mt-1" /></div>
+                        <div><span class="label text-xs">OC Set 1:</span><OcPartsDisplay :parts="machineModel.Oc1Parts" class="mt-1" /></div>
+                        <div><span class="label text-xs">OC Set 2:</span><OcPartsDisplay :parts="machineModel.Oc2Parts" class="mt-1" /></div>
                     </div>
                 </div>
 
@@ -161,28 +161,28 @@ const weapons = computed(() => [
                 <div class="info-card" v-if="currentMachine">
                     <h3 class="section-title">Base Stats</h3>
                     <div class="grid grid-cols-4 gap-2 text-xs">
-                        <div><span class="label">HP:</span> <span class="value">{{ currentMachine.hp }}</span></div>
-                        <div><span class="label">Shield:</span> <span class="value">{{ currentMachine.shieldHP }}</span></div>
-                        <div><span class="label">Attack:</span> <span class="value">{{ currentMachine.attack }}</span></div>
-                        <div><span class="label">Defense:</span> <span class="value">{{ currentMachine.defense }}</span></div>
-                        <div><span class="label">Agility:</span> <span class="value">{{ currentMachine.agility }}</span></div>
-                        <div><span class="label">FwdSpeed:</span> <span class="value">{{ currentMachine.forwardSpeed }}</span></div>
-                        <div><span class="label">MoveSpeed:</span> <span class="value">{{ currentMachine.moveSpeed }}</span></div>
-                        <div><span class="label">BzdSpeed:</span> <span class="value">{{ currentMachine.bzdSpeed }}</span></div>
-                        <div><span class="label">Boost Capacity:</span> <span class="value">{{ currentMachine.boostCapacity }}</span></div>
-                        <div><span class="label">Boost Recovery:</span> <span class="value">{{ currentMachine.boostRecoverySpeed }}</span></div>
-                        <div><span class="label">Boost Use:</span> <span class="value">{{ currentMachine.boostConsumption }}</span></div>
-                        <div><span class="label">Radar:</span> <span class="value">{{ currentMachine.radarRange }}</span></div>
-                        <div><span class="label">Respawn:</span> <span class="value">{{ currentMachine.respawnTimeSeconds }}s</span></div>
-                        <div><span class="label">TrackSpd:</span> <span class="value">{{ currentMachine.trackSpeed }}</span></div>
-                        <div><span class="label">TrackAcc:</span> <span class="value">{{ currentMachine.trackAcceleration?.toFixed(2) }}</span></div>
-                        <div><span class="label">Atkspd Lv:</span> <span class="value">{{ currentMachine.attackSpeedLevel }}</span></div>
+                        <div><span class="label">HP:</span> <span class="value">{{ currentMachine.HP }}</span></div>
+                        <div><span class="label">Shield:</span> <span class="value">{{ currentMachine.ShieldHP }}</span></div>
+                        <div><span class="label">Attack:</span> <span class="value">{{ currentMachine.Attack }}</span></div>
+                        <div><span class="label">Defense:</span> <span class="value">{{ currentMachine.Defense }}</span></div>
+                        <div><span class="label">Agility:</span> <span class="value">{{ currentMachine.Agility }}</span></div>
+                        <div><span class="label">FwdSpeed:</span> <span class="value">{{ currentMachine.ForwardSpeed }}</span></div>
+                        <div><span class="label">MoveSpeed:</span> <span class="value">{{ currentMachine.MoveSpeed }}</span></div>
+                        <div><span class="label">BzdSpeed:</span> <span class="value">{{ currentMachine.BzdSpeed }}</span></div>
+                        <div><span class="label">Boost Capacity:</span> <span class="value">{{ currentMachine.BoostCapacity }}</span></div>
+                        <div><span class="label">Boost Recovery:</span> <span class="value">{{ currentMachine.BoostRecoverySpeed }}</span></div>
+                        <div><span class="label">Boost Use:</span> <span class="value">{{ currentMachine.BoostConsumption }}</span></div>
+                        <div><span class="label">Radar:</span> <span class="value">{{ currentMachine.RadarRange }}</span></div>
+                        <div><span class="label">Respawn:</span> <span class="value">{{ currentMachine.RespawnTimeSeconds }}s</span></div>
+                        <div><span class="label">TrackSpd:</span> <span class="value">{{ currentMachine.TrackSpeed }}</span></div>
+                        <div><span class="label">TrackAcc:</span> <span class="value">{{ currentMachine.TrackAcceleration?.toFixed(2) }}</span></div>
+                        <div><span class="label">Atkspd Lv:</span> <span class="value">{{ currentMachine.AttackSpeedLevel }}</span></div>
                     </div>
                     <!-- Shield Info -->
                     <div class="grid grid-cols-3 gap-2 text-xs mt-2 pt-2 border-t border-white/10">
-                        <div><span class="label">Shield Type:</span> <span class="value">{{ currentMachine.shieldType || '--' }}</span></div>
-                        <div><span class="label">Shield Dir:</span> <span class="value">🛡️ {{ currentMachine.shieldDirection || '--' }}</span></div>
-                        <div><span class="label">Shield %:</span> <span class="value">{{ currentMachine.shieldDeductionPercentage ? currentMachine.shieldDeductionPercentage + '%' : '--' }}</span></div>
+                        <div><span class="label">Shield Type:</span> <span class="value">{{ currentMachine.ShieldType || '--' }}</span></div>
+                        <div><span class="label">Shield Dir:</span> <span class="value">🛡️ {{ currentMachine.ShieldDirection || '--' }}</span></div>
+                        <div><span class="label">Shield %:</span> <span class="value">{{ currentMachine.ShieldDeductionPercentage ? currentMachine.ShieldDeductionPercentage + '%' : '--' }}</span></div>
                     </div>
                 </div>
 

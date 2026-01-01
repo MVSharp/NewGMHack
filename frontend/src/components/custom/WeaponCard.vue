@@ -1,32 +1,32 @@
 <script setup lang="ts">
 interface WeaponInfo {
-    weaponId: number
-    weaponName: string
-    weaponType: string
+    WeaponId: number
+    WeaponName: string
+    WeaponType: string
     // Core
-    weaponDamage: number
-    weaponRange: number
+    WeaponDamage: number
+    WeaponRange: number
     // Ammo
-    ammoCount: number
-    ammoRecoverySpeed: number
-    coolTime: number
+    AmmoCount: number
+    AmmoRecoverySpeed: number
+    CoolTime: number
     // Precision
-    missileSpeed: number
-    aimSpeed: number
+    MissileSpeed: number
+    AimSpeed: number
     // Impact
-    knockbackEffect: number
-    knockdownPerHit: number
-    knockdownThreshold: number
+    KnockbackEffect: number
+    KnockdownPerHit: number
+    KnockdownThreshold: number
     // Pierce
-    hasPierce: boolean
-    pierceValue: number
+    HasPierce: boolean
+    PierceValue: number
     // Movement
-    allowUseWhenMove: boolean
+    AllowUseWhenMove: boolean
     // AoE
-    collisionWidth: number
-    collisionHeight: number
-    splashRadius: number
-    splashCoreRadius: number
+    CollisionWidth: number
+    CollisionHeight: number
+    SplashRadius: number
+    SplashCoreRadius: number
 }
 
 defineProps<{
@@ -53,64 +53,64 @@ const typeColor = (type: string) => {
                 {{ isSpecial ? '⚡ Special' : `Weapon ${index}` }}
             </span>
             <div class="flex items-center gap-2">
-                <span :class="['text-[10px] px-1.5 py-0.5 rounded border', typeColor(weapon.weaponType)]">
-                    {{ weapon.weaponType || '?' }}
+                <span :class="['text-[10px] px-1.5 py-0.5 rounded border', typeColor(weapon.WeaponType)]">
+                    {{ weapon.WeaponType || '?' }}
                 </span>
-                <span class="text-[10px] text-gray-600">ID:{{ weapon.weaponId }}</span>
+                <span class="text-[10px] text-gray-600">ID:{{ weapon.WeaponId }}</span>
             </div>
         </div>
         
         <!-- Name -->
-        <div class="text-white font-medium text-sm mb-2">{{ weapon.weaponName || 'Unknown' }}</div>
+        <div class="text-white font-medium text-sm mb-2">{{ weapon.WeaponName || 'Unknown' }}</div>
         
         <!-- Core Stats Row -->
         <div class="flex gap-2 mb-2">
             <div class="core-stat">
                 <span class="text-gray-500">DMG</span>
-                <span class="text-red-400 font-bold">{{ weapon.weaponDamage }}</span>
+                <span class="text-red-400 font-bold">{{ weapon.WeaponDamage }}</span>
             </div>
             <div class="core-stat">
                 <span class="text-gray-500">RNG</span>
-                <span class="text-blue-400">{{ weapon.weaponRange }}</span>
+                <span class="text-blue-400">{{ weapon.WeaponRange }}</span>
             </div>
-            <div class="core-stat" v-if="weapon.ammoCount">
+            <div class="core-stat" v-if="weapon.AmmoCount">
                 <span class="text-gray-500">AMMO</span>
-                <span class="text-white">{{ weapon.ammoCount }}</span>
+                <span class="text-white">{{ weapon.AmmoCount }}</span>
             </div>
-            <div class="core-stat" v-if="weapon.coolTime">
+            <div class="core-stat" v-if="weapon.CoolTime">
                 <span class="text-gray-500">CD</span>
-                <span class="text-white">{{ weapon.coolTime }}</span>
+                <span class="text-white">{{ weapon.CoolTime }}</span>
             </div>
         </div>
 
         <!-- Secondary Stats Grid -->
         <div class="grid grid-cols-4 gap-1 text-[10px]">
             <!-- Ammo & Speed -->
-            <div v-if="weapon.ammoRecoverySpeed" class="stat">Reload: {{ weapon.ammoRecoverySpeed }}</div>
-            <div v-if="weapon.missileSpeed" class="stat">MissSpd: {{ weapon.missileSpeed }}</div>
-            <div v-if="weapon.aimSpeed" class="stat">AimSpd: {{ weapon.aimSpeed }}</div>
+            <div v-if="weapon.AmmoRecoverySpeed" class="stat">Reload: {{ weapon.AmmoRecoverySpeed }}</div>
+            <div v-if="weapon.MissileSpeed" class="stat">MissSpd: {{ weapon.MissileSpeed }}</div>
+            <div v-if="weapon.AimSpeed" class="stat">AimSpd: {{ weapon.AimSpeed }}</div>
             
             <!-- Impact -->
-            <div v-if="weapon.knockbackEffect" class="stat">Knockback: {{ weapon.knockbackEffect }}</div>
-            <div v-if="weapon.knockdownPerHit || weapon.knockdownThreshold" class="stat text-yellow-400">
-                KD: {{ weapon.knockdownPerHit }}/{{ weapon.knockdownThreshold }}
+            <div v-if="weapon.KnockbackEffect" class="stat">Knockback: {{ weapon.KnockbackEffect }}</div>
+            <div v-if="weapon.KnockdownPerHit || weapon.KnockdownThreshold" class="stat text-yellow-400">
+                KD: {{ weapon.KnockdownPerHit }}/{{ weapon.KnockdownThreshold }}
             </div>
             
             <!-- Pierce -->
-            <div v-if="weapon.hasPierce" class="stat text-purple-400">Pierce: {{ weapon.pierceValue || '✓' }}</div>
+            <div v-if="weapon.HasPierce" class="stat text-purple-400">Pierce: {{ weapon.PierceValue || '✓' }}</div>
             
             <!-- AoE -->
-            <div v-if="weapon.splashRadius" class="stat text-orange-400">Splash: {{ weapon.splashRadius }}</div>
-            <div v-if="weapon.splashCoreRadius" class="stat text-orange-300">Core: {{ weapon.splashCoreRadius }}</div>
-            <div v-if="weapon.collisionWidth && weapon.collisionHeight" class="stat">
-                Size: {{ weapon.collisionWidth }}×{{ weapon.collisionHeight }}
+            <div v-if="weapon.SplashRadius" class="stat text-orange-400">Splash: {{ weapon.SplashRadius }}</div>
+            <div v-if="weapon.SplashCoreRadius" class="stat text-orange-300">Core: {{ weapon.SplashCoreRadius }}</div>
+            <div v-if="weapon.CollisionWidth && weapon.CollisionHeight" class="stat">
+                Size: {{ weapon.CollisionWidth }}×{{ weapon.CollisionHeight }}
             </div>
         </div>
 
         <!-- Tags -->
-        <div class="flex gap-1 mt-2" v-if="weapon.allowUseWhenMove || weapon.hasPierce">
-            <span v-if="weapon.allowUseWhenMove" class="tag bg-green-500/20 text-green-400 border-green-500/30">Move Fire</span>
-            <span v-if="weapon.hasPierce && !weapon.pierceValue" class="tag bg-purple-500/20 text-purple-400 border-purple-500/30">Pierce</span>
+        <div class="flex gap-1 mt-2" v-if="weapon.AllowUseWhenMove || weapon.HasPierce">
+            <span v-if="weapon.AllowUseWhenMove" class="tag bg-green-500/20 text-green-400 border-green-500/30">Move Fire</span>
+            <span v-if="weapon.HasPierce && !weapon.PierceValue" class="tag bg-purple-500/20 text-purple-400 border-purple-500/30">Pierce</span>
         </div>
     </div>
 </template>

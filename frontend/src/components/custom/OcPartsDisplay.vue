@@ -1,9 +1,9 @@
 <script setup lang="ts">
 interface OcParts {
-    part1: number
-    part2: number
-    part3: number
-    part4: number
+    Part1: number
+    Part2: number
+    Part3: number
+    Part4: number
 }
 
 defineProps<{
@@ -17,9 +17,9 @@ defineProps<{
             v-for="n in 4" 
             :key="n"
             class="part-block"
-            :class="{ 'has-part': parts && (parts as any)[`part${n}`] > 0 }"
+            :class="{ 'has-part': parts && (parts as any)[`Part${n}`] > 0 }"
         >
-            <span class="text-xs">{{ parts ? (parts as any)[`part${n}`] || '-' : '-' }}</span>
+            <span class="text-xs">{{ parts ? (parts as any)[`Part${n}`] || '-' : '-' }}</span>
         </div>
     </div>
 </template>

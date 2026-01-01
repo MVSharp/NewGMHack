@@ -70,7 +70,10 @@ namespace NewGmHack.GUI.Services
                         webBuilder.ConfigureServices(services =>
                         {
                             services.AddCors();
-                            services.AddSignalR();
+                            services.AddSignalR()
+                                .AddJsonProtocol(options => {
+                                    options.PayloadSerializerOptions.PropertyNamingPolicy = null;
+                                });
                             services.AddSingleton(new DbConfig { ConnectionString = connString });
                             // Pass the outer channel to inner container
                             services.AddSingleton(_channel);
