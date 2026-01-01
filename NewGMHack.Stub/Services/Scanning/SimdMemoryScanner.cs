@@ -9,12 +9,22 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using ZLogger;
 
 namespace NewGMHack.Stub.Services.Scanning
 {
      public class SimdMemoryScanner : IMemoryScanner
     {
+        private readonly ILogger<SimdMemoryScanner> _logger;
+
+        public SimdMemoryScanner(ILogger<SimdMemoryScanner> logger)
+        {
+            _logger = logger;
+        }
+
         #region Win32 API
+
 
         [DllImport("kernel32.dll", SetLastError = true)]
         static extern bool ReadProcessMemory(
@@ -50,91 +60,180 @@ namespace NewGMHack.Stub.Services.Scanning
 
         public async Task<List<long>> ScanAsync(Process process, byte[] pattern, string? mask = null, CancellationToken token = default)
         {
-            if (process == null || process.HasExited) return new List<long>();
-            if (pattern == null || pattern.Length == 0) return new List<long>();
-
-            // Normalize mask
-            if (string.IsNullOrEmpty(mask))
+            var batchInput = new List<(byte[] pattern, string mask, int id)>
             {
-                mask = new string('x', pattern.Length);
-            }
-            if (mask.Length != pattern.Length)
-            {
-                 throw new ArgumentException("Mask length must match pattern length.");
-            }
-
-            // Convert mask to bool array for faster access
-            bool[] boolMask = mask.Select(c => c != '?').ToArray();
-
-            // 1. Collect and Chunk Regions
-            var regions = GetRegions(process);
-            var jobs = CreateScanJobs(regions, pattern.Length);
-
-            // 2. Parallel Scan
-            var results = new ConcurrentBag<long>();
-            byte firstByte = pattern[0];
-            bool firstByteMasked = boolMask[0];
-
-            // Limit concurrency slightly to avoid thread pool starvation or aggressive memory usage
-            // The default is -1 (ProcessorCount), which is usually fine with small buffers.
-            var parallelOptions = new ParallelOptions 
-            { 
-                CancellationToken = token,
-                MaxDegreeOfParallelism = Environment.ProcessorCount 
+                (pattern, mask ?? "", 0)
             };
 
-            await Task.Run(() =>
-            {
-                Parallel.ForEach(jobs, parallelOptions, (job) =>
-                {
-                    if (token.IsCancellationRequested) return;
+            var results = await ScanBatchAsync(process, batchInput, token);
+            return results.TryGetValue(0, out var list) ? list : new List<long>();
+        }
 
-                    // Rent a buffer large enough for the chunk + potential overlap
-                    // job.Size is the SCAN SIZE (number of valid start positions)
-                    // We need to read job.Size + pattern.Length - 1 bytes to check the last position
-                    int readSize = job.Size + pattern.Length - 1;
-                    
-                    // Clamp readSize to not exceed region boundaries (though CheckScanJobs handles this logically)
-                    // The job.Size is calculated such that BaseAddress + Size + PatternLen - 1 <= RegionEnd
-                    
+        private struct PatternInfo
+        {
+            public int Id;
+            public byte[] Pattern;
+            public bool[] Mask;
+            public byte AnchorByte;
+            public int AnchorOffset;
+            public int PatternLength;
+        }
+
+        public async Task<Dictionary<int, List<long>>> ScanBatchAsync(Process process, List<(byte[] pattern, string mask, int id)> searchPatterns, CancellationToken token = default)
+        {
+            var results = new ConcurrentDictionary<int, ConcurrentBag<long>>();
+            if (process == null || process.HasExited || searchPatterns == null || searchPatterns.Count == 0) 
+                return new Dictionary<int, List<long>>();
+
+            // 1. Pre-process patterns
+            var patterns = new List<PatternInfo>();
+            int maxPatternLength = 0;
+
+            foreach (var (p, m, id) in searchPatterns)
+            {
+                if (p == null || p.Length == 0) continue;
+                
+                string mask = string.IsNullOrEmpty(m) ? new string('x', p.Length) : m;
+                if (mask.Length != p.Length) continue;
+
+                var boolMask = mask.Select(c => c != '?').ToArray();
+                var anchor = SelectAnchor(p, boolMask);
+
+                patterns.Add(new PatternInfo
+                {
+                    Id = id,
+                    Pattern = p,
+                    Mask = boolMask,
+                    AnchorByte = anchor.Byte,
+                    AnchorOffset = anchor.Offset,
+                    PatternLength = p.Length
+                });
+
+                if (p.Length > maxPatternLength) maxPatternLength = p.Length;
+                
+                // Initialize result bag
+                results[id] = new ConcurrentBag<long>();
+            }
+
+            if (patterns.Count == 0) return new Dictionary<int, List<long>>();
+
+            // 2. Collect Regions & Jobs
+            // We use the LONGEST pattern to determine minimum chunk size validity, 
+            // but for safety we should arguably use the shortest or handle them individually.
+            // However, CreateScanJobs filters out regions smaller than pattern. 
+            // We should pass maxPatternLength to ensure we don't process tiny regions useless to everyone,
+            // or better: pass 1 (or min) and filter inside. 
+            // For now, let's use the SHORTEST pattern length for job creation to be inclusive,
+            // and filter individually.
+            int minPatternLength = patterns.Min(x => x.PatternLength);
+            
+            var regions = GetRegions(process);
+            var jobs = CreateScanJobs(regions, minPatternLength);
+
+            // 3. Parallel Scan
+            // ReadProcessMemory is thread-safe and safe against crashes (returns false).
+            // We use Parallel.ForEach to maximize throughput.
+            
+            Parallel.ForEach(jobs, 
+                new ParallelOptions { CancellationToken = token, MaxDegreeOfParallelism = Environment.ProcessorCount },
+                // Local Init: Rent a buffer for this thread
+                () => 
+                {
                     var bufferPool = ArrayPool<byte>.Shared;
-                    byte[] buffer = bufferPool.Rent(readSize);
+                    int maxBufferSize = MAX_CHUNK_SIZE + maxPatternLength;
+                    return (Buffer: bufferPool.Rent(maxBufferSize), Pool: bufferPool, BufferSize: maxBufferSize);
+                },
+                // Body
+                (job, loopedState, localState) =>
+                {
+                    var (buffer, _, currentBufferSize) = localState;
+                    
+                    // Allow buffer growth if needed (rare/impossible if maxPatternLength is consistent)
+                    int readSize = job.Size + maxPatternLength - 1;
+                    if (buffer.Length < readSize)
+                    {
+                        localState.Pool.Return(buffer);
+                        buffer = localState.Pool.Rent(readSize);
+                        localState = (buffer, localState.Pool, readSize);
+                    }
 
                     try
                     {
                         if (ReadProcessMemory(process.Handle, job.BaseAddress, buffer, readSize, out var bytesRead))
                         {
                             int actualSize = (int)bytesRead.ToInt64();
-                            // We only scan up to 'actualSize' 
-                            // but effectively we only care about matches starting within [0, job.Size)
-                            // or [0, actualSize - pattern.Length]
-                            
-                            int scanLimit = actualSize; 
-                            
-                            if (scanLimit >= pattern.Length)
+                            var bufferSpan = buffer.AsSpan(0, actualSize);
+
+                            // Run ALL patterns against this buffer
+                            foreach (var pat in patterns)
                             {
-                                var matches = FindPatternSIMD(buffer.AsSpan(0, scanLimit), pattern, boolMask, firstByte, firstByteMasked);
-                                foreach (var offset in matches)
-                                {
-                                    // Filter out matches that might belong to the next chunk's overlap 
-                                    // if we didn't handle overlap strictly by start index.
-                                    // Using job.Size as the limit of *start positions* ensures disjoint keys.
-                                    if (offset < job.Size)
-                                    {
-                                        results.Add(job.BaseAddress.ToInt64() + offset);
-                                    }
-                                }
+                                if (actualSize < pat.PatternLength) continue;
+                                ScanSpan(bufferSpan, pat.Pattern, pat.Mask, pat.AnchorByte, pat.AnchorOffset, job.BaseAddress.ToInt64(), job.Size, results[pat.Id]);
                             }
                         }
                     }
-                    finally
+                    catch (Exception ex)
                     {
-                        bufferPool.Return(buffer);
+                        _logger?.ZLogError($"Batch Scan Error at 0x{job.BaseAddress:X}: {ex.Message}");
                     }
-                });
-            }, token);
 
-            return results.ToList();
+                    return localState; // Pass state to next iteration
+                },
+                // Local Finally: Return buffer
+                (localState) =>
+                {
+                    localState.Pool.Return(localState.Buffer);
+                });
+            
+            return results.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToList());
+        }
+
+        private void ScanSpan(ReadOnlySpan<byte> data, byte[] pattern, bool[] mask, byte anchorByte, int anchorOffset, long baseAddress, int scanLimit, ConcurrentBag<long> results)
+        {
+            var matches = FindPatternSIMD(data, pattern, mask, anchorByte, anchorOffset);
+            foreach (var offset in matches)
+            {
+                // Filter overlap
+                if (offset < scanLimit)
+                {
+                    results.Add(baseAddress + offset);
+                }
+            }
+        }
+
+        
+        private readonly struct AnchorInfo
+        {
+            public readonly int Offset;
+            public readonly byte Byte;
+            public AnchorInfo(int offset, byte b) { Offset = offset; Byte = b; }
+        }
+
+        private AnchorInfo SelectAnchor(byte[] pattern, bool[] mask)
+        {
+            // Heuristic: Prefer non-00, non-FF values.
+            // If all are 00/FF or masked, pick the first masked byte.
+            
+            for (int i = 0; i < pattern.Length; i++)
+            {
+                if (!mask[i]) continue; // Skip wildcards
+
+                byte b = pattern[i];
+                // Good anchor?
+                if (b != 0x00 && b != 0xFF) 
+                {
+                    return new AnchorInfo(i, b);
+                }
+            }
+            
+            // Fallback: First valid mask
+            for (int i = 0; i < pattern.Length; i++)
+            {
+                if (mask[i]) return new AnchorInfo(i, pattern[i]);
+            }
+            
+            // Fallback: 0, 0 (Shouldn't happen if pattern has at least 1 byte not wildcard)
+            return new AnchorInfo(0, pattern[0]);
         }
 
         private struct ScanJob
@@ -211,66 +310,76 @@ namespace NewGMHack.Stub.Services.Scanning
             return regions;
         }
 
-        private static List<int> FindPatternSIMD(ReadOnlySpan<byte> data, byte[] pattern, bool[] mask, byte firstByte, bool firstByteMasked)
+        private static List<int> FindPatternSIMD(ReadOnlySpan<byte> data, byte[] pattern, bool[] mask, byte anchorByte, int anchorOffset)
         {
             var results = new List<int>();
             int patternLength = pattern.Length;
             int dataLength = data.Length;
             int vectorSize = Vector<byte>.Count;
 
-            if (dataLength < patternLength) return results;
-
-            // Simple optimization: If first byte matches, we check the rest.
-            // If first byte is a wildcard, we can't use SIMD to skip efficiently on it.
-            // But usually first byte is known. If not, we scan linearly or pick a different anchor (complexity).
-            // For now, assume first byte is known or fallback to linear.
+            // We scan 'data' looking for 'anchorByte'.
+            // Effective search range for anchor: [anchorOffset, dataLength - (patternLength - anchorOffset)]
+            // Because if anchor is found at 'p', the pattern starts at 'p - anchorOffset'.
             
-            if (firstByteMasked)
+            // Adjust data range to search for the ANCHOR
+            int searchStart = anchorOffset;
+            int searchEnd = dataLength - (patternLength - anchorOffset); 
+            // e.g. Data=100, Pat=10, AnchorAt=2. Anchor must be in [2, 100-(8)] = [2, 92].
+            // If Anchor at 2, Start at 0. If Anchor at 92, Start at 90. End at 90+10=100.
+            
+            if (searchEnd < searchStart) return results;
+
+            int limit = searchEnd - searchStart + 1;
+            // The slice we actually search in:
+            var searchSpace = data.Slice(searchStart, searchEnd - searchStart);
+            
+            // SIMD Search on the Search Space
+            Vector<byte> searchVector = new Vector<byte>(anchorByte);
+            
+            int i = 0;
+            int vectorLimit = searchSpace.Length - vectorSize;
+
+            // 1. Vectorized Search for Anchor
+            while (i <= vectorLimit)
             {
-                Vector<byte> searchVector = new Vector<byte>(firstByte);
-                int i = 0;
-                int limit = dataLength - patternLength;
-                int vectorLimit = limit - vectorSize + 1;
-
-                while (i < vectorLimit)
+                var chunk = new Vector<byte>(searchSpace.Slice(i, vectorSize));
+                var equals = Vector.Equals(chunk, searchVector);
+                
+                if (equals != Vector<byte>.Zero)
                 {
-                    var chunk = new Vector<byte>(data.Slice(i, vectorSize));
-                    var equals = Vector.Equals(chunk, searchVector);
-
-                    if (equals != Vector<byte>.Zero)
+                    // Fallback for missing ExtractMostSignificantBits in older .NET versions / targets
+                    for (int k = 0; k < vectorSize; k++)
                     {
-                        for (int j = 0; j < vectorSize && i + j <= limit; j++)
+                        if (equals[k] != 0) // Byte matched
                         {
-                            if (data[i + j] == firstByte && MatchPattern(data.Slice(i + j), pattern, mask))
+                            int patternStart = i + k;
+                            if (patternStart >= 0 && patternStart <= dataLength - patternLength)
                             {
-                                results.Add(i + j);
+                                if (MatchPattern(data.Slice(patternStart), pattern, mask))
+                                {
+                                    results.Add(patternStart);
+                                }
                             }
                         }
                     }
-                    i += vectorSize;
                 }
-
-                while (i <= limit)
-                {
-                    if (data[i] == firstByte && MatchPattern(data.Slice(i), pattern, mask))
-                    {
-                        results.Add(i);
-                    }
-                    i++;
-                }
+                i += vectorSize;
             }
-            else
+
+            // 2. Tail Search
+            while (i < searchSpace.Length)
             {
-                // First byte is wildcard, fallback to linear scan (slower but correct)
-                for (int i = 0; i <= dataLength - patternLength; i++)
+                if (searchSpace[i] == anchorByte)
                 {
-                    if (MatchPattern(data.Slice(i), pattern, mask))
+                    int patternStart = i; // Same logic as above
+                    if (MatchPattern(data.Slice(patternStart), pattern, mask))
                     {
-                        results.Add(i);
+                        results.Add(patternStart);
                     }
                 }
+                i++;
             }
-
+            
             return results;
         }
 

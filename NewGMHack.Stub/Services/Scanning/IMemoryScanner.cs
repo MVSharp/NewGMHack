@@ -26,5 +26,11 @@ namespace NewGMHack.Stub.Services.Scanning
         /// <param name="token">Cancellation token.</param>
         /// <returns>A list of addresses where the pattern matches.</returns>
         Task<List<long>> ScanAsync(Process process, byte[] pattern, string? mask = null, CancellationToken token = default);
+
+        /// <summary>
+        /// Scans for multiple patterns in a single pass.
+        /// Returns a dictionary where key is the ID provided in the input tuple, and value is list of found addresses.
+        /// </summary>
+        Task<Dictionary<int, List<long>>> ScanBatchAsync(Process process, List<(byte[] pattern, string mask, int id)> searchPatterns, CancellationToken token = default);
     }
 }

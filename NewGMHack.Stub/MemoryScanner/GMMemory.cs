@@ -157,10 +157,8 @@ namespace NewGMHack.Stub.MemoryScanner
             var machineInfo = await ScanMachine(id, token);
             if (machineInfo == null) return null;
 
-            var skillTask = AssignSkillsAsync(machineInfo, token);
-            var weaponTask = AssignWeaponsAsync(machineInfo, token);
-
-            await Task.WhenAll(skillTask, weaponTask);
+            // Super Batch: Scan all Skills and Weapons in ONE pass
+            await AssignDetailsAsync(machineInfo, token);
 
             if (machineInfo.HasTransform && machineInfo.TransformId != 0 &&
                 machineInfo.TransformId + 1 != machineInfo.MachineId)
@@ -170,51 +168,143 @@ namespace NewGMHack.Stub.MemoryScanner
                 {
                     machineInfo.TransformedMachine.Skill1Info = machineInfo.Skill1Info;
                     machineInfo.TransformedMachine.Skill2Info = machineInfo.Skill2Info;
-                    await AssignWeaponsAsync(machineInfo.TransformedMachine, token);
+                    // Also scan weapons for transformed machine.
+                    // Ideally we should have batched THIS too into the first call if we knew the ID.
+                    // But we don't know the TransformId until we verify the first Machine.
+                    // So this remains a second step, but improved.
+                    await AssignDetailsAsync(machineInfo.TransformedMachine, token);
                 }
             }
 
             return machineInfo;
         }
 
-        private async Task AssignSkillsAsync(MachineBaseInfo info, CancellationToken token)
+        private async Task AssignDetailsAsync(MachineBaseInfo info, CancellationToken token)
         {
-            var tasks = new List<Task<SkillBaseInfo?>>();
-            Task<SkillBaseInfo?>? t1 = null, t2 = null;
+            // Collect all IDs
+            var skillIds = new List<uint>();
+            if (info.SkillID1 != 0) skillIds.Add(info.SkillID1);
+            if (info.SkillID2 != 0) skillIds.Add(info.SkillID2);
 
-            if (info.SkillID1 != 0) t1 = ScanSkill(info.SkillID1, token);
-            if (info.SkillID2 != 0) t2 = ScanSkill(info.SkillID2, token);
+            var weaponIds = new List<uint>();
+            if (info.Weapon1Code != 0) weaponIds.Add(info.Weapon1Code);
+            if (info.Weapon2Code != 0) weaponIds.Add(info.Weapon2Code);
+            if (info.Weapon3Code != 0) weaponIds.Add(info.Weapon3Code);
+            if (info.SpecialAttackCode != 0) weaponIds.Add(info.SpecialAttackCode);
+            weaponIds = weaponIds.Distinct().ToList();
 
-            if (t1 != null) tasks.Add(t1);
-            if (t2 != null) tasks.Add(t2);
+            if (skillIds.Count == 0 && weaponIds.Count == 0) return;
 
-            if (tasks.Count > 0) await Task.WhenAll(tasks);
+            string processName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ=="));
+            var process = Process.GetProcessesByName(processName).FirstOrDefault();
+            if (process == null) return;
 
-            if (t1 != null) info.Skill1Info = await t1;
-            if (t2 != null) info.Skill2Info = await t2;
-        }
+            // 1. Build Batch Patterns
+            var batchInput = new List<(byte[], string, int)>();
+            
+            // We use positive IDs for everything, assuming no overlap in ID space or we just check context.
+            // Skill and Weapon IDs might overlap? 
+            // SkillId 70227, WeaponId 28698. Seems distinct ranges.
+            // But to be safe, we could use negative IDs for Skills or mask them?
+            // Let's assume unique or use a differentiation. 
+            // Actually, dictionary `ID -> Addresses`. If ID=1 exists in both, we scan pattern for ID=1.
+            // If patterns are different, we add both (Tuple in input is unique pattern).
+            // But result dictionary key is `int`. 
+            // Fix: Use 1000000 offset for Skills to guarantee uniqueness if ranges overlap.
+            
+            foreach (var id in weaponIds)
+            {
+                batchInput.Add((BuildWeaponPattern(id), null, (int)id));
+            }
+            foreach (var id in skillIds)
+            {
+                // Offset Skill IDs just in case
+                batchInput.Add((BuildSkillPattern(id), null, (int)id + 1000000));
+            }
 
-        private async Task AssignWeaponsAsync(MachineBaseInfo info, CancellationToken token)
-        {
-            var tasks = new List<Task<WeaponBaseInfo?>>();
-            Task<WeaponBaseInfo?>? w1 = null, w2 = null, w3 = null, sp = null;
+            // 2. Scan Batch
+            var sw = Stopwatch.StartNew();
+            logger.ZLogInformation($"BatchScan Input: {weaponIds.Count} Weapons, {skillIds.Count} Skills");
+            
+            var results = await _scanner.ScanBatchAsync(process, batchInput, token);
+            
+            sw.Stop();
+            logger.ZLogInformation($"BatchScan found results in {sw.ElapsedMilliseconds}ms");
 
-            if (info.Weapon1Code != 0) w1 = ScanWeapon(info.Weapon1Code, token);
-            if (info.Weapon2Code != 0) w2 = ScanWeapon(info.Weapon2Code, token);
-            if (info.Weapon3Code != 0) w3 = ScanWeapon(info.Weapon3Code, token);
-            if (info.SpecialAttackCode != 0) sp = ScanWeapon(info.SpecialAttackCode, token);
 
-            if (w1 != null) tasks.Add(w1);
-            if (w2 != null) tasks.Add(w2);
-            if (w3 != null) tasks.Add(w3);
-            if (sp != null) tasks.Add(sp);
+            // 3. Process Results
+            var bufferPool = ArrayPool<byte>.Shared;
+            int maxStructSize = Math.Max(WEAPON_BUFFER_SIZE, SKILL_BUFFER_SIZE); 
+            byte[] buffer = bufferPool.Rent(maxStructSize);
 
-            if (tasks.Count > 0) await Task.WhenAll(tasks);
+            try
+            {
+                // WEAPONS
+                foreach (var id in weaponIds)
+                {
+                    WeaponBaseInfo? foundInfo = null;
+                    if (results.TryGetValue((int)id, out var addresses))
+                    {
+                        foreach (var addr in addresses)
+                        {
+                            if (ReadProcessMemory(process.Handle, (IntPtr)addr, buffer, WEAPON_BUFFER_SIZE, out _))
+                            {
+                                var span = buffer.AsSpan(0, WEAPON_BUFFER_SIZE);
+                                if (ValidateWeaponData(span, id))
+                                {
+                                    foundInfo = ParseWeaponData(span);
+                                    if (foundInfo != null)
+                                    {
+                                        logger.ZLogInformation($"Found weapon at addr:0x{addr:X}");
+                                        LogWeaponResult(foundInfo);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
 
-            if (w1 != null) info.Weapon1Info = await w1;
-            if (w2 != null) info.Weapon2Info = await w2;
-            if (w3 != null) info.Weapon3Info = await w3;
-            if (sp != null) info.SpecialAttack = await sp;
+                    if (foundInfo != null)
+                    {
+                        if (id == info.Weapon1Code) info.Weapon1Info = foundInfo;
+                        if (id == info.Weapon2Code) info.Weapon2Info = foundInfo;
+                        if (id == info.Weapon3Code) info.Weapon3Info = foundInfo;
+                        if (id == info.SpecialAttackCode) info.SpecialAttack = foundInfo;
+                    }
+                }
+
+                // SKILLS
+                foreach (var id in skillIds)
+                {
+                    int lookupId = (int)id + 1000000;
+                    if (results.TryGetValue(lookupId, out var addresses))
+                    {
+                         foreach (var addr in addresses)
+                        {
+                            if (ReadProcessMemory(process.Handle, (IntPtr)addr, buffer, SKILL_BUFFER_SIZE, out _))
+                            {
+                                var span = buffer.AsSpan(0, SKILL_BUFFER_SIZE);
+                                if (ValidateSkillData(span, id))
+                                {
+                                    var result = ParseSkillData(span);
+                                    if (result != null)
+                                    {
+                                        logger.ZLogInformation($"Found skill at addr:0x{addr:X}");
+                                        LogSkillResult(result);
+                                        if (id == info.SkillID1) info.Skill1Info = result;
+                                        else if (id == info.SkillID2) info.Skill2Info = result;
+                                        break; 
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                bufferPool.Return(buffer);
+            }
         }
 
         #endregion

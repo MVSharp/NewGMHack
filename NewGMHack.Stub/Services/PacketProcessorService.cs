@@ -193,31 +193,26 @@ public class PacketProcessorService : BackgroundService
                 
                 var slot = changed.Slot;
                 _selfInformation.PersonInfo.Slot = slot;
-                var machineInfo = await ScanCondom(changed.MachineId, token: token);
-
-                if (machineInfo != null)
+                
+                try 
                 {
-                     // Notify Frontend via IPC -> SignalR
-                    _logger.ZLogInformation($"Sending MachineInfoUpdate for machine {changed.MachineId}");
-                    var response = new NewGMHack.CommunicationModel.IPC.Responses.MachineInfoResponse
+                    var machineInfo = await ScanCondom(changed.MachineId, token: token);
+
+                    if (machineInfo != null)
                     {
-                        MachineModel = _selfInformation.CurrentMachineModel,
-                        MachineBaseInfo = machineInfo
-                    };
-                    await _ipcService.SendMachineInfoUpdateAsync(response);
-
-                    //try
-                    //{
-                    //    // Enable logging for production debug
-                    //    var json = System.Text.Json.JsonSerializer.Serialize(response, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-                    //    _logger.ZLogInformation($"[MachineInfoUpdate] Payload: {json}");
-                    //}
-                    //catch (Exception ex)
-                    //{
-                    //    _logger.ZLogError(ex, $"Failed to log MachineInfoUpdate payload");
-                    //}
-
-
+                         // Notify Frontend via IPC -> SignalR
+                        _logger.ZLogInformation($"Sending MachineInfoUpdate for machine {changed.MachineId}");
+                        var response = new NewGMHack.CommunicationModel.IPC.Responses.MachineInfoResponse
+                        {
+                            MachineModel = _selfInformation.CurrentMachineModel,
+                            MachineBaseInfo = machineInfo
+                        };
+                        await _ipcService.SendMachineInfoUpdateAsync(response);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.ZLogError($"ScanCondom/IPC Error: {ex} {ex.Message}");
                 }
 
                 ChargeCondom(socket, slot);
