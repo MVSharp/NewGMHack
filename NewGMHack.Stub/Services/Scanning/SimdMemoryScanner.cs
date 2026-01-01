@@ -291,7 +291,9 @@ namespace NewGMHack.Stub.Services.Scanning
                 if (!VirtualQueryEx(process.Handle, address, out var mbi, (uint)Marshal.SizeOf<MEMORY_BASIC_INFORMATION>()))
                     break;
 
-                bool isValidType = (mbi.Type == MEM_PRIVATE || mbi.Type == MEM_IMAGE);
+                // Optimization: Search only MEM_PRIVATE (Dynamic Heaps). 
+                // Exclude MEM_IMAGE (Static DLL/EXE code) and MEM_MAPPED (File mappings).
+                bool isValidType = (mbi.Type == MEM_PRIVATE);
                 if (mbi.State == MEM_COMMIT && isValidType && IsReadable(mbi.Protect))
                 {
                     long regionSize = mbi.RegionSize.ToInt64();
