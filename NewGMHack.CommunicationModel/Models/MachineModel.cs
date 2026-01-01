@@ -79,12 +79,18 @@ public class MachineModel
         for (int i = 0; i < 6; i++)
         {
             model.ColorsRaw.Add(raw.Color[i]);
-            model.Colors[i] = UShortToHexColor(raw.Color[i]);
+            model.Colors[i] = UShortToHexColor_ByteMap(raw.Color[i]);
         }
         
         return model;
     }
-    
+    private static string UShortToHexColor_ByteMap(ushort color) { 
+        int r = (color >> 8) & 0xFF; // high byte
+        int g = color & 0xFF; // low byte
+        int b = 0; // fixed zero
+        return $"#{r:X2}{g:X2}{b:X2}";
+
+    }
     /// <summary>
     /// Converts a ushort color value to web hex color format.
     /// Assumes RGB565 format (5 bits R, 6 bits G, 5 bits B).
