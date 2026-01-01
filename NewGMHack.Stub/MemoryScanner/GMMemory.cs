@@ -247,13 +247,13 @@ namespace NewGMHack.Stub.MemoryScanner
 
                     var allTasks1 = new List<Task>();
                   if (machineInfo.TransformedMachine.Weapon1Code != 0)
-                      weapon1Task = ScanWeapon(machineInfo.Weapon1Code, token);
+                      weapon1Task = ScanWeapon(machineInfo.TransformedMachine.Weapon1Code, token);
                   if (machineInfo.TransformedMachine.Weapon2Code != 0)
-                      weapon2Task = ScanWeapon(machineInfo.Weapon2Code, token);
+                      weapon2Task = ScanWeapon(machineInfo.TransformedMachine.Weapon2Code, token);
                   if (machineInfo.TransformedMachine.Weapon3Code != 0)
-                      weapon3Task = ScanWeapon(machineInfo.Weapon3Code, token);
+                      weapon3Task = ScanWeapon(machineInfo.TransformedMachine.Weapon3Code, token);
                   if (machineInfo.TransformedMachine.SpecialAttackCode != 0)
-                      specialTask = ScanWeapon(machineInfo.SpecialAttackCode, token);
+                      specialTask = ScanWeapon(machineInfo.TransformedMachine.SpecialAttackCode, token);
 
                  if (weapon1Task != null) allTasks1.Add(weapon1Task);
                  if (weapon2Task != null) allTasks1.Add(weapon2Task);

@@ -148,9 +148,9 @@ async function pollData() {
             }
         }
 
+
         // Fetch roommates
         roommates.value = await api.getRoommates()
-
 
     } catch (e) {
         console.error('Poll data error:', e)
@@ -312,6 +312,16 @@ export function useSignalR() {
 
         // PRODUCTION - Real SignalR + Polling
         await startSignalR()
+
+        // Initial fetch of machine info (fixes empty UI on load, avoids polling/blinking)
+        try {
+            const initialInfo = await api.getMachineInfo()
+            if (initialInfo && Object.keys(initialInfo).length > 0) {
+                machineInfo.value = initialInfo
+            }
+        } catch (e) {
+            console.error('Initial machine info fetch failed', e)
+        }
 
         // Fetch app version
         try {
