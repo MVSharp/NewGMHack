@@ -42,7 +42,7 @@ public class NotificationHandler
                 // Verify parameters is not null, then forward
                 if (request.Parameters != null)
                 {
-                    _logger.LogInformation("Received Machine Info Update");
+                    _logger.LogInformation($"Received Machine Info Update. Type: {request.Parameters.GetType().FullName}");
                     _webChannel.Writer.TryWrite(new WebMessage("UpdateMachineInfo", request.Parameters));
                 }
             }
