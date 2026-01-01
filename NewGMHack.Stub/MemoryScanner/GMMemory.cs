@@ -191,87 +191,69 @@ namespace NewGMHack.Stub.MemoryScanner
             var machineInfo = await ScanMachine(id, token);
             if (machineInfo == null) return null;
 
-            // Run skill and weapon scans in parallel
+            // Run skill and weapon scans in parallel for the base machine
+            var skillTask = AssignSkillsAsync(machineInfo, token);
+            var weaponTask = AssignWeaponsAsync(machineInfo, token);
 
-            // Skill tasks
-            Task<SkillBaseInfo?>? skill1Task = null;
-            Task<SkillBaseInfo?>? skill2Task = null;
-            if (machineInfo.SkillID1 != 0)
-                skill1Task = ScanSkill(machineInfo.SkillID1, token);
-            if (machineInfo.SkillID2 != 0)
-                skill2Task = ScanSkill(machineInfo.SkillID2, token);
-
-            // Weapon tasks
-            Task<WeaponBaseInfo?>? weapon1Task = null;
-            Task<WeaponBaseInfo?>? weapon2Task = null;
-            Task<WeaponBaseInfo?>? weapon3Task = null;
-            Task<WeaponBaseInfo?>? specialTask = null;
-            if (machineInfo.Weapon1Code != 0)
-                weapon1Task = ScanWeapon(machineInfo.Weapon1Code, token);
-            if (machineInfo.Weapon2Code != 0)
-                weapon2Task = ScanWeapon(machineInfo.Weapon2Code, token);
-            if (machineInfo.Weapon3Code != 0)
-                weapon3Task = ScanWeapon(machineInfo.Weapon3Code, token);
-            if (machineInfo.SpecialAttackCode != 0)
-                specialTask = ScanWeapon(machineInfo.SpecialAttackCode, token);
-
-            // Await all tasks
-            var allTasks = new List<Task>();
-            if (skill1Task  != null) allTasks.Add(skill1Task);
-            if (skill2Task  != null) allTasks.Add(skill2Task);
-            if (weapon1Task != null) allTasks.Add(weapon1Task);
-            if (weapon2Task != null) allTasks.Add(weapon2Task);
-            if (weapon3Task != null) allTasks.Add(weapon3Task);
-            if (specialTask != null) allTasks.Add(specialTask);
-
-            if (allTasks.Count > 0)
-                await Task.WhenAll(allTasks);
-
-            // Assign results
-            if (skill1Task  != null) machineInfo.Skill1Info    = await skill1Task;
-            if (skill2Task  != null) machineInfo.Skill2Info    = await skill2Task;
-            if (weapon1Task != null) machineInfo.Weapon1Info   = await weapon1Task;
-            if (weapon2Task != null) machineInfo.Weapon2Info   = await weapon2Task;
-            if (weapon3Task != null) machineInfo.Weapon3Info   = await weapon3Task;
-            if (specialTask != null) machineInfo.SpecialAttack = await specialTask;
+            await Task.WhenAll(skillTask, weaponTask);
 
             // Scan transformed machine (prevent duplicate if TransformId+1 == MachineId)
             if (machineInfo.HasTransform && machineInfo.TransformId != 0 &&
-                machineInfo.TransformId + 1                         != machineInfo.MachineId)
+                machineInfo.TransformId + 1 != machineInfo.MachineId)
             {
-                machineInfo.TransformedMachine            = await ScanMachine(machineInfo.TransformId, token);
+                machineInfo.TransformedMachine = await ScanMachine(machineInfo.TransformId, token);
                 if (machineInfo.TransformedMachine is not null)
-                { 
-                      machineInfo.TransformedMachine.Skill1Info = machineInfo.Skill1Info;
+                {
+                    // Copy skills from base
+                    machineInfo.TransformedMachine.Skill1Info = machineInfo.Skill1Info;
                     machineInfo.TransformedMachine.Skill2Info = machineInfo.Skill2Info;
 
-                    var allTasks1 = new List<Task>();
-                  if (machineInfo.TransformedMachine.Weapon1Code != 0)
-                      weapon1Task = ScanWeapon(machineInfo.TransformedMachine.Weapon1Code, token);
-                  if (machineInfo.TransformedMachine.Weapon2Code != 0)
-                      weapon2Task = ScanWeapon(machineInfo.TransformedMachine.Weapon2Code, token);
-                  if (machineInfo.TransformedMachine.Weapon3Code != 0)
-                      weapon3Task = ScanWeapon(machineInfo.TransformedMachine.Weapon3Code, token);
-                  if (machineInfo.TransformedMachine.SpecialAttackCode != 0)
-                      specialTask = ScanWeapon(machineInfo.TransformedMachine.SpecialAttackCode, token);
-
-                 if (weapon1Task != null) allTasks1.Add(weapon1Task);
-                 if (weapon2Task != null) allTasks1.Add(weapon2Task);
-                 if (weapon3Task != null) allTasks1.Add(weapon3Task);
-                 if (specialTask != null) allTasks1.Add(specialTask);
-                 if (allTasks1.Count > 0)
-                 {
-                    await Task.WhenAll(allTasks1);
-                 }
-                  if (weapon1Task != null) machineInfo.TransformedMachine.Weapon1Info   = await weapon1Task;
-                  if (weapon2Task != null) machineInfo.TransformedMachine.Weapon2Info   = await weapon2Task;
-                  if (weapon3Task != null) machineInfo.TransformedMachine.Weapon3Info   = await weapon3Task;
-                  if (specialTask != null) machineInfo.TransformedMachine.SpecialAttack = await specialTask;
+                    // Scan weapons for transformed
+                    await AssignWeaponsAsync(machineInfo.TransformedMachine, token);
                 }
-
             }
 
             return machineInfo;
+        }
+
+        private async Task AssignSkillsAsync(MachineBaseInfo info, CancellationToken token)
+        {
+            var tasks = new List<Task<SkillBaseInfo?>>();
+            Task<SkillBaseInfo?>? t1 = null, t2 = null;
+
+            if (info.SkillID1 != 0) t1 = ScanSkill(info.SkillID1, token);
+            if (info.SkillID2 != 0) t2 = ScanSkill(info.SkillID2, token);
+
+            if (t1 != null) tasks.Add(t1);
+            if (t2 != null) tasks.Add(t2);
+
+            if (tasks.Count > 0) await Task.WhenAll(tasks);
+
+            if (t1 != null) info.Skill1Info = await t1;
+            if (t2 != null) info.Skill2Info = await t2;
+        }
+
+        private async Task AssignWeaponsAsync(MachineBaseInfo info, CancellationToken token)
+        {
+            var tasks = new List<Task<WeaponBaseInfo?>>();
+            Task<WeaponBaseInfo?>? w1 = null, w2 = null, w3 = null, sp = null;
+
+            if (info.Weapon1Code != 0) w1 = ScanWeapon(info.Weapon1Code, token);
+            if (info.Weapon2Code != 0) w2 = ScanWeapon(info.Weapon2Code, token);
+            if (info.Weapon3Code != 0) w3 = ScanWeapon(info.Weapon3Code, token);
+            if (info.SpecialAttackCode != 0) sp = ScanWeapon(info.SpecialAttackCode, token);
+
+            if (w1 != null) tasks.Add(w1);
+            if (w2 != null) tasks.Add(w2);
+            if (w3 != null) tasks.Add(w3);
+            if (sp != null) tasks.Add(sp);
+
+            if (tasks.Count > 0) await Task.WhenAll(tasks);
+
+            if (w1 != null) info.Weapon1Info = await w1;
+            if (w2 != null) info.Weapon2Info = await w2;
+            if (w3 != null) info.Weapon3Info = await w3;
+            if (sp != null) info.SpecialAttack = await sp;
         }
 
         #endregion
@@ -397,11 +379,11 @@ namespace NewGMHack.Stub.MemoryScanner
             const uint MAX_ID = 99999;
             if (info.Weapon1Code == 0 && info is { Weapon2Code: 0, Weapon3Code: 0 }) return null;
             if (info is { SkillID1 : 0, SkillID2 : 0 }) return null;
-            if ((info.Weapon1Code != 0 && info.Weapon2Code != 0 && info.Weapon1Code + 1 != info.Weapon2Code) ||
-                (info.Weapon2Code != 0 && info.Weapon3Code != 0 && info.Weapon2Code + 1 != info.Weapon3Code))
-                return null;
-            if (info.SkillID1    > MAX_ID || info.SkillID2    > MAX_ID) return null;
-            if (info.Weapon1Code > MAX_ID || info.Weapon2Code > MAX_ID || info.Weapon3Code > MAX_ID) return null;
+            //if ((info.Weapon1Code != 0 && info.Weapon2Code != 0 && info.Weapon1Code + 1 != info.Weapon2Code) ||
+            //    (info.Weapon2Code != 0 && info.Weapon3Code != 0 && info.Weapon2Code + 1 != info.Weapon3Code))
+            //    return null;
+            //if (info.SkillID1    > MAX_ID || info.SkillID2    > MAX_ID) return null;
+            //if (info.Weapon1Code > MAX_ID || info.Weapon2Code > MAX_ID || info.Weapon3Code > MAX_ID) return null;
 
             return info;
         }

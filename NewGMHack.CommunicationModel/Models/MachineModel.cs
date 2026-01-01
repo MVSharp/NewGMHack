@@ -44,11 +44,12 @@ public class MachineModel
     [Key(11)] public byte OcMaxLevel { get; set; }
     [Key(12)] public bool IsLocked { get; set; }
     
-    [Key(13)] public OcPartsModel Oc1Parts { get; set; } = new();
-    [Key(14)] public OcPartsModel Oc2Parts { get; set; } = new();
-    [Key(15)] public OcPointsModel OcBaseBonusPoints { get; set; } = new();
-    [Key(16)] public OcPointsModel OcBonusExtraPoints { get; set; } = new();
-    
+    [Key(13)]      public OcPartsModel  Oc1Parts           { get; set; } = new();
+    [Key(14)]      public OcPartsModel  Oc2Parts           { get; set; } = new();
+    [Key(15)]      public OcPointsModel OcBaseBonusPoints  { get; set; } = new();
+    [Key(16)]      public OcPointsModel OcBonusExtraPoints { get; set; } = new();
+    [IgnoreMember] public List<ushort>  ColorsRaw          { get; set; } = new();
+
     /// <summary>
     /// Maps a raw Machine struct to this model
     /// </summary>
@@ -73,10 +74,11 @@ public class MachineModel
             OcBaseBonusPoints = OcPointsModel.FromRaw(raw.OcBasePoints),
             OcBonusExtraPoints = OcPointsModel.FromRaw(raw.OcBonusPoints)
         };
-        
+         
         // Convert colors to hex strings
         for (int i = 0; i < 6; i++)
         {
+            model.ColorsRaw.Add(raw.Color[i]);
             model.Colors[i] = UShortToHexColor(raw.Color[i]);
         }
         

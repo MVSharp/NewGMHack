@@ -135,7 +135,6 @@ public class MachineBaseInfo
     /// Transformed machine info (if HasTransform and TransformId != 0)
     /// </summary>
     [Key(43)] public MachineBaseInfo? TransformedMachine { get; set; }
-    
     /// <summary>
     /// Transform raw struct to friendly class
     /// </summary>

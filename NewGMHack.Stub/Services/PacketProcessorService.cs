@@ -206,7 +206,7 @@ public class PacketProcessorService : BackgroundService
                     };
                     await _ipcService.SendMachineInfoUpdateAsync(response);
 
-                    //try 
+                    //try
                     //{
                     //    // Enable logging for production debug
                     //    var json = System.Text.Json.JsonSerializer.Serialize(response, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
@@ -216,7 +216,7 @@ public class PacketProcessorService : BackgroundService
                     //{
                     //    _logger.ZLogError(ex, $"Failed to log MachineInfoUpdate payload");
                     //}
-                    
+
 
                 }
 
