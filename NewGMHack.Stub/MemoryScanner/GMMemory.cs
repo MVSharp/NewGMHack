@@ -239,7 +239,36 @@ namespace NewGMHack.Stub.MemoryScanner
             if (machineInfo.HasTransform && machineInfo.TransformId != 0 &&
                 machineInfo.TransformId + 1                         != machineInfo.MachineId)
             {
-                machineInfo.TransformedMachine = await ScanMachine(machineInfo.TransformId, token);
+                machineInfo.TransformedMachine            = await ScanMachine(machineInfo.TransformId, token);
+                if (machineInfo.TransformedMachine is not null)
+                { 
+                      machineInfo.TransformedMachine.Skill1Info = machineInfo.Skill1Info;
+                    machineInfo.TransformedMachine.Skill2Info = machineInfo.Skill2Info;
+
+                    var allTasks1 = new List<Task>();
+                  if (machineInfo.TransformedMachine.Weapon1Code != 0)
+                      weapon1Task = ScanWeapon(machineInfo.Weapon1Code, token);
+                  if (machineInfo.TransformedMachine.Weapon2Code != 0)
+                      weapon2Task = ScanWeapon(machineInfo.Weapon2Code, token);
+                  if (machineInfo.TransformedMachine.Weapon3Code != 0)
+                      weapon3Task = ScanWeapon(machineInfo.Weapon3Code, token);
+                  if (machineInfo.TransformedMachine.SpecialAttackCode != 0)
+                      specialTask = ScanWeapon(machineInfo.SpecialAttackCode, token);
+
+                 if (weapon1Task != null) allTasks1.Add(weapon1Task);
+                 if (weapon2Task != null) allTasks1.Add(weapon2Task);
+                 if (weapon3Task != null) allTasks1.Add(weapon3Task);
+                 if (specialTask != null) allTasks1.Add(specialTask);
+                 if (allTasks1.Count > 0)
+                 {
+                    await Task.WhenAll(allTasks1);
+                 }
+                  if (weapon1Task != null) machineInfo.TransformedMachine.Weapon1Info   = await weapon1Task;
+                  if (weapon2Task != null) machineInfo.TransformedMachine.Weapon2Info   = await weapon2Task;
+                  if (weapon3Task != null) machineInfo.TransformedMachine.Weapon3Info   = await weapon3Task;
+                  if (specialTask != null) machineInfo.TransformedMachine.SpecialAttack = await specialTask;
+                }
+
             }
 
             return machineInfo;

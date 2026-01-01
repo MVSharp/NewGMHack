@@ -68,7 +68,7 @@ public class MachineModel
             CurrentExp = raw.CurrentExp,
             OcMaxLevel = raw.OcMaxLevel,
             IsLocked = raw.Lock != 0,
-            Oc1Parts = OcPartsModel.FromRaw(raw.Oc1Parts),
+            Oc1Parts = OcPartsModel.FromRaw(raw.Oc1Part1 , raw.Oc1Part2 , raw.Oc1Part3 , raw.Oc1Part4),
             Oc2Parts = OcPartsModel.FromRaw(raw.Oc2Parts),
             OcBaseBonusPoints = OcPointsModel.FromRaw(raw.OcBasePoints),
             OcBonusExtraPoints = OcPointsModel.FromRaw(raw.OcBonusPoints)
@@ -122,6 +122,13 @@ public class OcPartsModel
     [Key(2)] public ushort Part3 { get; set; }
     [Key(3)] public ushort Part4 { get; set; }
     
+  public static OcPartsModel FromRaw(ushort part1,ushort part2 , ushort part3 , ushort part4) => new()
+  {
+      Part1 = part1,
+      Part2 = part2,
+      Part3 = part3,
+      Part4 = part4
+  };
     public static OcPartsModel FromRaw(OcParts raw) => new()
     {
         Part1 = raw.Part1,

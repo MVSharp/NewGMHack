@@ -30,14 +30,16 @@ public unsafe struct Machine
     public       byte          OcMaxLevel;
     public       byte          Lock; //Is Locked
     public fixed byte          RawC[3];// later on fix, because oc parts missed one byte
-
-    public OcParts Oc1Parts;
-
+    //TODO fuck their mother , i dont know why they split the oc1 parts , fuck
+    //public OcParts Oc1Parts;
+    public ushort Oc1Part1;
+    public ushort Oc1Part2;
+    public ushort Oc1Part3;
     // public fixed byte          Pad3[2];
     // public       byte          VaginaLevel;//  merge more bot become stronger Vagina 
     // public fixed byte          VaginaLv[4];
     public OcParts Oc2Parts;
-
+    public ushort  Oc1Part4;
     public fixed byte     Pad4[5];
     public       OcPoints OcBasePoints;
     public       byte     Pad5;
