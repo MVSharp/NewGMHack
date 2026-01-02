@@ -29,6 +29,7 @@ public class ClientConfig
         new HackFeatures() { Name = FeatureName.IsIllusion, IsEnabled     = false },
         new HackFeatures() { Name = FeatureName.SuckStarOverChina, IsEnabled     = false },
         new HackFeatures(){Name = FeatureName.FreezeEnemy , IsEnabled = false},
+        new HackFeatures(){Name = FeatureName.WideVision , IsEnabled = false},
         //new HackFeatures() { Name = FeatureName.IsAimSupport, IsEnabled     = false },
         new HackFeatures() { Name = FeatureName.IsAutoFunnel, IsEnabled     = false },
         new HackFeatures() { Name = FeatureName.CollectGift, IsEnabled     = false },

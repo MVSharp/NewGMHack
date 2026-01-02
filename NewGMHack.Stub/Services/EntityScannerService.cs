@@ -96,7 +96,10 @@ public class EntityScannerService : BackgroundService
         {
             try
             {
-                if (!_selfInfo.ClientConfig.Features.GetFeature(FeatureName.EnableAutoAim).IsEnabled)
+                // Only skip if BOTH overlay AND autoaim are disabled
+                bool overlayEnabled = _selfInfo.ClientConfig.Features.GetFeature(FeatureName.EnableOverlay).IsEnabled;
+                bool autoAimEnabled = _selfInfo.ClientConfig.Features.GetFeature(FeatureName.EnableAutoAim).IsEnabled;
+                if (!overlayEnabled && !autoAimEnabled)
                 {
                     await Task.Delay(500);
                     continue;

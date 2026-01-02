@@ -38,12 +38,16 @@ public class DirectInputLogicProcessor
     private readonly ILogger<DirectInputLogicProcessor> _logger;
     private readonly InputStateTracker InputTracker;
 
-private int _lastManualWeapon = DIK_1;
+    private int _lastManualWeapon = DIK_1;
     private readonly Stopwatch _timer = Stopwatch.StartNew();
     private readonly List<ScheduledEvent> _scheduledEvents = new();
 
     private bool _isSwitching = false;
     private bool _leftWasDown = false;
+
+    // Aimbot state
+    private float _lastDeltaX = 0f;
+    private float _lastDeltaY = 0f;
 
     private const int DIK_ESCAPE = 0x01;
     private const int DIK_1 = 0x02;
@@ -57,6 +61,78 @@ private int _lastManualWeapon = DIK_1;
         _logger = logger;
         InputTracker = tracker;
     }
+
+    /// <summary>
+    /// Optimized aimbot using exponential decay
+    /// - Fast: 65% of distance per frame
+    /// - Stable: Can't overshoot (mathematically impossible)
+    /// - Snap: Direct movement when very close
+    /// </summary>
+    public void InjectAimbot(IntPtr dataPtr)
+    {
+        try
+        {
+            DIMOUSESTATE state = Marshal.PtrToStructure<DIMOUSESTATE>(dataPtr);
+
+            // Check if right mouse button is held (aiming)
+            bool isRightMouseDown = (state.rgbButtons1 & 0x80) != 0;
+            if (!isRightMouseDown) return;
+
+            // Get best target
+            var target = _self.Targets.FirstOrDefault(x => x.IsBest && x.CurrentHp > 0);
+            if (target == null || target.ScreenX <= 0 || target.ScreenY <= 0) return;
+
+            // Calculate delta from crosshair to target
+            float deltaX = target.ScreenX - _self.CrossHairX;
+            float deltaY = target.ScreenY - _self.CrossHairY;
+            float distance = (float)Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
+
+            // Check if within aim circle
+            if (distance > _self.AimRadius) return;
+
+            // Dead zone - already on target
+            if (distance < 3f) return;
+
+            int moveX, moveY;
+
+            // SNAP: When very close, move directly to target (no oscillation possible)
+            if (distance < 12f)
+            {
+                moveX = (int)deltaX;
+                moveY = (int)deltaY;
+            }
+            else
+            {
+                // EXPONENTIAL DECAY: Move 65% of remaining distance
+                // This mathematically can't overshoot since we always move less than the full distance
+                const float decayFactor = 0.65f;
+                
+                moveX = (int)(deltaX * decayFactor);
+                moveY = (int)(deltaY * decayFactor);
+
+                // Minimum movement to prevent stalling when close
+                if (moveX == 0 && Math.Abs(deltaX) > 0.5f) moveX = Math.Sign(deltaX);
+                if (moveY == 0 && Math.Abs(deltaY) > 0.5f) moveY = Math.Sign(deltaY);
+            }
+
+            // Clamp maximum speed for safety
+            moveX = Math.Clamp(moveX, -120, 120);
+            moveY = Math.Clamp(moveY, -120, 120);
+
+            // Inject movement
+            if (moveX != 0 || moveY != 0)
+            {
+                state.lX += moveX;
+                state.lY += moveY;
+                Marshal.StructureToPtr(state, dataPtr, false);
+            }
+        }
+        catch
+        {
+            // Swallow errors
+        }
+    }
+
 
     public void Process(DeviceType deviceType, int size, IntPtr dataPtr)
     {

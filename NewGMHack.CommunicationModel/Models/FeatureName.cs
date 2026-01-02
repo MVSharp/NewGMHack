@@ -71,4 +71,7 @@ public enum FeatureName
     
     [FeatureMetadata("Freeze Enemy", "冷凍敵人", "冷凍離人", "Freeze all the enemy")]
     FreezeEnemy,
+
+    [FeatureMetadata("Wide Vision", "大機視角", "大機視角", "wider vision")]
+    WideVision,
 }

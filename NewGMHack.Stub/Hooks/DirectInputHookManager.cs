@@ -107,6 +107,28 @@ public class DirectInputHookManager(
         _hooks.Clear();
     }
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    private bool IsGameFocused()
+    {
+        try
+        {
+            IntPtr foreground = GetForegroundWindow();
+            if (foreground == IntPtr.Zero) return false;
+            
+            GetWindowThreadProcessId(foreground, out uint foregroundPid);
+            return foregroundPid == Environment.ProcessId;
+        }
+        catch
+        {
+            return true; // Assume focused on error
+        }
+    }
+
     private int HookedGetDeviceState(IntPtr devicePtr, int size, IntPtr dataPtr, DeviceType deviceType)
     {
         var original = deviceType switch
@@ -123,41 +145,78 @@ public class DirectInputHookManager(
             return 0;
         }
 
+        // Call original to get real input first
         int result = original(devicePtr, size, dataPtr);
-        if (result != 0)
-        {
-            logicProcessor.ZeroMemory(dataPtr, size);
-        }
 
+        bool isGameFocused = IsGameFocused();
         bool isAutoReady = self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoReady);
+        bool isAutoAim = self.ClientConfig.Features.IsFeatureEnable(FeatureName.EnableAutoAim);
 
-        if (isAutoReady)
+        // If game is focused: pass through real input (don't zero, don't modify)
+        // Unless AutoReady or AutoAim is enabled, then also inject synthetic input
+        if (isGameFocused)
         {
-            if (deviceType == DeviceType.Keyboard && size == 256)
+            // Game is focused - real input should work
+            if (isAutoReady)
             {
-                byte[] keys = new byte[256];
-                Marshal.Copy(dataPtr, keys, 0, 256);
-
-                _f5Down = !_f5Down;
-                _escDown = !_escDown;
-
-                if (_f5Down) keys[63] |= 0x80;
-                if (_escDown) keys[1] |= 0x80;
-
-                Marshal.Copy(keys, 0, dataPtr, 256);
-            }
-            else if (deviceType == DeviceType.Mouse && size == Marshal.SizeOf<DIMOUSESTATE>())
-            {
-                DIMOUSESTATE state = Marshal.PtrToStructure<DIMOUSESTATE>(dataPtr);
-                _rightMouseDown = !_rightMouseDown;
-                state.rgbButtons1 = _rightMouseDown ? (byte)0x80 : (byte)0x00;
-                Marshal.StructureToPtr(state, dataPtr, false);
+                // Merge synthetic input on top of real input
+                InjectAutoReadyInput(deviceType, size, dataPtr);
             }
 
+            // Aimbot: inject mouse delta when aiming (using refined algorithm in logicProcessor)
+            if (isAutoAim && deviceType == DeviceType.Mouse && size == Marshal.SizeOf<DIMOUSESTATE>())
+            {
+                logicProcessor.InjectAimbot(dataPtr);
+            }
+
+            // Return original result - real input passes through
+            return result;
+        }
+        else
+        {
+            // Game is NOT focused (backgrounded)
+            // Zero real input, inject synthetic if needed
+            logicProcessor.ZeroMemory(dataPtr, size);
+            
+            if (isAutoReady)
+            {
+                InjectAutoReadyInput(deviceType, size, dataPtr);
+            }
+
+            // Aimbot also works in background
+            if (isAutoAim && deviceType == DeviceType.Mouse && size == Marshal.SizeOf<DIMOUSESTATE>())
+            {
+                logicProcessor.InjectAimbot(dataPtr);
+            }
+            
             return 0;
         }
+    }
 
-        return result;
+    // InjectAimbotInput removed - now using logicProcessor.InjectAimbot() for better algorithm
+
+    private void InjectAutoReadyInput(DeviceType deviceType, int size, IntPtr dataPtr)
+    {
+        if (deviceType == DeviceType.Keyboard && size == 256)
+        {
+            byte[] keys = new byte[256];
+            Marshal.Copy(dataPtr, keys, 0, 256);
+
+            _f5Down = !_f5Down;
+            _escDown = !_escDown;
+
+            if (_f5Down) keys[63] |= 0x80;
+            if (_escDown) keys[1] |= 0x80;
+
+            Marshal.Copy(keys, 0, dataPtr, 256);
+        }
+        else if (deviceType == DeviceType.Mouse && size == Marshal.SizeOf<DIMOUSESTATE>())
+        {
+            DIMOUSESTATE state = Marshal.PtrToStructure<DIMOUSESTATE>(dataPtr);
+            _rightMouseDown = !_rightMouseDown;
+            state.rgbButtons1 = _rightMouseDown ? (byte)0x80 : (byte)0x00;
+            Marshal.StructureToPtr(state, dataPtr, false);
+        }
     }
 }
 //using System;

@@ -33,6 +33,10 @@ namespace NewGMHack.Stub.Hooks
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool DestroyWindow(nint hWnd);
 
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int vKey);
+        private const int VK_G = 0x47; // 'G' key for aimbot testing
+
         private const int D3D9_DEVICE_METHOD_COUNT = 119;
         private readonly List<nint> _vtableAddresses = [];
 
@@ -41,12 +45,14 @@ namespace NewGMHack.Stub.Hooks
         private IHook<ResetDelegate>? _resetHook;
         private IHook<DrawPrimitiveDelegate>? _drawPrimitiveHook;
         private IHook<DrawIndexedPrimitiveDelegate>? _drawIndexedPrimitiveHook;
+        private IHook<SetTransformDelegate>? _setTransformHook;
 
         private EndSceneDelegate? _originalEndScene;
         private PresentDelegate? _originalPresent;
         private ResetDelegate? _originalReset;
         private DrawPrimitiveDelegate? _originalDrawPrimitive;
         private DrawIndexedPrimitiveDelegate? _originalDrawIndexedPrimitive;
+        private SetTransformDelegate? _originalSetTransform;
 
         private Device? _device;
         private bool _deviceInitialized;
@@ -69,6 +75,10 @@ namespace NewGMHack.Stub.Hooks
         [Function(CallingConventions.Stdcall)]
         private delegate int DrawIndexedPrimitiveDelegate(nint devicePtr, int primitiveType, int baseVertexIndex, uint minVertexIndex, uint numVertices, uint startIndex, uint primitiveCount);
 
+        // SetTransform(device, state, pMatrix)
+        [Function(CallingConventions.Stdcall)]
+        private delegate int SetTransformDelegate(nint devicePtr, int state, nint pMatrix);
+
         public void HookAll()
         {
             logger.LogInformation($"Initializing D3D9 hooks using Reloaded.Hooks");
@@ -85,7 +95,8 @@ namespace NewGMHack.Stub.Hooks
             HookMethod("Reset", (int)Direct3DDevice9FunctionOrdinals.Reset, new ResetDelegate(ResetHook), out _resetHook, out _originalReset);
             HookMethod("DrawPrimitive", (int)Direct3DDevice9FunctionOrdinals.DrawPrimitive, new DrawPrimitiveDelegate(DrawPrimitiveHook), out _drawPrimitiveHook, out _originalDrawPrimitive);
             HookMethod("DrawIndexedPrimitive", (int)Direct3DDevice9FunctionOrdinals.DrawIndexedPrimitive, new DrawIndexedPrimitiveDelegate(DrawIndexedPrimitiveHook), out _drawIndexedPrimitiveHook, out _originalDrawIndexedPrimitive);
-            logger.LogInformation($"D3D9 hooks installed: EndScene, Present, Reset, DrawPrimitive, DrawIndexedPrimitive");
+            HookMethod("SetTransform", (int)Direct3DDevice9FunctionOrdinals.SetTransform, new SetTransformDelegate(SetTransformHook), out _setTransformHook, out _originalSetTransform);
+            logger.LogInformation($"D3D9 hooks installed: EndScene, Present, Reset, DrawPrimitive, DrawIndexedPrimitive, SetTransform");
         }
 
         public void UnHookAll()
@@ -95,6 +106,7 @@ namespace NewGMHack.Stub.Hooks
             _resetHook?.Disable();
             _drawPrimitiveHook?.Disable();
             _drawIndexedPrimitiveHook?.Disable();
+            _setTransformHook?.Disable();
             logger.LogInformation($"D3D9 hooks disabled");
         }
 
@@ -220,6 +232,63 @@ namespace NewGMHack.Stub.Hooks
                 return 0; // D3D_OK - pretend success but don't render
             }
             return _originalDrawIndexedPrimitive?.Invoke(devicePtr, primitiveType, baseVertexIndex, minVertexIndex, numVertices, startIndex, primitiveCount) ?? 0;
+        }
+
+        private int SetTransformHook(nint devicePtr, int state, nint pMatrix)
+        {
+            // TransformState.View = 2, TransformState.Projection = 3
+            const int D3DTS_VIEW = 2;
+            const int D3DTS_PROJECTION = 3;
+            
+            try
+            {
+                // WideVision: Scale projection matrix to zoom out (wider FOV effect)
+                if (state == D3DTS_PROJECTION && 
+                    self.ClientConfig.Features.IsFeatureEnable(FeatureName.WideVision))
+                {
+                    unsafe
+                    {
+                        float* matrixPtr = (float*)pMatrix;
+                        // Scale down the projection to see more (zoom out effect)
+                        // M11 and M22 control the FOV scaling in perspective projection
+                        // Smaller values = wider view
+                        const float zoomOutFactor = 0.7f; // 0.7 = ~30% wider view
+                        matrixPtr[0] *= zoomOutFactor;  // M11 - horizontal scale
+                        matrixPtr[5] *= zoomOutFactor;  // M22 - vertical scale
+                    }
+                }
+
+                // Aimbot (disabled - doesn't affect actual shooting)
+                /*
+                if (state == D3DTS_VIEW && 
+                    self.ClientConfig.Features.IsFeatureEnable(FeatureName.EnableAutoAim) &&
+                    (GetAsyncKeyState(VK_G) & 0x8000) != 0)
+                {
+                    var target = self.Targets.FirstOrDefault(x => x.IsBest && x.CurrentHp > 0);
+                    if (target != null && target.EntityPosPtrAddress != 0)
+                    {
+                        var eyePos = new SharpDX.Vector3(self.PersonInfo.X, self.PersonInfo.Y + 80, self.PersonInfo.Z);
+                        var targetPos = new SharpDX.Vector3(target.Position.X, target.Position.Y, target.Position.Z);
+                        var lookAtMatrix = SharpDX.Matrix.LookAtLH(eyePos, targetPos, SharpDX.Vector3.UnitY);
+                        
+                        unsafe
+                        {
+                            float* matrixPtr = (float*)pMatrix;
+                            matrixPtr[0] = lookAtMatrix.M11; matrixPtr[1] = lookAtMatrix.M12; matrixPtr[2] = lookAtMatrix.M13; matrixPtr[3] = lookAtMatrix.M14;
+                            matrixPtr[4] = lookAtMatrix.M21; matrixPtr[5] = lookAtMatrix.M22; matrixPtr[6] = lookAtMatrix.M23; matrixPtr[7] = lookAtMatrix.M24;
+                            matrixPtr[8] = lookAtMatrix.M31; matrixPtr[9] = lookAtMatrix.M32; matrixPtr[10] = lookAtMatrix.M33; matrixPtr[11] = lookAtMatrix.M34;
+                            matrixPtr[12] = lookAtMatrix.M41; matrixPtr[13] = lookAtMatrix.M42; matrixPtr[14] = lookAtMatrix.M43; matrixPtr[15] = lookAtMatrix.M44;
+                        }
+                    }
+                }
+                */
+            }
+            catch
+            {
+                // Swallow errors to not crash game
+            }
+            
+            return _originalSetTransform?.Invoke(devicePtr, state, pMatrix) ?? 0;
         }
 
         private void GetD3D9Addresses()

@@ -126,7 +126,7 @@ namespace NewGMHack.Stub
                                        });
                                        services.AddSingleton(packetChannel);
                                        services.AddHostedService<PacketDispatcher>();
-                                       services.AddHostedService<AimBotServices>();
+                                       //services.AddHostedService<AimBotServices>();
                                        services.AddSingleton<InputStateTracker>();
                                        //services.AddSingleton<WinsockHookManager>(); // this is no problem , only once
                                        //services.AddSingleton<WinsockHookManager>(); // this is no problem , only once

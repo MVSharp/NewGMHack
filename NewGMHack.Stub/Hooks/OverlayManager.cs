@@ -2,6 +2,7 @@
 using SharpDX.Direct3D9;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 
 namespace NewGMHack.Stub.Hooks;
@@ -29,6 +30,20 @@ public class OverlayManager(SelfInformation self)
     private float _lastAimRadius = -1;
     private int _lastScreenWidth = -1;
     private int _lastScreenHeight = -1;
+
+    // FPS Counter
+    private readonly Stopwatch _fpsStopwatch = new();
+    private int _frameCount = 0;
+    private float _fps = 0;
+    private long _lastFpsUpdate = 0;
+
+    // Radar settings
+    private const float RadarSize = 120f;
+    private const float RadarRange = 800f; // World units
+    private readonly Vector2[] _radarCircle = new Vector2[CircleSegments + 1];
+
+    // Warning flash
+    private const float WarningDistance = 150f;
 
     public void Initialize(Device device)
     {
@@ -265,10 +280,17 @@ public class OverlayManager(SelfInformation self)
             }
 
             var playerPos = new Vector3(self.PersonInfo.X, self.PersonInfo.Y, self.PersonInfo.Z);
+
+            // NEW: Draw FPS Counter
+            DrawFpsCounter(device);
+
+            // NEW: Draw Radar (with camera rotation)
+            DrawRadar(device, playerPos, viewport, viewMatrix);
             
             // Loop directly without .ToList() allocation
             var targets = self.Targets; 
-            int count = targets.Count; 
+            int count = targets.Count;
+            float closestDistance = float.MaxValue;
             
             for(int i = 0; i < count; i++)
             {
@@ -280,6 +302,10 @@ public class OverlayManager(SelfInformation self)
                 Vector2 screenPos = WorldToScreen(entity.Position, viewMatrix, projMatrix, viewport);
                 entity.ScreenX = screenPos.X;
                 entity.ScreenY = screenPos.Y;
+
+                // Calculate distance for indicator and warning
+                float distance = Vector3.Distance(playerPos, entity.Position);
+                if (distance < closestDistance) closestDistance = distance;
 
                 bool isBehind;
                 // Optimized check: just check W from clip space inside WorldToScreen roughly or reuse matrix calc
@@ -305,6 +331,9 @@ public class OverlayManager(SelfInformation self)
                     Vector2 centerTop = new(viewport.Width / 2.0f, 10);
                     DrawLine(centerTop, screenPos, lineColor, viewport);
 
+                    // NEW: Distance Indicator
+                    DrawDistanceIndicator(screenPos, distance, viewport);
+
                     if (entity.IsBest)
                     {
                         // Draw line to center (subtle cyan gradient)
@@ -315,6 +344,9 @@ public class OverlayManager(SelfInformation self)
                     }
                 }
             }
+
+            // NEW: Warning Flash if enemy close
+            DrawWarningFlash(device, closestDistance, viewport);
 
             if (_isDrawing)
             {
@@ -413,6 +445,151 @@ public class OverlayManager(SelfInformation self)
         _font.DrawText(null, line, new Rectangle(x, y, 200, LineHeight), FontDrawFlags.NoClip, color);
         y += LineHeight;
     }
+
+    // ==================== NEW OVERLAY FEATURES ====================
+
+    /// <summary>
+    /// Draw distance indicator below entity screen position
+    /// </summary>
+    private void DrawDistanceIndicator(Vector2 screenPos, float distance, Viewport viewport)
+    {
+        if (_font == null || screenPos == Vector2.Zero) return;
+        if (screenPos.X < 0 || screenPos.X > viewport.Width || screenPos.Y < 0 || screenPos.Y > viewport.Height) return;
+
+        string distText = $"{distance:F0}m";
+        int textX = (int)screenPos.X - 15;
+        int textY = (int)screenPos.Y + 20;
+        _font.DrawText(null, distText, new Rectangle(textX, textY, 60, 14), FontDrawFlags.NoClip, new ColorBGRA(255, 255, 255, 180));
+    }
+
+    /// <summary>
+    /// Draw a 2D radar/minimap in corner showing entity positions (rotated by camera)
+    /// </summary>
+    private void DrawRadar(Device device, Vector3 playerPos, Viewport viewport, Matrix viewMatrix)
+    {
+        if (_line == null || _line.IsDisposed) return;
+
+        // Radar center position (top-left corner with padding)
+        float radarX = 20 + RadarSize / 2;
+        float radarY = 60 + RadarSize / 2;
+
+        // Extract camera yaw from view matrix (looking at M31, M33 for forward direction in XZ plane)
+        // The view matrix's inverse gives us camera orientation
+        // Forward direction in world space: (-M13, -M23, -M33) after considering row-major
+        // For D3D row-major: forward is (M31, M32, M33) inversed, but we can use M31/M33 for yaw
+        float camForwardX = -viewMatrix.M31;
+        float camForwardZ = -viewMatrix.M33;
+        float cameraYaw = (float)Math.Atan2(camForwardX, camForwardZ) + (float)Math.PI; // +180° to fix inversion
+
+        // Draw radar background circle
+        for (int i = 0; i <= CircleSegments; i++)
+        {
+            _radarCircle[i].X = radarX + (RadarSize / 2) * _unitCircle[i].X;
+            _radarCircle[i].Y = radarY + (RadarSize / 2) * _unitCircle[i].Y;
+        }
+        _line.Draw(_radarCircle, new ColorBGRA(100, 100, 100, 80));
+
+        // Draw cross lines on radar (vertical line = forward direction)
+        DrawLine(new Vector2(radarX - RadarSize / 2, radarY), new Vector2(radarX + RadarSize / 2, radarY), new ColorBGRA(80, 80, 80, 60));
+        DrawLine(new Vector2(radarX, radarY - RadarSize / 2), new Vector2(radarX, radarY + RadarSize / 2), new ColorBGRA(80, 80, 80, 60));
+
+        // Draw forward indicator (small triangle at top of radar)
+        DrawLine(new Vector2(radarX - 5, radarY - RadarSize / 2 + 5), new Vector2(radarX, radarY - RadarSize / 2 - 2), new ColorBGRA(255, 255, 255, 150));
+        DrawLine(new Vector2(radarX + 5, radarY - RadarSize / 2 + 5), new Vector2(radarX, radarY - RadarSize / 2 - 2), new ColorBGRA(255, 255, 255, 150));
+
+        // Draw player at center (white dot)
+        DrawEllipse(radarX, radarY, 3, 3, new ColorBGRA(255, 255, 255, 200));
+
+        // Precompute rotation values
+        float cosYaw = (float)Math.Cos(-cameraYaw);
+        float sinYaw = (float)Math.Sin(-cameraYaw);
+
+        // Draw entities as dots relative to player (rotated by camera yaw)
+        var targets = self.Targets;
+        int count = targets.Count;
+        for (int i = 0; i < count; i++)
+        {
+            var entity = targets[i];
+            if (entity.CurrentHp <= 0 || entity.MaxHp <= 0) continue;
+
+            // Calculate relative position in world space
+            float dx = entity.Position.X - playerPos.X;
+            float dz = entity.Position.Z - playerPos.Z;
+
+            // Rotate by camera yaw so "up" on radar = camera forward
+            float rotatedX = dx * cosYaw - dz * sinYaw;
+            float rotatedZ = dx * sinYaw + dz * cosYaw;
+
+            // Scale to radar size
+            float scale = (RadarSize / 2) / RadarRange;
+            float dotX = radarX + rotatedX * scale;
+            float dotY = radarY - rotatedZ * scale; // Negative because screen Y is inverted
+
+            // Clamp to radar bounds
+            float dist = (float)Math.Sqrt((dotX - radarX) * (dotX - radarX) + (dotY - radarY) * (dotY - radarY));
+            if (dist > RadarSize / 2)
+            {
+                float angle = (float)Math.Atan2(dotY - radarY, dotX - radarX);
+                dotX = radarX + (RadarSize / 2 - 3) * (float)Math.Cos(angle);
+                dotY = radarY + (RadarSize / 2 - 3) * (float)Math.Sin(angle);
+            }
+
+            // Color based on IsBest
+            var dotColor = entity.IsBest ? new ColorBGRA(255, 255, 0, 220) : new ColorBGRA(255, 50, 50, 180);
+            DrawEllipse(dotX, dotY, 4, 4, dotColor);
+        }
+    }
+
+    /// <summary>
+    /// Draw red border flash when enemy is close
+    /// </summary>
+    private void DrawWarningFlash(Device device, float closestDistance, Viewport viewport)
+    {
+        if (closestDistance > WarningDistance || closestDistance <= 0) return;
+
+        // Calculate alpha based on distance (closer = more intense)
+        float intensity = 1.0f - (closestDistance / WarningDistance);
+        float pulse = (float)(Math.Sin(Environment.TickCount / 100.0) * 0.3 + 0.7);
+        byte alpha = (byte)(intensity * pulse * 120);
+
+        var flashColor = new ColorBGRA(255, 0, 0, alpha);
+        int borderWidth = 8;
+
+        // Top border
+        DrawLine(new Vector2(0, borderWidth / 2), new Vector2(viewport.Width, borderWidth / 2), flashColor);
+        // Bottom border
+        DrawLine(new Vector2(0, viewport.Height - borderWidth / 2), new Vector2(viewport.Width, viewport.Height - borderWidth / 2), flashColor);
+        // Left border
+        DrawLine(new Vector2(borderWidth / 2, 0), new Vector2(borderWidth / 2, viewport.Height), flashColor);
+        // Right border
+        DrawLine(new Vector2(viewport.Width - borderWidth / 2, 0), new Vector2(viewport.Width - borderWidth / 2, viewport.Height), flashColor);
+    }
+
+    /// <summary>
+    /// Update and draw FPS counter
+    /// </summary>
+    private void DrawFpsCounter(Device device)
+    {
+        if (_font == null) return;
+
+        if (!_fpsStopwatch.IsRunning)
+            _fpsStopwatch.Start();
+
+        _frameCount++;
+        long elapsed = _fpsStopwatch.ElapsedMilliseconds;
+
+        if (elapsed - _lastFpsUpdate >= 500) // Update every 500ms
+        {
+            _fps = _frameCount / ((elapsed - _lastFpsUpdate) / 1000f);
+            _frameCount = 0;
+            _lastFpsUpdate = elapsed;
+        }
+
+        string fpsText = $"FPS: {_fps:F0}";
+        _font.DrawText(null, fpsText, new Rectangle(20, 20, 80, 16), FontDrawFlags.NoClip, new ColorBGRA(0, 255, 0, 180));
+    }
+
+    // ==================== END NEW FEATURES ====================
 
     public void Reset()
     {
