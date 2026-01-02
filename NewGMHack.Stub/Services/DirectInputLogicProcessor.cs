@@ -45,9 +45,17 @@ public class DirectInputLogicProcessor
     private bool _isSwitching = false;
     private bool _leftWasDown = false;
 
-    // Aimbot state
+    // Aimbot state - no longer needed but kept for compatibility
     private float _lastDeltaX = 0f;
     private float _lastDeltaY = 0f;
+
+    // Target lead prediction state
+    private float _lastTargetScreenX = 0f;
+    private float _lastTargetScreenY = 0f;
+    private float _targetVelocityX = 0f;
+    private float _targetVelocityY = 0f;
+    private long _lastPredictionTimeMs = 0;
+    private uint _lastTargetPtr = 0;
 
     private const int DIK_ESCAPE = 0x01;
     private const int DIK_1 = 0x02;
@@ -63,10 +71,10 @@ public class DirectInputLogicProcessor
     }
 
     /// <summary>
-    /// Optimized aimbot using exponential decay
+    /// Optimized aimbot with target lead prediction
     /// - Fast: 65% of distance per frame
     /// - Stable: Can't overshoot (mathematically impossible)
-    /// - Snap: Direct movement when very close
+    /// - Predictive: Aims ahead of moving targets
     /// </summary>
     public void InjectAimbot(IntPtr dataPtr)
     {
@@ -76,15 +84,63 @@ public class DirectInputLogicProcessor
 
             // Check if right mouse button is held (aiming)
             bool isRightMouseDown = (state.rgbButtons1 & 0x80) != 0;
-            if (!isRightMouseDown) return;
+            if (!isRightMouseDown)
+            {
+                ResetPredictionState();
+                return;
+            }
 
             // Get best target
             var target = _self.Targets.FirstOrDefault(x => x.IsBest && x.CurrentHp > 0);
-            if (target == null || target.ScreenX <= 0 || target.ScreenY <= 0) return;
+            if (target == null || target.ScreenX <= 0 || target.ScreenY <= 0)
+            {
+                ResetPredictionState();
+                return;
+            }
 
-            // Calculate delta from crosshair to target
-            float deltaX = target.ScreenX - _self.CrossHairX;
-            float deltaY = target.ScreenY - _self.CrossHairY;
+            // Get current time
+            long currentTimeMs = _timer.ElapsedMilliseconds;
+            float deltaTimeSeconds = (_lastPredictionTimeMs > 0) 
+                ? (currentTimeMs - _lastPredictionTimeMs) / 1000f 
+                : 0f;
+
+            // Current target screen position
+            float currentX = target.ScreenX;
+            float currentY = target.ScreenY;
+
+            // Reset velocity if targeting a different entity
+            if (target.EntityPtrAddress != _lastTargetPtr)
+            {
+                _targetVelocityX = 0;
+                _targetVelocityY = 0;
+                _lastTargetPtr = target.EntityPtrAddress;
+            }
+            else if (_lastPredictionTimeMs > 0 && deltaTimeSeconds > 0 && deltaTimeSeconds < 0.5f)
+            {
+                // Calculate velocity (pixels per second)
+                float rawVelX = (currentX - _lastTargetScreenX) / deltaTimeSeconds;
+                float rawVelY = (currentY - _lastTargetScreenY) / deltaTimeSeconds;
+
+                // Smooth velocity with exponential moving average
+                const float velocitySmoothing = 0.3f;
+                _targetVelocityX = _targetVelocityX + (rawVelX - _targetVelocityX) * velocitySmoothing;
+                _targetVelocityY = _targetVelocityY + (rawVelY - _targetVelocityY) * velocitySmoothing;
+            }
+
+            // Store for next frame
+            _lastTargetScreenX = currentX;
+            _lastTargetScreenY = currentY;
+            _lastPredictionTimeMs = currentTimeMs;
+
+            // Predict future position (lead the target)
+            // Prediction time: how many seconds ahead to aim
+            const float predictionTime = 0.08f; // 80ms ahead
+            float predictedX = currentX + (_targetVelocityX * predictionTime);
+            float predictedY = currentY + (_targetVelocityY * predictionTime);
+
+            // Calculate delta to predicted position
+            float deltaX = predictedX - _self.CrossHairX;
+            float deltaY = predictedY - _self.CrossHairY;
             float distance = (float)Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
 
             // Check if within aim circle
@@ -95,7 +151,7 @@ public class DirectInputLogicProcessor
 
             int moveX, moveY;
 
-            // SNAP: When very close, move directly to target (no oscillation possible)
+            // SNAP: When very close, move directly to target
             if (distance < 12f)
             {
                 moveX = (int)deltaX;
@@ -104,18 +160,17 @@ public class DirectInputLogicProcessor
             else
             {
                 // EXPONENTIAL DECAY: Move 65% of remaining distance
-                // This mathematically can't overshoot since we always move less than the full distance
                 const float decayFactor = 0.65f;
                 
                 moveX = (int)(deltaX * decayFactor);
                 moveY = (int)(deltaY * decayFactor);
 
-                // Minimum movement to prevent stalling when close
+                // Minimum movement to prevent stalling
                 if (moveX == 0 && Math.Abs(deltaX) > 0.5f) moveX = Math.Sign(deltaX);
                 if (moveY == 0 && Math.Abs(deltaY) > 0.5f) moveY = Math.Sign(deltaY);
             }
 
-            // Clamp maximum speed for safety
+            // Clamp maximum speed
             moveX = Math.Clamp(moveX, -120, 120);
             moveY = Math.Clamp(moveY, -120, 120);
 
@@ -132,6 +187,17 @@ public class DirectInputLogicProcessor
             // Swallow errors
         }
     }
+
+    private void ResetPredictionState()
+    {
+        _lastTargetScreenX = 0;
+        _lastTargetScreenY = 0;
+        _targetVelocityX = 0;
+        _targetVelocityY = 0;
+        _lastPredictionTimeMs = 0;
+        _lastTargetPtr = 0;
+    }
+
 
 
     public void Process(DeviceType deviceType, int size, IntPtr dataPtr)
