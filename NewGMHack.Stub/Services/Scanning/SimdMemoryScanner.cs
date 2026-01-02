@@ -7,6 +7,8 @@ using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Runtime.ExceptionServices;
+using System.Security;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -130,62 +132,51 @@ namespace NewGMHack.Stub.Services.Scanning
             var regions = GetRegions(process);
             var jobs = CreateScanJobs(regions, minPatternLength);
 
-            // 3. Parallel Scan
-            // ReadProcessMemory is thread-safe and safe against crashes (returns false).
-            // We use Parallel.ForEach to maximize throughput.
+            // 3. Parallel Scan (Direct Memory Access - No ReadProcessMemory!)
+            // Since we're injected, we can read memory directly using unsafe pointers.
+            // This eliminates syscall overhead entirely.
             
             Parallel.ForEach(jobs, 
                 new ParallelOptions { CancellationToken = token, MaxDegreeOfParallelism = Environment.ProcessorCount },
-                // Local Init: Rent a buffer for this thread
-                () => 
-                {
-                    var bufferPool = ArrayPool<byte>.Shared;
-                    int maxBufferSize = MAX_CHUNK_SIZE + maxPatternLength;
-                    return (Buffer: bufferPool.Rent(maxBufferSize), Pool: bufferPool, BufferSize: maxBufferSize);
-                },
-                // Body
-                (job, loopedState, localState) =>
-                {
-                    var (buffer, _, currentBufferSize) = localState;
-                    
-                    // Allow buffer growth if needed (rare/impossible if maxPatternLength is consistent)
-                    int readSize = job.Size + maxPatternLength - 1;
-                    if (buffer.Length < readSize)
-                    {
-                        localState.Pool.Return(buffer);
-                        buffer = localState.Pool.Rent(readSize);
-                        localState = (buffer, localState.Pool, readSize);
-                    }
-
-                    try
-                    {
-                        if (ReadProcessMemory(process.Handle, job.BaseAddress, buffer, readSize, out var bytesRead))
-                        {
-                            int actualSize = (int)bytesRead.ToInt64();
-                            var bufferSpan = buffer.AsSpan(0, actualSize);
-
-                            // Run ALL patterns against this buffer
-                            foreach (var pat in patterns)
-                            {
-                                if (actualSize < pat.PatternLength) continue;
-                                ScanSpan(bufferSpan, pat.Pattern, pat.Mask, pat.AnchorByte, pat.AnchorOffset, job.BaseAddress.ToInt64(), job.Size, results[pat.Id]);
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger?.ZLogError($"Batch Scan Error at 0x{job.BaseAddress:X}: {ex.Message}");
-                    }
-
-                    return localState; // Pass state to next iteration
-                },
-                // Local Finally: Return buffer
-                (localState) =>
-                {
-                    localState.Pool.Return(localState.Buffer);
-                });
+                job => ScanJobDirect(job, maxPatternLength, patterns, results));
             
             return results.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToList());
+        }
+
+        /// <summary>
+        /// Scans a job directly using unsafe pointers. Must be a separate method
+        /// with HandleProcessCorruptedStateExceptions to catch AccessViolationException.
+        /// </summary>
+        [HandleProcessCorruptedStateExceptions]
+        [SecurityCritical]
+        private void ScanJobDirect(ScanJob job, int maxPatternLength, List<PatternInfo> patterns, ConcurrentDictionary<int, ConcurrentBag<long>> results)
+        {
+            int readSize = job.Size + maxPatternLength - 1;
+            
+            try
+            {
+                unsafe
+                {
+                    // Direct memory access - no syscall!
+                    byte* ptr = (byte*)job.BaseAddress;
+                    var bufferSpan = new ReadOnlySpan<byte>(ptr, readSize);
+
+                    // Run ALL patterns against this buffer
+                    foreach (var pat in patterns)
+                    {
+                        if (readSize < pat.PatternLength) continue;
+                        ScanSpan(bufferSpan, pat.Pattern, pat.Mask, pat.AnchorByte, pat.AnchorOffset, job.BaseAddress.ToInt64(), job.Size, results[pat.Id]);
+                    }
+                }
+            }
+            catch (AccessViolationException)
+            {
+                // Protected page - skip silently
+            }
+            catch (Exception ex)
+            {
+                _logger?.ZLogError($"Batch Scan Error at 0x{job.BaseAddress:X}: {ex.Message}");
+            }
         }
 
         private void ScanSpan(ReadOnlySpan<byte> data, byte[] pattern, bool[] mask, byte anchorByte, int anchorOffset, long baseAddress, int scanLimit, ConcurrentBag<long> results)
@@ -211,29 +202,60 @@ namespace NewGMHack.Stub.Services.Scanning
 
         private AnchorInfo SelectAnchor(byte[] pattern, bool[] mask)
         {
-            // Heuristic: Prefer non-00, non-FF values.
-            // If all are 00/FF or masked, pick the first masked byte.
+            // Improved heuristic: Score each candidate anchor byte
+            // Prefer: rare bytes > later positions > non-00/FF bytes
+            
+            int bestScore = -1;
+            int bestOffset = 0;
+            byte bestByte = 0;
+            
+            // Common bytes that appear frequently in memory (low score)
+            // 0x00 (null), 0xFF (padding), 0x20 (space), 0xCC (debug fill)
+            ReadOnlySpan<byte> commonBytes = stackalloc byte[] { 0x00, 0xFF, 0x20, 0xCC, 0x90, 0xCD };
             
             for (int i = 0; i < pattern.Length; i++)
             {
                 if (!mask[i]) continue; // Skip wildcards
-
+                
                 byte b = pattern[i];
-                // Good anchor?
-                if (b != 0x00 && b != 0xFF) 
+                int score = 0;
+                
+                // Score: Later positions are better (reduces re-checks on false positives)
+                score += i;
+                
+                // Score: Non-common bytes get big bonus
+                bool isCommon = false;
+                foreach (byte c in commonBytes)
                 {
-                    return new AnchorInfo(i, b);
+                    if (b == c) { isCommon = true; break; }
+                }
+                if (!isCommon) score += 100;
+                
+                // Score: Signature-like bytes (ASCII letters used in paths like 'm', 'd', 'r', 's', 'f', 'x')
+                if ((b >= 0x61 && b <= 0x7A) || (b >= 0x41 && b <= 0x5A)) // a-z, A-Z
+                {
+                    score += 50;
+                }
+                
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestOffset = i;
+                    bestByte = b;
                 }
             }
             
-            // Fallback: First valid mask
-            for (int i = 0; i < pattern.Length; i++)
+            // Fallback if no valid mask found
+            if (bestScore < 0 && pattern.Length > 0)
             {
-                if (mask[i]) return new AnchorInfo(i, pattern[i]);
+                for (int i = 0; i < pattern.Length; i++)
+                {
+                    if (mask[i]) return new AnchorInfo(i, pattern[i]);
+                }
+                return new AnchorInfo(0, pattern[0]);
             }
             
-            // Fallback: 0, 0 (Shouldn't happen if pattern has at least 1 byte not wildcard)
-            return new AnchorInfo(0, pattern[0]);
+            return new AnchorInfo(bestOffset, bestByte);
         }
 
         private struct ScanJob
@@ -242,7 +264,7 @@ namespace NewGMHack.Stub.Services.Scanning
             public int Size; // The number of "start positions" to scan
         }
         
-        private const int MAX_CHUNK_SIZE = 4 * 1024 * 1024; // 4MB chunks
+        private const int MAX_CHUNK_SIZE = 8 * 1024 * 1024; // 8MB chunks
 
         private List<ScanJob> CreateScanJobs(List<MEMORY_BASIC_INFORMATION> regions, int patternLength)
         {
