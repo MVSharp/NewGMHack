@@ -4,7 +4,9 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
+using System.Security;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -20,10 +22,30 @@ namespace NewGMHack.Stub.MemoryScanner
         private readonly ILogger<GmMemory> logger;
         private readonly IMemoryScanner _scanner;
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool ReadProcessMemory(
-            IntPtr hProcess, IntPtr     lpBaseAddress, [Out] byte[] lpBuffer,
-            int    dwSize,   out IntPtr lpNumberOfBytesRead);
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MEMORY_BASIC_INFORMATION
+        {
+            public IntPtr BaseAddress;
+            public IntPtr AllocationBase;
+            public uint AllocationProtect;
+            public IntPtr RegionSize;
+            public uint State;
+            public uint Protect;
+            public uint Type;
+        }
+
+        [DllImport("kernel32.dll")]
+        private static extern int VirtualQuery(IntPtr lpAddress, out MEMORY_BASIC_INFORMATION lpBuffer, uint dwLength);
+
+        private const uint MEM_COMMIT = 0x1000;
+        private const uint PAGE_READONLY = 0x02;
+        private const uint PAGE_READWRITE = 0x04;
+        private const uint PAGE_WRITECOPY = 0x08;
+        private const uint PAGE_EXECUTE_READ = 0x20;
+        private const uint PAGE_EXECUTE_READWRITE = 0x40;
+        private const uint PAGE_EXECUTE_WRITECOPY = 0x80;
+        private const uint PAGE_GUARD = 0x100;
+        private const uint PAGE_NOACCESS = 0x01;
 
         public GmMemory(ILogger<GmMemory> logger, IMemoryScanner scanner)
         {
@@ -247,7 +269,7 @@ namespace NewGMHack.Stub.MemoryScanner
                     {
                         foreach (var addr in addresses)
                         {
-                            if (ReadProcessMemory(process.Handle, (IntPtr)addr, buffer, WEAPON_BUFFER_SIZE, out _))
+                            if (TryReadMemory((IntPtr)addr, buffer, WEAPON_BUFFER_SIZE))
                             {
                                 var span = buffer.AsSpan(0, WEAPON_BUFFER_SIZE);
                                 if (ValidateWeaponData(span, id))
@@ -281,7 +303,7 @@ namespace NewGMHack.Stub.MemoryScanner
                     {
                          foreach (var addr in addresses)
                         {
-                            if (ReadProcessMemory(process.Handle, (IntPtr)addr, buffer, SKILL_BUFFER_SIZE, out _))
+                            if (TryReadMemory((IntPtr)addr, buffer, SKILL_BUFFER_SIZE))
                             {
                                 var span = buffer.AsSpan(0, SKILL_BUFFER_SIZE);
                                 if (ValidateSkillData(span, id))
@@ -353,8 +375,7 @@ namespace NewGMHack.Stub.MemoryScanner
                 {
                     foreach (var address in addresses)
                     {
-                        bool success =
-                            ReadProcessMemory(process.Handle, (IntPtr)address, pooledBuffer, bufferSize, out _);
+                        bool success = TryReadMemory((IntPtr)address, pooledBuffer, bufferSize);
                         if (!success) continue;
 
                         var span = pooledBuffer.AsSpan(0, bufferSize);
@@ -532,6 +553,78 @@ namespace NewGMHack.Stub.MemoryScanner
             ];
         }
         
+        
+        #endregion
+
+        //#endregion
+
+        #region Memory Safety Logic
+
+         private static bool IsMemoryRangeReadable(IntPtr address, int size)
+        {
+             // Basic pointer valid checks
+            if (address == IntPtr.Zero || size <= 0) return false;
+            long startAddr = (long)address;
+            long endAddr = startAddr + size;
+
+             // User mode range check
+             if (IntPtr.Size == 4 && (startAddr < 0x10000 || endAddr > 0x80000000)) return false;
+             if (IntPtr.Size == 8 && (startAddr < 0x10000 || endAddr > 0x7FFFFFFFFFF)) return false;
+
+            long currentAddr = startAddr;
+            while (currentAddr < endAddr)
+            {
+                MEMORY_BASIC_INFORMATION mbi;
+                if (VirtualQuery((IntPtr)currentAddr, out mbi, (uint)Marshal.SizeOf(typeof(MEMORY_BASIC_INFORMATION))) == 0)
+                    return false;
+
+                if (mbi.State != MEM_COMMIT) return false;
+                if ((mbi.Protect & PAGE_GUARD) == PAGE_GUARD) return false;
+                if ((mbi.Protect & PAGE_NOACCESS) == PAGE_NOACCESS) return false;
+                
+                // Readable checks
+                bool readable = (mbi.Protect & PAGE_READONLY) != 0 ||
+                                (mbi.Protect & PAGE_READWRITE) != 0 ||
+                                (mbi.Protect & PAGE_WRITECOPY) != 0 ||
+                                (mbi.Protect & PAGE_EXECUTE_READ) != 0 ||
+                                (mbi.Protect & PAGE_EXECUTE_READWRITE) != 0 ||
+                                (mbi.Protect & PAGE_EXECUTE_WRITECOPY) != 0;
+
+                if (!readable) return false;
+
+                // Move to next region
+                long regionEnd = (long)mbi.BaseAddress + (long)mbi.RegionSize;
+                currentAddr = regionEnd;
+            }
+
+            return true;
+        }
+
+        [HandleProcessCorruptedStateExceptions]
+        [SecurityCritical]
+        private bool TryReadMemory(IntPtr address, byte[] buffer, int size)
+        {
+            // Validate the whole range to prevent page boundary crossing crashes
+             if (!IsMemoryRangeReadable(address, size)) return false;
+
+            try
+            {
+                unsafe
+                {
+                    fixed (byte* ptr = buffer)
+                    {
+                        // Direct memory copy since we are in same process
+                        Buffer.MemoryCopy((void*)address, ptr, buffer.Length, size);
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         #endregion
     }
 }

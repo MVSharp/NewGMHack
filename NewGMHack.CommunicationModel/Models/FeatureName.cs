@@ -68,4 +68,7 @@ public enum FeatureName
 
     [FeatureMetadata("Static Process Mode", "後台模式", "後台模式", "Used to reduce resources when you left the game behind")]
     BackGroundMode,
+    
+    [FeatureMetadata("Freeze Enemy", "冷凍敵人", "冷凍離人", "Freeze all the enemy")]
+    FreezeEnemy,
 }

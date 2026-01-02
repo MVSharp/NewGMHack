@@ -15,6 +15,31 @@ public class EntityScannerService : BackgroundService
     private readonly SelfInformation               _selfInfo;
     private readonly ILogger<EntityScannerService> _logger;
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MEMORY_BASIC_INFORMATION
+    {
+        public IntPtr BaseAddress;
+        public IntPtr AllocationBase;
+        public uint AllocationProtect;
+        public IntPtr RegionSize;
+        public uint State;
+        public uint Protect;
+        public uint Type;
+    }
+
+    [DllImport("kernel32.dll")]
+    private static extern int VirtualQuery(IntPtr lpAddress, out MEMORY_BASIC_INFORMATION lpBuffer, uint dwLength);
+
+    private const uint MEM_COMMIT = 0x1000;
+    private const uint PAGE_READONLY = 0x02;
+    private const uint PAGE_READWRITE = 0x04;
+    private const uint PAGE_WRITECOPY = 0x08;
+    private const uint PAGE_EXECUTE_READ = 0x20;
+    private const uint PAGE_EXECUTE_READWRITE = 0x40;
+    private const uint PAGE_EXECUTE_WRITECOPY = 0x80;
+    private const uint PAGE_GUARD = 0x100;
+    private const uint PAGE_NOACCESS = 0x01;
+
     private static readonly string ProcessName =
         Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ==")) + ".exe";
 
@@ -167,7 +192,21 @@ public class EntityScannerService : BackgroundService
                 }
             }
 
+            if (_selfInfo.ClientConfig.Features.IsFeatureEnable(FeatureName.FreezeEnemy))
+            {
 
+                var targets = _selfInfo.Targets.Where(x => x.EntityPtrAddress != 0 && x.EntityPosPtrAddress != 0)
+                                       .ToList();
+                int   count  = targets.Count;
+
+                for (int i = 0; i < count; i++)
+                {
+                    var e = targets[i];
+                    WriteFloat(e.EntityPosPtrAddress + XyzOffsets[0],  0 );
+                    WriteFloat(e.EntityPosPtrAddress + XyzOffsets[1], 200 + i * 50);
+                    WriteFloat(e.EntityPosPtrAddress + XyzOffsets[2], 0);
+                }
+            }
             if (_selfInfo.ClientConfig.Features.IsFeatureEnable(FeatureName.SuckStarOverChina))
             {
                 var targets = _selfInfo.Targets.Where(x => x.EntityPtrAddress != 0 && x.EntityPosPtrAddress != 0)
@@ -367,10 +406,46 @@ public class EntityScannerService : BackgroundService
     }
 
     // Fixed: Valid x86 user-mode address range
+    // Fixed: Valid x86 user-mode address range
     private static bool IsAddressValid(uint address)
     {
         // Avoid null, low memory, and kernel space
         return address >= 0x10000 && address < 0x80000000;
+    }
+
+    private static bool IsMemoryReadable(uint address)
+    {
+        if (!IsAddressValid(address)) return false;
+
+        MEMORY_BASIC_INFORMATION mbi;
+        if (VirtualQuery((IntPtr)address, out mbi, (uint)Marshal.SizeOf(typeof(MEMORY_BASIC_INFORMATION))) == 0)
+            return false;
+
+        if (mbi.State != MEM_COMMIT) return false;
+        if ((mbi.Protect & PAGE_GUARD) == PAGE_GUARD) return false;
+        if ((mbi.Protect & PAGE_NOACCESS) == PAGE_NOACCESS) return false;
+
+        return true; // Any committed memory that isn't Guard/NoAccess is generally readable in this context
+    }
+
+    private static bool IsMemoryWritable(uint address)
+    {
+        if (!IsAddressValid(address)) return false;
+
+        MEMORY_BASIC_INFORMATION mbi;
+        if (VirtualQuery((IntPtr)address, out mbi, (uint)Marshal.SizeOf(typeof(MEMORY_BASIC_INFORMATION))) == 0)
+            return false;
+
+        if (mbi.State != MEM_COMMIT) return false;
+        if ((mbi.Protect & PAGE_GUARD) == PAGE_GUARD) return false;
+
+        // check for write permissions
+        bool writable = (mbi.Protect & PAGE_READWRITE) != 0 ||
+                        (mbi.Protect & PAGE_WRITECOPY) != 0 ||
+                        (mbi.Protect & PAGE_EXECUTE_READWRITE) != 0 ||
+                        (mbi.Protect & PAGE_EXECUTE_WRITECOPY) != 0;
+
+        return writable;
     }
 
     [HandleProcessCorruptedStateExceptions]
@@ -378,7 +453,7 @@ public class EntityScannerService : BackgroundService
     private static bool TryReadUInt(uint address, out uint value)
     {
         value = 0;
-        if (!IsAddressValid(address)) return false;
+        if (!IsMemoryReadable(address)) return false;
 
         try
         {
@@ -396,7 +471,7 @@ public class EntityScannerService : BackgroundService
     private static bool TryReadInt(uint address, out int value)
     {
         value = 0;
-        if (!IsAddressValid(address)) return false;
+        if (!IsMemoryReadable(address)) return false;
 
         try
         {
@@ -414,7 +489,7 @@ public class EntityScannerService : BackgroundService
     private static bool TryReadFloat(uint address, out float value)
     {
         value = 0;
-        if (!IsAddressValid(address)) return false;
+        if (!IsMemoryReadable(address)) return false;
 
         try
         {
@@ -431,7 +506,7 @@ public class EntityScannerService : BackgroundService
     [SecurityCritical]
     public static void WriteFloat(uint address, float value)
     {
-        if (!IsAddressValid(address)) return;
+        if (!IsMemoryWritable(address)) return;
 
         try
         {
