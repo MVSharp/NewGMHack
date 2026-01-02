@@ -506,10 +506,7 @@ namespace NewGMHack.Stub.MemoryScanner
             for (int i = 0; i < 4; i++) maskChars[i] = 'x';
 
             // 2. Signature "mdrs\" at offset 0x264
-            var mdrsSig = new byte[] 
-            { 
-                0x6D, 0x00, 0x64, 0x00, 0x72, 0x00, 0x73, 0x00, 0x5C, 0x00 
-            };
+            var mdrsSig = "m\0d\0r\0s\0\\\0"u8.ToArray();
             Array.Copy(mdrsSig, 0, patternBytes, 0x264, mdrsSig.Length);
             for (int i = 0; i < mdrsSig.Length; i++) maskChars[0x264 + i] = 'x';
 
@@ -526,13 +523,13 @@ namespace NewGMHack.Stub.MemoryScanner
         {
             // WeaponId is a uint (4 bytes), so we need to match all 4 bytes
             var idBytes = BitConverter.GetBytes(weaponId);
-            return new byte[]
-            {
+            return
+            [
                 idBytes[0],  // Low byte
                 idBytes[1],
                 idBytes[2],
                 idBytes[3]   // High byte (usually 0x00 for typical IDs)
-            };
+            ];
         }
         
         #endregion
