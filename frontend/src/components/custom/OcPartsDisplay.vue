@@ -31,7 +31,7 @@ defineProps<{
 }
 
 .part-block.has-part {
-    @apply border-neon-blue/50 text-neon-cyan bg-neon-blue/10;
+    @apply border-neon-blue-50 text-neon-cyan bg-neon-blue-10;
 }
 
 .part-block:hover {

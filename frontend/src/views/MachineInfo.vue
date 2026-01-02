@@ -86,7 +86,7 @@ const weapons = computed(() => [
 <template>
     <div class="machine-info-container h-full flex flex-col overflow-y-auto p-4 gap-4">
         <!-- Header with Transform Toggle -->
-        <div class="flex items-center justify-between border-b border-neon-cyan/30 pb-3 animate-fade-in">
+        <div class="flex items-center justify-between border-b border-neon-cyan-30 pb-3 animate-fade-in">
             <div class="text-neon-cyan font-rajdhani text-xl uppercase">{{ t('machine_info') }}</div>
             <button 
                 v-if="hasTransform"
@@ -258,12 +258,12 @@ const weapons = computed(() => [
 }
 
 .info-card { 
-    @apply bg-bg-panel border border-neon-blue/50 p-3 shadow-lg transition-all duration-300;
+    @apply bg-bg-panel border border-neon-blue-50 p-3 shadow-lg transition-all duration-300;
     animation: cyber-fade-in 0.4s ease-out both;
     animation-delay: var(--anim-delay, 0s);
 }
 .info-card:hover { 
-    @apply border-neon-cyan/60;
+    @apply border-neon-cyan-60;
     box-shadow: 0 0 15px rgba(0, 240, 255, 0.2), inset 0 0 20px rgba(0, 240, 255, 0.05);
 }
 

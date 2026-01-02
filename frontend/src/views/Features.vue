@@ -123,7 +123,7 @@ onMounted(() => {
 
 <style scoped>
 .panel-header {
-    @apply border-b border-neon-cyan/30 pb-3;
+    @apply border-b border-neon-cyan-30 pb-3;
 }
 
 .features-grid {

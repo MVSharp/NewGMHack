@@ -8,7 +8,7 @@ const { t } = useI18n()
 
 <template>
     <div class="h-full flex flex-col">
-        <div class="panel-header text-neon-cyan font-rajdhani text-xl border-b border-neon-cyan/30 pb-3 mb-4 uppercase">
+        <div class="panel-header text-neon-cyan font-rajdhani text-xl border-b border-neon-cyan-30 pb-3 mb-4 uppercase">
             {{ t('lobby_recon') }}
         </div>
         
@@ -64,6 +64,6 @@ const { t } = useI18n()
 }
 
 .data-table tr:hover td {
-    @apply bg-neon-cyan/5 text-white;
+    @apply bg-neon-cyan-5 text-white;
 }
 </style>

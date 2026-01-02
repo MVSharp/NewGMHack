@@ -91,7 +91,7 @@ async function handleDeattach() {
                     :class="[
                         'lang-btn px-2 py-1 rounded transition-all duration-200',
                         currentLang === lang.code 
-                            ? 'bg-neon-cyan/20 text-neon-cyan border border-neon-cyan' 
+                            ? 'bg-neon-cyan-20 text-neon-cyan border border-neon-cyan' 
                             : 'text-gray-500 hover:text-neon-cyan hover:bg-white/5'
                     ]"
                     :title="lang.label"
@@ -140,8 +140,8 @@ async function handleDeattach() {
 }
 
 .status-dot.waiting {
-    @apply bg-orange-400 shadow-[0_0_10px_#ffaa00];
-    animation: blink 1s infinite;
+    @apply bg-yellow-400 shadow-[0_0_15px_#ffff00];
+    animation: blink 0.5s infinite;
 }
 
 /* Action Buttons */

@@ -103,7 +103,7 @@ const formatStat = (val: number, suffix = '') => {
     animation: skill-fade-in 0.3s ease-out both;
 }
 .skill-card:hover {
-    @apply border-neon-cyan/40 bg-neon-cyan/5;
+    @apply border-neon-cyan-40 bg-neon-cyan-5;
     box-shadow: 0 0 10px rgba(0, 240, 255, 0.15);
 }
 .stat {

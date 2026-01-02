@@ -55,60 +55,92 @@ let mockIntervals: number[] = []
 
 function startMockData() {
     console.warn('[MOCK] Starting Simulation Mode')
+    // Start as DISCONNECTED to allow testing Injection flow
     isConnected.value = true
-    isGameConnected.value = true
+    isGameConnected.value = false 
+    isInjecting.value = false
 
-    // Mock Pilot
+    // Simulate SignalR Data stream only when 'connected'
     mockIntervals.push(window.setInterval(async () => {
+        if (!isGameConnected.value) return 
+
+        // Mock Pilot
         pilotInfo.value = await api.getMe()
         if (pilotInfo.value.personId && currentPlayerId.value === 0) {
             currentPlayerId.value = pilotInfo.value.personId
+        }
+
+        // Randomly update machine info to simulate live data
+        if (machineInfo.value?.MachineBaseInfo) {
+             const base = machineInfo.value.MachineBaseInfo
+             // Slight jitter for realism
+             base.HP = 6000 + Math.floor(Math.random() * 100)
+        }
+
+        // Mock Stats populate
+        if (currentPlayerId.value !== 0 && (!stats.value || Math.random() > 0.9)) {
+            await refreshStats()
         }
     }, 1000))
 
     // Mock Roommates
     mockIntervals.push(window.setInterval(async () => {
+        if (!isGameConnected.value) return
         roommates.value = await api.getRoommates()
     }, 3000))
 
-    // Mock MachineInfo
-    mockIntervals.push(window.setInterval(async () => {
-        machineInfo.value = await api.getMachineInfo()
-    }, 2000))
-
-    // Mock Stats & History
-    mockIntervals.push(window.setInterval(async () => {
-        if (currentPlayerId.value > 0) {
-            stats.value = await api.getStats(currentPlayerId.value)
-            combatLog.value = await api.getHistory(currentPlayerId.value)
-            if (combatLog.value.length > 0) {
-                const latest = combatLog.value[0]!
-                latestMatch.value = {
-                    points: latest.Points,
-                    kills: latest.Kills,
-                    deaths: latest.Deaths,
-                    supports: latest.Supports,
-                    gbGain: (latest.GBGain ?? 0) + (latest.TotalBonus ?? 0),
-                    timestamp: new Date(latest.CreatedAtUtc).toLocaleString(),
-                    gameStatus: latest.GameStatus ?? null,
-                    gradeRank: latest.GradeRank ?? null
-                }
-            }
-        }
-    }, 2000))
-
-    // Initial load
+    // Initial partial load (just so we have some data structures)
     setTimeout(async () => {
-        stats.value = await api.getStats(currentPlayerId.value || 12345)
-        combatLog.value = await api.getHistory(currentPlayerId.value || 12345)
         pilotInfo.value = await api.getMe()
-        roommates.value = await api.getRoommates()
         machineInfo.value = await api.getMachineInfo()
-        if (pilotInfo.value?.personId) {
-            currentPlayerId.value = pilotInfo.value.personId
-        }
     }, 100)
 }
+
+// === Actions ===
+
+async function inject() {
+    isInjecting.value = true
+    
+    // MOCK MODE INTERCEPTION
+    if (isDev()) {
+        console.log('[MOCK] Simulating Injection...')
+        setTimeout(() => {
+            isGameConnected.value = true
+            isInjecting.value = false
+            console.log('[MOCK] Injection Successful')
+        }, 2000)
+        return
+    }
+
+    // REAL MODE
+    try {
+        await api.inject()
+    } catch (e) {
+        console.error('Inject failed:', e)
+        isInjecting.value = false
+    }
+}
+
+async function deattach() {
+    // MOCK MODE INTERCEPTION
+    if (isDev()) {
+        console.log('[MOCK] Simulating Deattach...')
+        setTimeout(() => {
+            isGameConnected.value = false
+            console.log('[MOCK] Deattached')
+        }, 1000)
+        return
+    }
+
+    // REAL MODE
+    try {
+        await api.deattach()
+        isGameConnected.value = false
+    } catch (e) {
+        console.error('Deattach failed:', e)
+    }
+}
+
 
 // === Status Polling (Production) ===
 
@@ -147,7 +179,6 @@ async function pollData() {
                 await refreshStats()
             }
         }
-
 
         // Fetch roommates
         roommates.value = await api.getRoommates()
@@ -189,11 +220,9 @@ async function startSignalR() {
         .configureLogging(LogLevel.Information)
         .build()
 
-    // ReceiveReward - from old dashboard.js line 44
+    // ReceiveReward
     conn.on('ReceiveReward', (notification: any) => {
         console.log('Reward Received:', notification)
-
-        // Update latest match panel
         latestMatch.value = {
             points: notification.points ?? notification.Points ?? 0,
             kills: notification.kills ?? notification.Kills ?? 0,
@@ -204,18 +233,15 @@ async function startSignalR() {
             gameStatus: notification.gameStatus ?? notification.GameStatus ?? null,
             gradeRank: notification.gradeRank ?? notification.GradeRank ?? null
         }
-
-        // If watching this player, refresh stats
+        
         const pid = notification.playerId ?? notification.PlayerId ?? 0
         if (currentPlayerId.value === pid || currentPlayerId.value === 0) {
-            if (currentPlayerId.value === 0) {
-                currentPlayerId.value = pid
-            }
+            if (currentPlayerId.value === 0) currentPlayerId.value = pid
             refreshStats()
         }
     })
 
-    // UpdatePersonInfo - from old dashboard.js line 69
+    // UpdatePersonInfo
     conn.on('UpdatePersonInfo', (info: any) => {
         pilotInfo.value = {
             personId: info.personId ?? info.PersonId ?? 0,
@@ -229,8 +255,7 @@ async function startSignalR() {
             y: info.y ?? info.Y ?? 0,
             z: info.z ?? info.Z ?? 0
         }
-
-        // Update current player ID if changed
+        
         const newPid = pilotInfo.value.personId
         if (newPid && newPid !== currentPlayerId.value) {
             currentPlayerId.value = newPid
@@ -245,7 +270,6 @@ async function startSignalR() {
         }))
     })
 
-    // UpdateMachineInfo
     conn.on('UpdateMachineInfo', (info: any) => {
         console.log('Machine Info Update:', info)
         machineInfo.value = info
@@ -272,27 +296,6 @@ async function startSignalR() {
     }
 }
 
-// === Actions ===
-
-async function inject() {
-    isInjecting.value = true
-    try {
-        await api.inject()
-    } catch (e) {
-        console.error('Inject failed:', e)
-        isInjecting.value = false
-    }
-}
-
-async function deattach() {
-    try {
-        await api.deattach()
-        isGameConnected.value = false
-    } catch (e) {
-        console.error('Deattach failed:', e)
-    }
-}
-
 async function searchPlayer(pid: number) {
     currentPlayerId.value = pid
     await refreshStats()
@@ -313,7 +316,7 @@ export function useSignalR() {
         // PRODUCTION - Real SignalR + Polling
         await startSignalR()
 
-        // Initial fetch of machine info (fixes empty UI on load, avoids polling/blinking)
+        // Initial fetch of machine info
         try {
             const initialInfo = await api.getMachineInfo()
             if (initialInfo && Object.keys(initialInfo).length > 0) {
@@ -332,14 +335,13 @@ export function useSignalR() {
             appVersion.value = '1.0.0.0'
         }
 
-        // Start status polling (every 1s like old frontend)
+        // Start status polling
         if (!statusInterval) {
             statusInterval = window.setInterval(async () => {
                 await pollStatus()
                 await pollData()
             }, 1000)
 
-            // Initial poll
             await pollStatus()
             await pollData()
         }

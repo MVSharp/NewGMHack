@@ -24,7 +24,7 @@ const coords = computed(() => {
 
 <template>
     <div class="h-full flex flex-col">
-        <div class="panel-header text-neon-cyan font-rajdhani text-xl border-b border-neon-cyan/30 pb-3 mb-4 uppercase">
+        <div class="panel-header text-neon-cyan font-rajdhani text-xl border-b border-neon-cyan-30 pb-3 mb-4 uppercase">
             {{ t('pilot_telemetry') }}
         </div>
         
@@ -89,7 +89,7 @@ const coords = computed(() => {
 }
 
 .data-table tr:hover td {
-    @apply bg-neon-cyan/5 text-white;
+    @apply bg-neon-cyan-5 text-white;
 }
 
 .glow-cyan { text-shadow: 0 0 10px rgba(102, 252, 241, 0.4); }

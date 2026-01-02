@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
+import { onMounted, computed, watch } from 'vue'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppNav from '@/components/layout/AppNav.vue'
+import ParticleBackground from '@/components/layout/ParticleBackground.vue'
 import Dashboard from '@/views/Dashboard.vue'
 import Features from '@/views/Features.vue'
 import Pilot from '@/views/Pilot.vue'
@@ -11,7 +12,7 @@ import { useTabs, TabNames } from '@/composables/useTabs'
 import { useSignalR } from '@/composables/useSignalR'
 
 const { currentTab } = useTabs()
-const { start } = useSignalR()
+const { start, isGameConnected } = useSignalR()
 
 const currentView = computed(() => {
     switch (currentTab.value) {
@@ -24,6 +25,17 @@ const currentView = computed(() => {
     }
 })
 
+// Trans-Am Mode Logic
+const isTransAm = computed(() => isGameConnected.value)
+
+watch(isTransAm, (val) => {
+    if (val) {
+        document.body.classList.add('trans-am')
+    } else {
+        document.body.classList.remove('trans-am')
+    }
+}, { immediate: true })
+
 onMounted(() => {
     start()
 })
@@ -31,6 +43,8 @@ onMounted(() => {
 
 <template>
     <div class="dashboard-wrapper">
+        <ParticleBackground :active="isTransAm" />
+        
         <!-- Header -->
         <AppHeader />
         
@@ -38,7 +52,7 @@ onMounted(() => {
         <AppNav />
         
         <!-- Main View -->
-        <main class="flex-1 overflow-hidden">
+        <main class="flex-1 overflow-hidden z-10 relative">
             <Transition name="fade" mode="out-in">
                 <component :is="currentView" :key="currentTab" />
             </Transition>
@@ -55,7 +69,10 @@ onMounted(() => {
     height: 100vh;
     padding: 15px;
     box-sizing: border-box;
-    background: linear-gradient(135deg, #050505 0%, #101015 100%);
+    /* Make background semi-transparent to show particles */
+    background: linear-gradient(135deg, rgba(5, 5, 5, 0.85) 0%, rgba(16, 16, 21, 0.9) 100%);
+    position: relative;
+    overflow: hidden;
 }
 
 /* Tab Transition */

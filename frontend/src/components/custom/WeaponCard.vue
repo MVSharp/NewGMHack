@@ -125,7 +125,7 @@ const typeColor = (type: string) => {
     animation: weapon-fade-in 0.3s ease-out both;
 }
 .weapon-card:hover {
-    @apply border-neon-blue/40 bg-neon-blue/5;
+    @apply border-neon-blue-40 bg-neon-blue-5;
     box-shadow: 0 0 10px rgba(0, 102, 255, 0.15);
 }
 .weapon-card.special-weapon {

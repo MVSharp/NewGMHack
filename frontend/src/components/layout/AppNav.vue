@@ -15,7 +15,7 @@ const tabs = [
 </script>
 
 <template>
-    <nav class="system-nav flex justify-center gap-5 border-b-2 border-neon-cyan/30 pb-4 bg-black/30">
+    <nav class="system-nav flex justify-center gap-5 border-b-2 border-neon-cyan-30 pb-4 bg-black/30">
         <button
             v-for="tab in tabs"
             :key="tab.name"
@@ -34,7 +34,7 @@ const tabs = [
 }
 
 .nav-btn:hover {
-    @apply bg-neon-cyan/10 text-neon-cyan border-neon-cyan shadow-[0_0_15px_rgba(102,252,241,0.2)];
+    @apply bg-neon-cyan-10 text-neon-cyan border-neon-cyan shadow-[0_0_15px_rgba(102,252,241,0.2)];
     text-shadow: 0 0 8px var(--neon-cyan);
 }
 

@@ -58,6 +58,21 @@
     --input: 240 3.7% 15.9%;
     --ring: 240 4.9% 83.9%;
   }
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    /* ... (unchanged) ... */
+    --ring: 240 4.9% 83.9%;
+  }
+
+  /* Trans-Am Mode Overrides (Kept structure but reverted to Cyan per request) */
+  .trans-am {
+    --neon-cyan: #66fcf1; /* Revert to default Cyan */
+    --neon-blue: #45a29e; /* Revert to default Blue */
+    --bg-panel: rgba(20, 20, 25, 0.98); /* Revert to default Panel */
+    --bg-dark: #0b0c10;   /* Revert to default Dark */
+    --text-dim: #8892b0;  /* Revert to default Dim */
+  }
 }
 
 @layer base {
@@ -68,7 +83,7 @@
   body {
     @apply bg-bg-dark text-text-white;
     /* Project Defaults */
-    font-family: 'Roboto', sans-serif;
+    font-family: "Roboto", sans-serif;
   }
 
   h1,
@@ -78,7 +93,9 @@
   .kpi-label,
   .val,
   .num {
-    font-family: 'Rajdhani', sans-serif;
+    font-family: "Rajdhani", sans-serif;
     text-transform: uppercase;
   }
 }
+
+

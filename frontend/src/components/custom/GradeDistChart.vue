@@ -136,7 +136,7 @@ const periods = [
                     :class="[
                         'px-2 py-0.5 text-xs font-rajdhani rounded transition-all uppercase tracking-wide',
                         timePeriod === period.key 
-                            ? 'bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/50 shadow-[0_0_8px_rgba(102,252,241,0.3)]' 
+                            ? 'bg-neon-cyan-20 text-neon-cyan border border-neon-cyan-50 shadow-[0_0_8px_rgba(102,252,241,0.3)]' 
                             : 'bg-white/5 text-gray-500 hover:bg-white/10 border border-transparent'
                     ]"
                 >

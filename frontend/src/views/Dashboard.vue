@@ -243,7 +243,7 @@ const chartExpData = computed(() => {
                                 :key="idx"
                                 :class="[
                                     'history-item',
-                                    match.Points > 2000 ? 'border-l-beam-pink bg-beam-pink/5' : ''
+                                    match.Points > 2000 ? 'border-l-beam-pink bg-beam-pink-5' : ''
                                 ]"
                             >
                                 <div class="flex items-center gap-2">
@@ -295,7 +295,7 @@ const chartExpData = computed(() => {
 }
 
 .panel-header {
-    @apply text-neon-cyan font-rajdhani text-lg border-b border-neon-cyan/30 pb-2 mb-3 flex justify-between items-center uppercase;
+    @apply text-neon-cyan font-rajdhani text-lg border-b border-neon-cyan-30 pb-2 mb-3 flex justify-between items-center uppercase;
 }
 
 .mini-stat {
