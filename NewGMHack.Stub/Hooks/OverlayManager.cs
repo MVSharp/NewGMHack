@@ -35,7 +35,7 @@ public class OverlayManager(SelfInformation self)
         if (_initialized || device == null) return;
         var fontDesc = new FontDescription
         {
-            Height         = 16,
+            Height         = 12,
             FaceName       = "Consolas",
             Weight         = FontWeight.Normal,
             Quality        = FontQuality.ClearType,
@@ -45,7 +45,7 @@ public class OverlayManager(SelfInformation self)
         _font = new SharpDX.Direct3D9.Font(device, fontDesc);
         _line = new Line(device)
         {
-            Width     = 1.5f,
+            Width     = 1.0f,
             Antialias = true,
         };
 
@@ -72,7 +72,7 @@ public class OverlayManager(SelfInformation self)
         // Cache Crosshair
         float centerX = screenWidth / 2f;
         float centerY = screenHeight / 2f;
-        const float size = 12f;
+        const float size = 8f;
 
         _crosshairCacheH = new[] { new Vector2(centerX - size, centerY), new Vector2(centerX + size, centerY) };
         _crosshairCacheV = new[] { new Vector2(centerX, centerY - size), new Vector2(centerX, centerY + size) };
@@ -250,18 +250,18 @@ public class OverlayManager(SelfInformation self)
             _line.Begin();
             _isDrawing = true;
 
-            // Draw cached Crosshair
+            // Draw cached Crosshair (white, thin)
             if (_crosshairCacheH != null && _crosshairCacheV != null)
             {
-                ColorBGRA chColor = new ColorBGRA(255, 0, 0, 255);
+                ColorBGRA chColor = new ColorBGRA(255, 255, 255, 200);
                 _line.Draw(_crosshairCacheH, chColor);
                 _line.Draw(_crosshairCacheV, chColor);
             }
 
-            // Draw cached Aim Circle
+            // Draw cached Aim Circle (semi-transparent cyan)
             if (_aimCircleCache != null)
             {
-                _line.Draw(_aimCircleCache, Color.Red);
+                _line.Draw(_aimCircleCache, new ColorBGRA(0, 255, 255, 100));
             }
 
             var playerPos = new Vector3(self.PersonInfo.X, self.PersonInfo.Y, self.PersonInfo.Z);
@@ -307,10 +307,11 @@ public class OverlayManager(SelfInformation self)
 
                     if (entity.IsBest)
                     {
-                        // Draw line to center
-                        DrawLine(new Vector2(entity.ScreenX, entity.ScreenY), new Vector2(viewport.Width / 2, viewport.Height / 2), Color.Red);
+                        // Draw line to center (subtle cyan gradient)
+                        ColorBGRA bestLineColor = new ColorBGRA(0, 255, 255, 140);
+                        DrawLine(new Vector2(entity.ScreenX, entity.ScreenY), new Vector2(viewport.Width / 2, viewport.Height / 2), bestLineColor);
                         // Draw small circle around head
-                        DrawEllipse(entity.ScreenX, entity.ScreenY, 30, 30, Color.Red);
+                        DrawEllipse(entity.ScreenX, entity.ScreenY, 30, 30, new ColorBGRA(0, 255, 255, 180));
                     }
                 }
             }
@@ -371,7 +372,7 @@ public class OverlayManager(SelfInformation self)
         {
             string status = feature.IsEnabled ? "Enabled" : "Disabled";
             string line   = $"{feature.Name,-18} {status}";
-            var    color  = feature.IsEnabled ? new ColorBGRA(0, 255, 0, 180) : new ColorBGRA(255, 0, 0, 180);
+            var    color  = feature.IsEnabled ? new ColorBGRA(0, 255, 0, 140) : new ColorBGRA(255, 0, 0, 140);
             _font.DrawText(null, line, new Rectangle(x, y, uiWidth, LineHeight), FontDrawFlags.NoClip, color);
             y += LineHeight;
         }
@@ -408,7 +409,7 @@ public class OverlayManager(SelfInformation self)
     private void DrawInfoRow(Device device, int x, ref int y, string label, string value)
     {
         string line  = $"{label,-10}: {value}";
-        var    color = new ColorBGRA(173, 216, 230, 160);
+        var    color = new ColorBGRA(173, 216, 230, 140);
         _font.DrawText(null, line, new Rectangle(x, y, 200, LineHeight), FontDrawFlags.NoClip, color);
         y += LineHeight;
     }
