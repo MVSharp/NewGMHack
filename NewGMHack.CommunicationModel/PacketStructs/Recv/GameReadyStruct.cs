@@ -23,10 +23,10 @@ public uint PlayerId;
 	
 	public byte Pad13;
 	// 14 : IsTeam (2 = yes, 1 = random)
-	public byte IsTeam;
+	public byte IsTeam; 
 
-	public byte GameType;
-
+	public byte GameType; // 3 = dead match , 1 = usual 
+ 
 	private fixed byte Pad16_29[14]; 
 
 	public byte PlayerCount;
