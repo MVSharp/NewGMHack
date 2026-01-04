@@ -539,7 +539,7 @@ namespace NewGMHack.Stub.MemoryScanner
             // SkillId is a uint (4 bytes) + 2 trailing 0x00 for better matching
             // Example: 70125 -> 0x000111ED -> ED 11 01 00 00 00
             var idBytes = BitConverter.GetBytes(skillId);
-            return [idBytes[0], idBytes[1], idBytes[2], idBytes[3], 0x00, 0x00];
+            return [idBytes[0], idBytes[1], idBytes[2], idBytes[3], 0x00];
         }
 
         private static byte[] BuildWeaponPattern(uint weaponId)
