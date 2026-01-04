@@ -36,5 +36,6 @@ public class Info
 
     [Key(11)]
     public int MaxHp { get; set; }
-
+    [Key(12)]
+    public string PlayerName { get; set; }
 }

@@ -121,8 +121,8 @@ public class DirectInputLogicProcessor
                 float rawVelX = (currentX - _lastTargetScreenX) / deltaTimeSeconds;
                 float rawVelY = (currentY - _lastTargetScreenY) / deltaTimeSeconds;
 
-                // Smooth velocity with exponential moving average
-                const float velocitySmoothing = 0.3f;
+                // Smooth velocity with exponential moving average (more smoothing = less jitter)
+                const float velocitySmoothing = 0.15f; // Reduced from 0.3 for smoother velocity
                 _targetVelocityX = _targetVelocityX + (rawVelX - _targetVelocityX) * velocitySmoothing;
                 _targetVelocityY = _targetVelocityY + (rawVelY - _targetVelocityY) * velocitySmoothing;
             }
@@ -133,8 +133,8 @@ public class DirectInputLogicProcessor
             _lastPredictionTimeMs = currentTimeMs;
 
             // Predict future position (lead the target)
-            // Prediction time: how many seconds ahead to aim
-            const float predictionTime = 0.08f; // 80ms ahead
+            // Reduced prediction time to prevent overshoot
+            const float predictionTime = 0.04f; // 40ms ahead (was 80ms)
             float predictedX = currentX + (_targetVelocityX * predictionTime);
             float predictedY = currentY + (_targetVelocityY * predictionTime);
 
@@ -146,33 +146,23 @@ public class DirectInputLogicProcessor
             // Check if within aim circle
             if (distance > _self.AimRadius) return;
 
-            // Dead zone - already on target
-            if (distance < 3f) return;
+            // Larger dead zone to prevent jitter (was 3px)
+            if (distance < 10f) return;
 
-            int moveX, moveY;
+            // ALWAYS use exponential decay - no snap zone (snap caused vibration)
+            // Lower decay factor = slower but more stable
+            const float decayFactor = 0.50f; // Reduced from 0.65
+            
+            int moveX = (int)(deltaX * decayFactor);
+            int moveY = (int)(deltaY * decayFactor);
 
-            // SNAP: When very close, move directly to target
-            if (distance < 12f)
-            {
-                moveX = (int)deltaX;
-                moveY = (int)deltaY;
-            }
-            else
-            {
-                // EXPONENTIAL DECAY: Move 65% of remaining distance
-                const float decayFactor = 0.65f;
-                
-                moveX = (int)(deltaX * decayFactor);
-                moveY = (int)(deltaY * decayFactor);
+            // Minimum movement to prevent stalling
+            if (moveX == 0 && Math.Abs(deltaX) > 1f) moveX = Math.Sign(deltaX);
+            if (moveY == 0 && Math.Abs(deltaY) > 1f) moveY = Math.Sign(deltaY);
 
-                // Minimum movement to prevent stalling
-                if (moveX == 0 && Math.Abs(deltaX) > 0.5f) moveX = Math.Sign(deltaX);
-                if (moveY == 0 && Math.Abs(deltaY) > 0.5f) moveY = Math.Sign(deltaY);
-            }
-
-            // Clamp maximum speed
-            moveX = Math.Clamp(moveX, -120, 120);
-            moveY = Math.Clamp(moveY, -120, 120);
+            // Lower max speed clamp for stability
+            moveX = Math.Clamp(moveX, -80, 80);
+            moveY = Math.Clamp(moveY, -80, 80);
 
             // Inject movement
             if (moveX != 0 || moveY != 0)

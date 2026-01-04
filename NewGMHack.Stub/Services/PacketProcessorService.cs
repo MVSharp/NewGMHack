@@ -146,13 +146,17 @@ public class PacketProcessorService : BackgroundService
         {
             // case 1992 or 1338 or 2312 or 1525 or 1521 or 2103:
             //1342 player reborn in battle
+            case 2245: //after F5
+                ReadGameReady(methodPacket.MethodBody);
+                break;
             case 2143: // battle reborn
                 _selfInformation.ClientConfig.IsInGame = true;
-                if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
-                {
-                    _logger.ZLogInformation($"battle reborn packet");
-                    ReadReborns(reader, reborns,false);
-                }
+                ReadPlayerStats(methodPacket.MethodBody, reborns);
+                //if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+                //{
+                //    _logger.ZLogInformation($"battle reborn packet with stats");
+                //    //ReadReborns(reader, reborns,false);
+                //}
                 break;
             case 1992 or 1342 or 2065: //or 1521 or 2312 or 1525 or 1518:
                 _selfInformation.ClientConfig.IsInGame = true;
@@ -168,7 +172,12 @@ public class PacketProcessorService : BackgroundService
                 ChargeCondom(socket, _selfInformation.PersonInfo.Slot);
                 break;
 
-            case 2107 or 2108 or 2109 or 2110 or 2877:// these are possible back room`
+            case 2107 or 2108 or 2109 or 2110:// these are possible back room`
+                ChargeCondom(socket, _selfInformation.PersonInfo.Slot);
+                SendF5(socket);
+                break;
+            case 2877:
+                ReadPlayerBasicInfo(methodPacket.MethodBody);
                 ChargeCondom(socket, _selfInformation.PersonInfo.Slot);
                 SendF5(socket);
                 break;
@@ -320,6 +329,77 @@ public class PacketProcessorService : BackgroundService
         }
     }
 
+    private unsafe void ReadPlayerBasicInfo(ReadOnlySpan<byte> bytes)
+    {
+        try
+        {
+            _selfInformation.ClientConfig.IsInGame = false;
+            var header = bytes.ReadStruct<PlayerBasicInfoStruct>();
+            
+            _selfInformation.PersonInfo.PersonId = header.PlayerId;
+            
+            // Get name from fixed byte array - decode as GB2312
+            int nameLen = Math.Min((int)header.NameLength, 30);
+            ReadOnlySpan<byte> nameBytes = new ReadOnlySpan<byte>(header.Name, nameLen);
+            _selfInformation.PersonInfo.PlayerName = chs.GetString(nameBytes).Trim('\0').Trim();
+            
+            _logger.ZLogInformation($"PlayerBasicInfo: Id={header.PlayerId} Name={_selfInformation.PersonInfo.PlayerName}");
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, $"Error in ReadPlayerBasicInfo");
+        }
+    }
+
+    private void ReadGameReady(ReadOnlySpan<byte> bytes)
+    {
+        try
+        {
+            var header = bytes.ReadStruct<GameReadyStruct>();
+            var players = bytes.SliceAfter<GameReadyStruct>().CastTo<PlayerBattleStruct>();
+            
+            _logger.ZLogInformation($"GameReady: PlayerId={header.PlayerId} Map={header.MapId} GameType={header.GameType} IsTeam={header.IsTeam} PlayerCount={header.PlayerCount}");
+            
+            // Store self info
+            _selfInformation.PersonInfo.PersonId = header.PlayerId;
+            _selfInformation.ClientConfig.IsInGame = true;
+            
+            // Log each player's battle info
+            int count = Math.Min(header.PlayerCount, players.Length);
+            for (int i = 0; i < count; i++)
+            {
+                var p = players[i];
+                _logger.ZLogInformation($"Player[{i}]: Id={p.Player} Team={p.TeamId} Machine={p.MachineId} HP={p.MaxHP} Atk={p.Attack} Def={p.Defense} Shield={p.Shield}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, $"Error in ReadGameReady");
+        }
+    }
+
+    private void ReadPlayerStats(ReadOnlySpan<byte> bytes, ConcurrentQueue<Reborn> reborns)
+    {
+        try
+        {
+            if (!_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+                return;
+
+            var playerState = bytes.ReadStruct<PlayerStateStruct>();
+            
+            // If PlayerId != SpawnId, add to reborn queue
+            if (playerState.PlayerId != playerState.SpawnId)
+            {
+                _logger.ZLogInformation($"battle reborn packet: PlayerId={playerState.PlayerId} SpawnId={playerState.SpawnId}");
+                reborns.Enqueue(new Reborn(playerState.PlayerId, playerState.SpawnId, 0));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, $"Error in ReadPlayerStats");
+        }
+    }
+
     private Machine ReadChangedMachine(ReadOnlyMemory<byte> methodPacketMethodBody)
     {
         var changed = methodPacketMethodBody.Span.ReadStruct<GetChangedMachine>();
@@ -439,32 +519,35 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
             _logger.LogError(ex , $"error in readdead");
         }    }
 
- private void ReadHitResponse1616(ReadOnlyMemory<byte> bytes, ConcurrentQueue<Reborn> reborns )
+ private void ReadHitResponse1616(ReadOnlyMemory<byte> bytes, ConcurrentQueue<Reborn> reborns)
  {
      try
      {
+         var hitResponse = bytes.Span.ReadStruct<HitResponse1616>();
+         var victims = bytes.Span.SliceAfter<HitResponse1616>().CastTo<Victim>();
+         
+         // Get first victim's ID for ToId (single-target compatibility)
+         uint toId = hitResponse.VictimCount > 0 && victims.Length > 0 ? victims[0].VictimId : 0;
 
-        var  hitResponse = bytes.Span.ReadStruct<HitResponse1616>();
-     if (hitResponse.FromId != _selfInformation.PersonInfo.PersonId)
-     {
-         if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
-             _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+         if (hitResponse.FromId != _selfInformation.PersonInfo.PersonId)
          {
-             reborns.Enqueue(new Reborn(hitResponse.PlayerId, hitResponse.ToId, 0));
+             if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
+                 _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+             {
+                 reborns.Enqueue(new Reborn(hitResponse.PlayerId, toId, 0));
+             }
          }
-     }
 
-     if (hitResponse.ToId == _selfInformation.PersonInfo.PersonId)
-     {
-         if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsRebound))
+         if (toId == _selfInformation.PersonInfo.PersonId)
          {
-             reborns.Enqueue(new Reborn(hitResponse.PlayerId, hitResponse.FromId, 0));
+             if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsRebound))
+             {
+                 reborns.Enqueue(new Reborn(hitResponse.PlayerId, hitResponse.FromId, 0));
+             }
          }
-     }
      }
      catch
      {
-
      }
  }
 

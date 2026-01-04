@@ -155,6 +155,27 @@ namespace NewGMHack.Stub.Services.Scanning
             
             try
             {
+                // Validate memory is still readable before creating span
+                // This prevents AV when regions change between job creation and scan
+                if (!VirtualQueryEx(Process.GetCurrentProcess().Handle, job.BaseAddress, out var mbi, (uint)Marshal.SizeOf<MEMORY_BASIC_INFORMATION>()))
+                    return;
+                
+                if (mbi.State != MEM_COMMIT)
+                    return;
+                
+                if (!IsReadable(mbi.Protect))
+                    return;
+                
+                // Ensure we don't read past the region boundary
+                long regionEnd = mbi.BaseAddress.ToInt64() + mbi.RegionSize.ToInt64();
+                long requestedEnd = job.BaseAddress.ToInt64() + readSize;
+                if (requestedEnd > regionEnd)
+                {
+                    // Clamp readSize to stay within region
+                    readSize = (int)(regionEnd - job.BaseAddress.ToInt64());
+                    if (readSize <= 0) return;
+                }
+
                 unsafe
                 {
                     // Direct memory access - no syscall!

@@ -536,8 +536,9 @@ namespace NewGMHack.Stub.MemoryScanner
 
         private static byte[] BuildSkillPattern(uint skillId)
         {
-            // SkillId is a uint (4 bytes), use BitConverter for correct little-endian
-            return BitConverter.GetBytes(skillId);
+            // SkillId is a uint (4 bytes) + trailing 0x00 for better matching
+            var idBytes = BitConverter.GetBytes(skillId);
+            return [idBytes[0], idBytes[1], idBytes[2], idBytes[3], 0x00];
         }
 
         private static byte[] BuildWeaponPattern(uint weaponId)
@@ -604,11 +605,29 @@ namespace NewGMHack.Stub.MemoryScanner
         [SecurityCritical]
         private bool TryReadMemory(IntPtr address, byte[] buffer, int size)
         {
+            // Quick null/size check first
+            if (address == IntPtr.Zero || size <= 0 || buffer == null || buffer.Length < size)
+                return false;
+
             // Validate the whole range to prevent page boundary crossing crashes
-             if (!IsMemoryRangeReadable(address, size)) return false;
+            if (!IsMemoryRangeReadable(address, size)) return false;
 
             try
             {
+                // Double-check just the start and end pages right before copy
+                // This reduces race condition window
+                MEMORY_BASIC_INFORMATION mbiStart, mbiEnd;
+                if (VirtualQuery(address, out mbiStart, (uint)Marshal.SizeOf(typeof(MEMORY_BASIC_INFORMATION))) == 0)
+                    return false;
+                if (mbiStart.State != MEM_COMMIT || (mbiStart.Protect & PAGE_NOACCESS) != 0 || (mbiStart.Protect & PAGE_GUARD) != 0)
+                    return false;
+
+                IntPtr endAddr = address + size - 1;
+                if (VirtualQuery(endAddr, out mbiEnd, (uint)Marshal.SizeOf(typeof(MEMORY_BASIC_INFORMATION))) == 0)
+                    return false;
+                if (mbiEnd.State != MEM_COMMIT || (mbiEnd.Protect & PAGE_NOACCESS) != 0 || (mbiEnd.Protect & PAGE_GUARD) != 0)
+                    return false;
+
                 unsafe
                 {
                     fixed (byte* ptr = buffer)
@@ -618,6 +637,16 @@ namespace NewGMHack.Stub.MemoryScanner
                     }
                 }
                 return true;
+            }
+            catch (AccessViolationException)
+            {
+                // Memory became invalid between check and copy
+                return false;
+            }
+            catch (SEHException)
+            {
+                // Structured exception from memory access
+                return false;
             }
             catch
             {

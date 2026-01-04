@@ -477,7 +477,7 @@ public static (string ip, int port)? GetLocalAddress(nint socket)
              if ((localAddr.sin_addr & 0xFF) == 127) 
              {
                  ushort port = ntohs(localAddr.sin_port);
-                 if (port >= 40000 && port <= 65535) isLocalValid = true;
+                 if (port >= 10000 && port <= 65535) isLocalValid = true;
              }
         }
         
