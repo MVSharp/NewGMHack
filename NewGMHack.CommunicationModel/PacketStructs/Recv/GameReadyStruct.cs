@@ -25,7 +25,7 @@ public uint PlayerId;
 	// 14 : IsTeam (2 = yes, 1 = random)
 	public byte IsTeam; 
 
-	public byte GameType; // 3 = dead match , 1 = usual 
+	public byte GameType; // 3 = dead match , 1 = usual ,5 is mission
  
 	private fixed byte Pad16_29[14]; 
 
