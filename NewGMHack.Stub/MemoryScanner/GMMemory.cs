@@ -184,9 +184,7 @@ namespace NewGMHack.Stub.MemoryScanner
 
             // Prevent cycle scan: TransformId could be MachineId+1 or MachineId-1
             // Only scan transformed machine if it's a different machine (not adjacent ID)
-            if (machineInfo.HasTransform && machineInfo.TransformId != 0 &&
-                machineInfo.TransformId != machineInfo.MachineId &&
-                Math.Abs((int)machineInfo.TransformId - (int)machineInfo.MachineId) > 1)
+            if (machineInfo.HasTransform && machineInfo.TransformId != 0 )
             {
                 machineInfo.TransformedMachine = await ScanMachine(machineInfo.TransformId, token);
                 if (machineInfo.TransformedMachine is not null)
@@ -457,7 +455,7 @@ namespace NewGMHack.Stub.MemoryScanner
         {
             var raw  = MemoryMarshal.Read<SkillBaseInfoStruct>(data);
             var info = SkillBaseInfo.FromRaw(raw);
-
+            if (info.HpActivateCondition.StartsWith("Unknown")) return null;
             if (string.IsNullOrWhiteSpace(info.SkillName)) return null;
             if (string.IsNullOrEmpty(info.Description)) return null;
             if(!string.IsNullOrEmpty(info.AuraEffect) && !info.AuraEffect.StartsWith(@"fxrs\",StringComparison.OrdinalIgnoreCase))return null;
@@ -467,6 +465,7 @@ namespace NewGMHack.Stub.MemoryScanner
 
             if (info.AttackIncrease         < -255 || info.DefenseIncrease < -255 || info.AgilityPercent < 0 ||
                 info.ExactHpActivatePercent < 0) return null;
+            if (info.MeleeDamageIncrease > 100) return null;
             return info;
         }
 

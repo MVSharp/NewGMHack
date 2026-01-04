@@ -11,7 +11,8 @@ public unsafe struct PlayerBattleStruct
 {
     public uint Player;
     public byte RoomSlot;
-    public ushort TeamId;
+        public byte TeamId1; // 1 is red 2 is blue team else unknown
+        public byte TeamId2; // 1 is red 2 is blue team else unknown
     public uint MachineId;
     private fixed byte _pad1[3];
     public uint MachineIdAfterTransform;

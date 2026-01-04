@@ -369,7 +369,7 @@ public class PacketProcessorService : BackgroundService
             for (int i = 0; i < count; i++)
             {
                 var p = players[i];
-                _logger.ZLogInformation($"Player[{i}]: Id={p.Player} Team={p.TeamId} Machine={p.MachineId} HP={p.MaxHP} Atk={p.Attack} Def={p.Defense} Shield={p.Shield}");
+                _logger.ZLogInformation($"Player[{i}]: Id={p.Player} Team={p.TeamId1} ,{p.TeamId2} Machine={p.MachineId} HP={p.MaxHP} Atk={p.Attack} Def={p.Defense} Shield={p.Shield}");
             }
         }
         catch (Exception ex)
