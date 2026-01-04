@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging;
 using ZLogger;
 using NewGMHack.CommunicationModel.Models;
 using NewGMHack.Stub.Services.Scanning;
+using NewGMHack.Stub.Services.Caching;
 
 namespace NewGMHack.Stub.MemoryScanner
 {
@@ -21,6 +22,14 @@ namespace NewGMHack.Stub.MemoryScanner
     {
         private readonly ILogger<GmMemory> logger;
         private readonly IMemoryScanner _scanner;
+        private readonly IEntityCache<MachineBaseInfo> _machineCache;
+        private readonly IEntityCache<SkillBaseInfo> _skillCache;
+        private readonly IEntityCache<WeaponBaseInfo> _weaponCache;
+        
+        /// <summary>
+        /// Cache TTL - entries older than this will trigger a rescan
+        /// </summary>
+        private static readonly TimeSpan CacheTTL = TimeSpan.FromMinutes(30);
 
         [StructLayout(LayoutKind.Sequential)]
         public struct MEMORY_BASIC_INFORMATION
@@ -47,17 +56,22 @@ namespace NewGMHack.Stub.MemoryScanner
         private const uint PAGE_GUARD = 0x100;
         private const uint PAGE_NOACCESS = 0x01;
 
-        public GmMemory(ILogger<GmMemory> logger, IMemoryScanner scanner)
+        public GmMemory(
+            ILogger<GmMemory> logger, 
+            IMemoryScanner scanner,
+            IEntityCache<MachineBaseInfo>? machineCache = null,
+            IEntityCache<SkillBaseInfo>? skillCache = null,
+            IEntityCache<WeaponBaseInfo>? weaponCache = null)
         {
             this.logger = logger;
             _scanner = scanner;
+            // Use injected caches or fallback to in-memory
+            _machineCache = machineCache ?? new InMemoryEntityCache<MachineBaseInfo>();
+            _skillCache = skillCache ?? new InMemoryEntityCache<SkillBaseInfo>();
+            _weaponCache = weaponCache ?? new InMemoryEntityCache<WeaponBaseInfo>();
         }
 
-        #region Caches
-
-        private readonly ConcurrentDictionary<uint, MachineBaseInfo> _machineCache = new();
-        private readonly ConcurrentDictionary<uint, SkillBaseInfo>   _skillCache   = new();
-        private readonly ConcurrentDictionary<uint, WeaponBaseInfo>  _weaponCache  = new();
+        #region Cache Methods
 
         public void CleanMachineCache() => _machineCache.Clear();
         public void CleanSkillCache()   => _skillCache.Clear();
@@ -70,12 +84,9 @@ namespace NewGMHack.Stub.MemoryScanner
             _weaponCache.Clear();
         }
 
-        public MachineBaseInfo? GetCachedMachine(uint id) => _machineCache.TryGetValue(id, out var v) ? v : null;
-        public SkillBaseInfo? GetCachedSkill(uint id) => _skillCache.TryGetValue(id, out var v) ? v : null;
-        public WeaponBaseInfo? GetCachedWeapon(uint id) => _weaponCache.TryGetValue(id, out var v) ? v : null;
-        public IEnumerable<MachineBaseInfo> GetAllCachedMachines() => _machineCache.Values;
-        public IEnumerable<SkillBaseInfo> GetAllCachedSkills() => _skillCache.Values;
-        public IEnumerable<WeaponBaseInfo> GetAllCachedWeapons() => _weaponCache.Values;
+        public async Task<MachineBaseInfo?> GetCachedMachineAsync(uint id) => await _machineCache.GetAsync(id);
+        public async Task<SkillBaseInfo?> GetCachedSkillAsync(uint id) => await _skillCache.GetAsync(id);
+        public async Task<WeaponBaseInfo?> GetCachedWeaponAsync(uint id) => await _weaponCache.GetAsync(id);
 
         #endregion
 
@@ -92,10 +103,16 @@ namespace NewGMHack.Stub.MemoryScanner
         public async Task<MachineBaseInfo?> ScanMachine(uint id, CancellationToken token)
         {
             if (id == 0) return null;
-            if (_machineCache.TryGetValue(id, out var cached))
+            
+            // Check cache with TTL
+            if (await _machineCache.IsValidAsync(id, CacheTTL))
             {
-                logger.ZLogInformation($"ScanMachine cache hit: {id}");
-                return cached;
+                var cached = await _machineCache.GetAsync(id);
+                if (cached != null)
+                {
+                    logger.ZLogInformation($"ScanMachine cache hit: {id}");
+                    return cached;
+                }
             }
 
             var (pattern, mask) = BuildMachinePattern(id);
@@ -111,7 +128,7 @@ namespace NewGMHack.Stub.MemoryScanner
 
             if (result != null)
             {
-                _machineCache.TryAdd(id, result);
+                await _machineCache.SetAsync(id, result);
                 LogMachineResult(result);
             }
 
@@ -121,10 +138,16 @@ namespace NewGMHack.Stub.MemoryScanner
         public async Task<SkillBaseInfo?> ScanSkill(uint skillId, CancellationToken token)
         {
             if (skillId == 0) return null;
-            if (_skillCache.TryGetValue(skillId, out var cached))
+            
+            // Check cache with TTL
+            if (await _skillCache.IsValidAsync(skillId, CacheTTL))
             {
-                logger.ZLogInformation($"ScanSkill cache hit: {skillId}");
-                return cached;
+                var cached = await _skillCache.GetAsync(skillId);
+                if (cached != null)
+                {
+                    logger.ZLogInformation($"ScanSkill cache hit: {skillId}");
+                    return cached;
+                }
             }
 
             var result = await ScanGeneric(
@@ -139,7 +162,7 @@ namespace NewGMHack.Stub.MemoryScanner
 
             if (result != null)
             {
-                _skillCache.TryAdd(skillId, result);
+                await _skillCache.SetAsync(skillId, result);
                 LogSkillResult(result);
             }
 
@@ -149,10 +172,16 @@ namespace NewGMHack.Stub.MemoryScanner
         public async Task<WeaponBaseInfo?> ScanWeapon(uint weaponId, CancellationToken token)
         {
             if (weaponId == 0) return null;
-            if (_weaponCache.TryGetValue(weaponId, out var cached))
+            
+            // Check cache with TTL
+            if (await _weaponCache.IsValidAsync(weaponId, CacheTTL))
             {
-                logger.ZLogInformation($"ScanWeapon cache hit: {weaponId}");
-                return cached;
+                var cached = await _weaponCache.GetAsync(weaponId);
+                if (cached != null)
+                {
+                    logger.ZLogInformation($"ScanWeapon cache hit: {weaponId}");
+                    return cached;
+                }
             }
 
             var result = await ScanGeneric(
@@ -167,7 +196,7 @@ namespace NewGMHack.Stub.MemoryScanner
 
             if (result != null)
             {
-                _weaponCache.TryAdd(weaponId, result);
+                await _weaponCache.SetAsync(weaponId, result);
                 LogWeaponResult(result);
             }
 

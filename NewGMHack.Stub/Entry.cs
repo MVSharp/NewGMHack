@@ -14,7 +14,9 @@ using NewGMHack.Stub.MemoryScanner;
 using NewGMHack.Stub.PacketStructs.Recv;
 using NewGMHack.Stub.Services;
 using NewGMHack.Stub.Services.Scanning;
+using NewGMHack.Stub.Services.Caching;
 using NewGMHack.Stub.Models;
+using NewGMHack.CommunicationModel.Models;
 using Reloaded.Hooks;
 using Reloaded.Hooks.Definitions;
 using SharedMemory;
@@ -86,6 +88,12 @@ namespace NewGMHack.Stub
                                        //services.AddSingleton<AsyncIPCLogProcessor>();
                                        services.AddSingleton<SelfInformation>();
                                        services.AddTransient<Mem>();
+                                       
+                                       // SQLite entity caches for GmMemory
+                                       services.AddSingleton<IEntityCache<MachineBaseInfo>, SqliteEntityCache<MachineBaseInfo>>();
+                                       services.AddSingleton<IEntityCache<SkillBaseInfo>, SqliteEntityCache<SkillBaseInfo>>();
+                                       services.AddSingleton<IEntityCache<WeaponBaseInfo>, SqliteEntityCache<WeaponBaseInfo>>();
+                                       
                                        services.AddTransient<GmMemory>();
                                        //services.AddSingleton<FullAoBScanner>();
                                        services.AddTransient<IBuffSplitter, BuffSplitter>();
