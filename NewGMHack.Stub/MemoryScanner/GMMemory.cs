@@ -182,8 +182,11 @@ namespace NewGMHack.Stub.MemoryScanner
             // Super Batch: Scan all Skills and Weapons in ONE pass
             await AssignDetailsAsync(machineInfo, token);
 
+            // Prevent cycle scan: TransformId could be MachineId+1 or MachineId-1
+            // Only scan transformed machine if it's a different machine (not adjacent ID)
             if (machineInfo.HasTransform && machineInfo.TransformId != 0 &&
-                machineInfo.TransformId + 1 != machineInfo.MachineId)
+                machineInfo.TransformId != machineInfo.MachineId &&
+                Math.Abs((int)machineInfo.TransformId - (int)machineInfo.MachineId) > 1)
             {
                 machineInfo.TransformedMachine = await ScanMachine(machineInfo.TransformId, token);
                 if (machineInfo.TransformedMachine is not null)
