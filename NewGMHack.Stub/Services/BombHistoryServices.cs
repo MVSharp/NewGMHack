@@ -95,7 +95,7 @@ namespace NewGMHack.Stub.Services
             // we will reconstruct it efficiently.
             
             // Header parts based on previous code:
-            // Version (2), Split (2), Method (2), Unknown1 (4), PlayerId (4), WeaponId (4), WeaponSlot (4 + ?)
+            // Version (2), Split (2), Method (2), Unknown1 (4), MyPlayerId (4), WeaponId (4), WeaponSlot (4 + ?)
             // The original code used DefinitionsExtensions.WriteAttack or ToByteArray. 
             // We'll write directly to the packet builder.
             
@@ -104,7 +104,7 @@ namespace NewGMHack.Stub.Services
             packetBuilder.Write<ushort>(1868); // Method
             packetBuilder.Write<uint>(0);  // Unknown1 (assuming 0 or padding) - Wait, struct had Unknown1. Let's assume 0 for now as it wasn't set explicitly in the 'new' block except implicitly 0.
             
-            packetBuilder.Write<uint>(_selfInformation.PersonInfo.PersonId); // PlayerId
+            packetBuilder.Write<uint>(_selfInformation.PersonInfo.PersonId); // MyPlayerId
             packetBuilder.Write<uint>(_selfInformation.PersonInfo.Weapon2);  // WeaponId
             // WeaponSlot = 65281 (0xFF01) - 4 bytes? or 2? struct name suggests slot. Usually int.
             packetBuilder.Write<uint>(65281); 
@@ -112,7 +112,7 @@ namespace NewGMHack.Stub.Services
             // PlayerId2 (4), Unknown2 (4)?
             // The original code commented out keys but we need to match the struct layout EXACTLY.
             // Let's rely on the previous struct fields order:
-            // Version, Split, Method, Unknown1, PlayerId, WeaponId, WeaponSlot, PlayerId2, Unknown2, TargetCount
+            // Version, Split, Method, Unknown1, MyPlayerId, WeaponId, WeaponSlot, PlayerId2, Unknown2, TargetCount
             
             packetBuilder.Write<uint>(0); // PlayerId2 (default 0)
             packetBuilder.Write<uint>(0); // Unknown2 (default 0)

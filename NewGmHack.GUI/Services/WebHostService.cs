@@ -134,7 +134,7 @@ namespace NewGmHack.GUI.Services
                                                     MIN(CreatedAtUtc) as FirstSortieDate,
                                                     MAX(CreatedAtUtc) as LastSortieDate
                                                 FROM MatchRewards 
-                                                WHERE PlayerId = @PlayerId";
+                                                WHERE MyPlayerId = @MyPlayerId";
                                             stats = await conn.QuerySingleOrDefaultAsync(sql, new { PlayerId = playerId });
                                             
                                             var sqlHourly = @"
@@ -146,7 +146,7 @@ namespace NewGmHack.GUI.Services
                                                     ifnull(SUM(MachineAddedExp), 0) as MachineExpLastHour,
                                                     ifnull(SUM(ifnull(Bonus1,0) + ifnull(Bonus2,0) + ifnull(Bonus3,0) + ifnull(Bonus4,0) + ifnull(Bonus5,0) + ifnull(Bonus6,0) + ifnull(Bonus7,0) + ifnull(Bonus8,0)), 0) as BonusLastHour
                                                 FROM MatchRewards
-                                                WHERE PlayerId = @PlayerId AND datetime(CreatedAtUtc) >= datetime('now', '-1 hour')";
+                                                WHERE MyPlayerId = @MyPlayerId AND datetime(CreatedAtUtc) >= datetime('now', '-1 hour')";
                                             hourly = await conn.QuerySingleOrDefaultAsync(sqlHourly, new { PlayerId = playerId });
                                             
                                             var sqlToday = @"
@@ -158,7 +158,7 @@ namespace NewGmHack.GUI.Services
                                                     SUM(MachineAddedExp) as MachineExpToday,
                                                     SUM(ifnull(Bonus1,0) + ifnull(Bonus2,0) + ifnull(Bonus3,0) + ifnull(Bonus4,0) + ifnull(Bonus5,0) + ifnull(Bonus6,0) + ifnull(Bonus7,0) + ifnull(Bonus8,0)) as BonusToday
                                                 FROM MatchRewards
-                                                WHERE PlayerId = @PlayerId AND datetime(CreatedAtUtc) >= date('now')";
+                                                WHERE MyPlayerId = @MyPlayerId AND datetime(CreatedAtUtc) >= date('now')";
                                             today = await conn.QuerySingleOrDefaultAsync(sqlToday, new { PlayerId = playerId });
                                         }
                                         else
@@ -181,7 +181,7 @@ namespace NewGmHack.GUI.Services
                                                     MIN(CreatedAtUtc) as FirstSortieDate,
                                                     MAX(CreatedAtUtc) as LastSortieDate
                                                 FROM MatchRewards 
-                                                WHERE PlayerId = @PlayerId";
+                                                WHERE MyPlayerId = @MyPlayerId";
                                             stats = await conn.QuerySingleOrDefaultAsync(sql, new { PlayerId = playerId });
                                             
                                             var sqlHourly = @"
@@ -192,7 +192,7 @@ namespace NewGmHack.GUI.Services
                                                     SUM(MachineAddedExp) as MachineExpLastHour,
                                                     SUM(ifnull(Bonus1,0) + ifnull(Bonus2,0) + ifnull(Bonus3,0) + ifnull(Bonus4,0) + ifnull(Bonus5,0) + ifnull(Bonus6,0) + ifnull(Bonus7,0) + ifnull(Bonus8,0)) as BonusLastHour
                                                 FROM MatchRewards
-                                                WHERE PlayerId = @PlayerId AND datetime(CreatedAtUtc) >= datetime('now', '-1 hour')";
+                                                WHERE MyPlayerId = @MyPlayerId AND datetime(CreatedAtUtc) >= datetime('now', '-1 hour')";
                                             hourly = await conn.QuerySingleOrDefaultAsync(sqlHourly, new { PlayerId = playerId });
                                             
                                             var sqlToday = @"
@@ -203,7 +203,7 @@ namespace NewGmHack.GUI.Services
                                                     SUM(MachineAddedExp) as MachineExpToday,
                                                     SUM(ifnull(Bonus1,0) + ifnull(Bonus2,0) + ifnull(Bonus3,0) + ifnull(Bonus4,0) + ifnull(Bonus5,0) + ifnull(Bonus6,0) + ifnull(Bonus7,0) + ifnull(Bonus8,0)) as BonusToday
                                                 FROM MatchRewards
-                                                WHERE PlayerId = @PlayerId AND datetime(CreatedAtUtc) >= date('now')";
+                                                WHERE MyPlayerId = @MyPlayerId AND datetime(CreatedAtUtc) >= date('now')";
                                             today = await conn.QuerySingleOrDefaultAsync(sqlToday, new { PlayerId = playerId });
                                         }
 
@@ -225,7 +225,7 @@ namespace NewGmHack.GUI.Services
                                             SELECT *, 
                                             (ifnull(Bonus1,0) + ifnull(Bonus2,0) + ifnull(Bonus3,0) + ifnull(Bonus4,0) + ifnull(Bonus5,0) + ifnull(Bonus6,0) + ifnull(Bonus7,0) + ifnull(Bonus8,0)) as TotalBonus 
                                             FROM MatchRewards 
-                                            WHERE PlayerId = @PlayerId 
+                                            WHERE MyPlayerId = @MyPlayerId 
                                             ORDER BY CreatedAtUtc DESC LIMIT 10";
                                         var history = await conn.QueryAsync(sql, new { PlayerId = playerId });
                                         await context.Response.WriteAsJsonAsync(history, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = null });

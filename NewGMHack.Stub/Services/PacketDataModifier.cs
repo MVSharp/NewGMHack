@@ -119,8 +119,8 @@ public static float DecodePosition(byte high, byte low)
                     //    Split   = 1008,
                     //    Method  = 1868,
                     //    //     TargetCount = 12,
-                    //    PlayerId = _selfInformation.PersonInfo.PersonId,
-                    //    //PlayerId2 = _selfInformation.PlayerId,
+                    //    MyPlayerId = _selfInformation.PersonInfo.PersonId,
+                    //    //PlayerId2 = _selfInformation.MyPlayerId,
                     //    WeaponId   = _selfInformation.PersonInfo.Weapon2,
                     //    WeaponSlot = 65281,
                     //};
@@ -168,7 +168,7 @@ public static float DecodePosition(byte high, byte low)
 
             //        var attack = raw.ReadStruct<Attack1486>();
             //    var targets = raw.SliceAfter<Attack1486>().CastTo<TargetData>();
-            //    if (attack.PlayerId != _self.PersonInfo.PersonId) return null;
+            //    if (attack.MyPlayerId != _self.PersonInfo.PersonId) return null;
 
             //    for (int i = 0; i < targets.Length; i++)
             //        targets[i].Damage = ushort.MaxValue;

@@ -91,16 +91,16 @@ public class BattleState
     }
     
     /// <summary>
-    /// Update player HP after hit (returns damage dealt)
+    /// Update player HP after hit (returns HP change: positive=damage, negative=healing)
     /// </summary>
-    public uint UpdatePlayerHP(uint playerId, uint newHP, uint newShield)
+    public int UpdatePlayerHP(uint playerId, uint newHP, uint newShield)
     {
         if (Players.TryGetValue(playerId, out var state))
         {
-            uint damage = state.CurrentHP > newHP ? state.CurrentHP - newHP : 0;
+            int hpDelta = (int)state.CurrentHP - (int)newHP; // positive = damage, negative = healing
             state.CurrentHP = newHP;
             state.CurrentShield = newShield;
-            return damage;
+            return hpDelta;
         }
         return 0;
     }
@@ -169,7 +169,7 @@ public class BattlePlayerRecord
 }
 
 /// <summary>
-/// Damage event record for SQLite
+/// Damage event record for SQLite (positive=damage, negative=healing)
 /// </summary>
 public class DamageEventRecord
 {
@@ -179,7 +179,7 @@ public class DamageEventRecord
     public uint AttackerId { get; set; }
     public uint WeaponId { get; set; }
     public uint VictimId { get; set; }
-    public uint Damage { get; set; }
+    public int Damage { get; set; } // positive = damage, negative = healing
     public uint VictimHPAfter { get; set; }
     public uint VictimShieldAfter { get; set; }
     public int IsKill { get; set; }

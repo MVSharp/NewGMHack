@@ -13,8 +13,8 @@ using System.Runtime.InteropServices;
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public unsafe struct PlayerStateStruct
 {
-    public UInt32 PlayerId;          // b[6..9]   - Player unique ID
-    public UInt32 SpawnId;        // b[10..11] - Spawn index (starts from 1?)
+    public UInt32 MyPlayerId;          // b[6..9]   - Player unique ID this is myself 
+    public UInt32 SpawnId;        // b[10..11] - Spawn index (starts from 1?) /reborn guy 
     public UInt32 CurrentHP;        // b[13..16] - Current HP
     public UInt32 CurrentSP;        // b[17..20] - Current SP
     public UInt32 FieldsHP;     // b[21..24] - State/fields HP

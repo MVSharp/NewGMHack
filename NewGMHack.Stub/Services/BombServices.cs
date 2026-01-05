@@ -154,8 +154,8 @@ namespace NewGMHack.Stub.Services
             //    Split   = 1008,
             //    Method  = 1335,
             //    //     TargetCount = 12,
-            //    PlayerId = _selfInformation.PersonInfo.PersonId,
-            //    //PlayerId2 = _selfInformation.PlayerId,
+            //    MyPlayerId = _selfInformation.PersonInfo.PersonId,
+            //    //PlayerId2 = _selfInformation.MyPlayerId,
             //    WeaponId   = _selfInformation.PersonInfo.Weapon2,
             //    WeaponSlot = 1
             //};
@@ -167,7 +167,7 @@ namespace NewGMHack.Stub.Services
                 Method  = 1868,
                 //     TargetCount = 12,
                 PlayerId = _selfInformation.PersonInfo.PersonId,
-                //PlayerId2 = _selfInformation.PlayerId,
+                //PlayerId2 = _selfInformation.MyPlayerId,
                 WeaponId   = _selfInformation.PersonInfo.Weapon2,
                 WeaponSlot = 65281,
             };

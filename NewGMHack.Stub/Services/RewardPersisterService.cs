@@ -204,12 +204,12 @@ public class RewardPersisterService : BackgroundService
             using var conn = new SqliteConnection(_connectionString);
             string sql = @"
                 INSERT INTO MatchRewards (
-                    PlayerId, CreatedAtUtc, SessionId, GameStatus,
+                    MyPlayerId, CreatedAtUtc, SessionId, GameStatus,
                     Kills, Deaths, Supports, Points, ExpGain, GBGain, MachineAddedExp, MachineExp, PracticeExpAdded,
                     GradeRank, DamageScore, TeamExpectationScore, SkillFulScore,
                     Bonus1, Bonus2, Bonus3, Bonus4, Bonus5, Bonus6, Bonus7, Bonus8
                 ) VALUES (
-                    @PlayerId, @CreatedAtUtc, @SessionId, @GameStatus,
+                    @MyPlayerId, @CreatedAtUtc, @SessionId, @GameStatus,
                     @Kills, @Deaths, @Supports, @Points, @ExpGain, @GBGain, @MachineAddedExp, @MachineExp, @PracticeExpAdded,
                     @GradeRank, @DamageScore, @TeamExpectationScore, @SkillFulScore,
                     @Bonus1, @Bonus2, @Bonus3, @Bonus4, @Bonus5, @Bonus6, @Bonus7, @Bonus8
@@ -253,7 +253,7 @@ public class RewardPersisterService : BackgroundService
             string createTableSql = @"
                 CREATE TABLE IF NOT EXISTS MatchRewards (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    PlayerId INTEGER NOT NULL,
+                    MyPlayerId INTEGER NOT NULL,
                     CreatedAtUtc TEXT NOT NULL,
                     Kills INTEGER,
                     Deaths INTEGER,
@@ -301,7 +301,7 @@ public class RewardPersisterService : BackgroundService
             }
             
             // Step 3: Create indexes AFTER columns exist
-            await conn.ExecuteAsync("CREATE INDEX IF NOT EXISTS IDX_PlayerId ON MatchRewards(PlayerId)");
+            await conn.ExecuteAsync("CREATE INDEX IF NOT EXISTS IDX_PlayerId ON MatchRewards(MyPlayerId)");
             await conn.ExecuteAsync("CREATE INDEX IF NOT EXISTS IDX_CreatedAt ON MatchRewards(CreatedAtUtc)");
             await conn.ExecuteAsync("CREATE INDEX IF NOT EXISTS IDX_GameStatus ON MatchRewards(GameStatus)");
             
