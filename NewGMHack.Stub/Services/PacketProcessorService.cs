@@ -238,7 +238,7 @@ public class PacketProcessorService : BackgroundService
 
                 _selfInformation.ClientConfig.IsInGame = false;
                 break;
-            case 1550 or 1282 or 1490 or 2253 : // 1691 or 2337 or 1550:
+            case 1550 or 1282 or 1490 or 2253 or 1933 or 2326 : // 1691 or 2337 or 1550:
                 _selfInformation.BombHistory.Clear();
                 _selfInformation.ClientConfig.IsInGame = true;
                 SendSkipScreen(socket);
@@ -396,26 +396,28 @@ public class PacketProcessorService : BackgroundService
                     Defense = p.Defense,
                     Shield = p.Shield
                 });
+
             }
-            
-            // Send to battle logger for persistence (temporarily disabled)
-            // _battleLogChannel.Writer.TryWrite(new BattleLogEvent
-            // {
-            //     Type = BattleEventType.SessionStart,
-            //     SessionId = sessionId,
-            //     Timestamp = DateTime.UtcNow,
-            //     Session = new BattleSessionRecord
-            //     {
-            //         SessionId = sessionId,
-            //         PlayerId = header.PlayerId,
-            //         MapId = header.MapId,
-            //         GameType = header.GameType,
-            //         IsTeam = header.IsTeam,
-            //         PlayerCount = count,
-            //         StartedAt = DateTime.UtcNow.ToString("O")
-            //     },
-            //     Players = playerRecords
-            // });
+
+            //Send to battle logger for persistence(temporarily disabled)
+
+            _battleLogChannel.Writer.TryWrite(new BattleLogEvent
+            {
+                Type = BattleEventType.SessionStart,
+                SessionId = sessionId,
+                Timestamp = DateTime.UtcNow,
+                Session = new BattleSessionRecord
+                {
+                    SessionId = sessionId,
+                    PlayerId = header.PlayerId,
+                    MapId = header.MapId,
+                    GameType = header.GameType,
+                    IsTeam = header.IsTeam,
+                    PlayerCount = count,
+                    StartedAt = DateTime.UtcNow.ToString("O")
+                },
+                Players = playerRecords
+            });
         }
         catch (Exception ex)
         {
@@ -557,7 +559,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
              {
                  deadIds[i] = deads[i].Id;
              }
-             _logger.ZLogInformation($"[ReadDeads] deads:{string.Join("|", deadIds)}");
+             //_logger.ZLogInformation($"[ReadDeads] deads:{string.Join("|", deadIds)}");
              
              for (int i = 0; i < actualCount; i++)
              {
@@ -578,7 +580,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
                               KillerId = deadStruct.KillerId
 }
                       });
-_logger.ZLogInformation($"Death recorded: Victim={dead.Id} Killer={deadStruct.KillerId}");
+//_logger.ZLogInformation($"Death recorded: Victim={dead.Id} Killer={deadStruct.KillerId}");
                   }
                  
                  if (_selfInformation.BombHistory.TryGetValue(dead.Id, out var count))
@@ -586,7 +588,7 @@ _logger.ZLogInformation($"Death recorded: Victim={dead.Id} Killer={deadStruct.Ki
                      bool isRemoved = _selfInformation.BombHistory.TryRemove(dead.Id, out var _);
                      if (isRemoved)
                      {
-                        _logger.ZLogInformation($"[ReadDeads] Removed:{dead.Id} since it is dead");
+                        //_logger.ZLogInformation($"[ReadDeads] Removed:{dead.Id} since it is dead");
                      }
                      else
                      {
@@ -973,11 +975,11 @@ ReadOnlySpan<byte> zone3 = [0x17, 0x00, 0xF0, 0x03, 0x6A, 0x09, 0x00, 0x00, 0x00
 //];
         _winsockHookManager.SendPacket(socket, escBuffer);
 
-        _winsockHookManager.SendPacket(socket, zone1);
+        //_winsockHookManager.SendPacket(socket, zone1);
 
-        _winsockHookManager.SendPacket(socket, zone2);
+        //_winsockHookManager.SendPacket(socket, zone2);
 
-        _winsockHookManager.SendPacket(socket, zone3);
+        //_winsockHookManager.SendPacket(socket, zone3);
 
         //_winsockHookManager.SendPacket(socket, unknownSkip);
     }
