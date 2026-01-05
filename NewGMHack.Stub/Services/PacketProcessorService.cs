@@ -34,13 +34,15 @@ public class PacketProcessorService : BackgroundService
     private readonly IpcNotificationService          _ipcService;
     private readonly Channel<(nint, List<Reborn>)>   _bombChannel;
     private readonly WinsockHookManager              _winsockHookManager;
+    private readonly Channel<BattleLogEvent>         _battleLogChannel;
 
 
     /// <inheritdoc />
     public PacketProcessorService(Channel<PacketContext> packetChannel, ILogger<PacketProcessorService> logger,
                                   IBuffSplitter buffSplitter, GmMemory gm, SelfInformation selfInformation,
                                   Channel<(nint, List<Reborn>)> bombChannel, IEnumerable<IHookManager> managers,
-                                  Channel<RewardEvent> rewardChannel, IpcNotificationService ipcService)
+                                  Channel<RewardEvent> rewardChannel, IpcNotificationService ipcService,
+                                  Channel<BattleLogEvent> battleLogChannel)
     {
         _packetChannel      = packetChannel;
         _logger             = logger;
@@ -51,6 +53,7 @@ public class PacketProcessorService : BackgroundService
         _winsockHookManager = managers.OfType<WinsockHookManager>().First();
         _rewardChannel      = rewardChannel;
         _ipcService         = ipcService;
+        _battleLogChannel   = battleLogChannel;
     }
 
     private readonly Channel<RewardEvent> _rewardChannel;
@@ -286,16 +289,17 @@ public class PacketProcessorService : BackgroundService
 
           case 1616:
               _selfInformation.ClientConfig.IsInGame = true;
-              ReadHitResponse1616(methodPacket.MethodBody,reborns);
+                ReadHitResponse2472(methodPacket.MethodBody,reborns);
+              //ReadHitResponse1616(methodPacket.MethodBody,reborns);
               break;
             case 2360:
                 _selfInformation.ClientConfig.IsInGame = true;
                 ReadDeads(methodPacket.MethodBody);
                 break;
-            case 1506:
-                _selfInformation.ClientConfig.IsInGame = true;
-                ReadDeads1506(methodPacket.MethodBody);
-                break;
+            //case 1506:
+            //    _selfInformation.ClientConfig.IsInGame = true;
+            //    ReadDeads1506(methodPacket.MethodBody);
+            //    break;
             //case 1338: // hitted or got hitted recv
 
             //    _selfInformation.ClientConfig.IsInGame = true;
@@ -364,13 +368,54 @@ public class PacketProcessorService : BackgroundService
             _selfInformation.PersonInfo.PersonId = header.PlayerId;
             _selfInformation.ClientConfig.IsInGame = true;
             
-            // Log each player's battle info
+            // Start new battle session
+            _selfInformation.BattleState.StartSession(header.MapId, header.GameType, header.IsTeam);
+            var sessionId = _selfInformation.BattleState.CurrentSessionId!;
+            
+            // Build player records for persistence
+            var playerRecords = new List<BattlePlayerRecord>();
             int count = Math.Min(header.PlayerCount, players.Length);
+            
             for (int i = 0; i < count; i++)
             {
                 var p = players[i];
-                _logger.ZLogInformation($"Player[{players[i].RoomSlot}]: Id={p.Player} Team={p.TeamId1} ,{p.TeamId2} Machine={p.MachineId} HP={p.MaxHP} Atk={p.Attack} Def={p.Defense} Shield={p.Shield}");
+                _logger.ZLogInformation($"Player[{p.RoomSlot}]: Id={p.Player} Team={p.TeamId1},{p.TeamId2} Machine={p.MachineId} HP={p.MaxHP} Atk={p.Attack} Def={p.Defense} Shield={p.Shield}");
+                
+                // Update in-memory state for HP tracking
+                _selfInformation.BattleState.SetPlayer(p.Player, p.TeamId1, p.MachineId, p.MaxHP, p.Attack, p.Defense, p.Shield);
+                
+                // Build record for SQLite
+                playerRecords.Add(new BattlePlayerRecord
+                {
+                    SessionId = sessionId,
+                    PlayerId = p.Player,
+                    TeamId = p.TeamId1,
+                    MachineId = p.MachineId,
+                    MaxHP = p.MaxHP,
+                    Attack = p.Attack,
+                    Defense = p.Defense,
+                    Shield = p.Shield
+                });
             }
+            
+            // Send to battle logger for persistence (temporarily disabled)
+            // _battleLogChannel.Writer.TryWrite(new BattleLogEvent
+            // {
+            //     Type = BattleEventType.SessionStart,
+            //     SessionId = sessionId,
+            //     Timestamp = DateTime.UtcNow,
+            //     Session = new BattleSessionRecord
+            //     {
+            //         SessionId = sessionId,
+            //         PlayerId = header.PlayerId,
+            //         MapId = header.MapId,
+            //         GameType = header.GameType,
+            //         IsTeam = header.IsTeam,
+            //         PlayerCount = count,
+            //         StartedAt = DateTime.UtcNow.ToString("O")
+            //     },
+            //     Players = playerRecords
+            // });
         }
         catch (Exception ex)
         {
@@ -382,11 +427,14 @@ public class PacketProcessorService : BackgroundService
     {
         try
         {
+            var playerState = bytes.ReadStruct<PlayerStateStruct>();
+            
+            // Reset HP for player reborn
+            _selfInformation.BattleState.ResetPlayerHP(playerState.PlayerId);
+            
             if (!_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
                 return;
 
-            var playerState = bytes.ReadStruct<PlayerStateStruct>();
-            
             // If PlayerId != SpawnId, add to reborn queue
             if (playerState.PlayerId != playerState.SpawnId)
             {
@@ -467,7 +515,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         //_logger.ZLogInformation($"accepting gift:{gift.GiftId}");
             AcceptGiftPacket acceptGiftPacket = new AcceptGiftPacket()
             {
-                Version = 14 ,
+                Length = 14 ,
                 Splitter = 1008,
                 Method = 2071,
                 GiftId = gift.GiftId
@@ -475,7 +523,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
 
             AcceptGiftPacket acceptGiftPacket2 = new AcceptGiftPacket()
             {
-                Version = 14 ,
+                Length = 14 ,
                 Splitter = 1008,
                 Method = 2074,
                 GiftId = gift.GiftId
@@ -489,26 +537,60 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
     {
       try
         {
-
          var deadStruct = buffer.Span.ReadStruct<DeadStruct>();
          var deads      = buffer.Span.SliceAfter<DeadStruct>().CastTo<Deads>();
              // _logger.ZLogInformation($"sstruct : {deadStruct.PersonId}|{deadStruct.KillerId}|{deadStruct.Count}");
+         
+         // Enhanced logging: show header info
+         _logger.ZLogInformation($"[ReadDeads] PersonId={deadStruct.PersonId} KillerId={deadStruct.KillerId} Count={deadStruct.Count} BufferLen={buffer.Length}");
+         
          if (deadStruct.Count > 0)
          {
-             // _logger.ZLogInformation($"the deads:{string.Join("|" , deads.AsValueEnumerable().Select(c=>c.Id).ToArray())}");
-             foreach (var dead in deads)
+             var sessionId = _selfInformation.BattleState.CurrentSessionId;
+
+             // Only process Count entries, not the entire array
+             int actualCount = Math.Min(deadStruct.Count, deads.Length);
+             
+             // Log only the valid dead IDs
+             var deadIds = new uint[actualCount];
+             for (int i = 0; i < actualCount; i++)
              {
-                 if (_selfInformation.BombHistory.TryGetValue(dead.Id,out var count))
+                 deadIds[i] = deads[i].Id;
+             }
+             _logger.ZLogInformation($"[ReadDeads] deads:{string.Join("|", deadIds)}");
+             
+             for (int i = 0; i < actualCount; i++)
+             {
+                 var dead = deads[i];
+                    //Log death event if in battle session (temporarily disabled)
+                  if (!string.IsNullOrEmpty(sessionId))
+                  {
+                      _battleLogChannel.Writer.TryWrite(new BattleLogEvent
+                      {
+                          Type = BattleEventType.Death,
+                          SessionId = sessionId,
+                          Timestamp = DateTime.UtcNow,
+                          Death = new DeathEventRecord
+                          {
+                              SessionId = sessionId,
+                              Timestamp = DateTime.UtcNow.ToString("O"),
+                              VictimId = dead.Id,
+                              KillerId = deadStruct.KillerId
+}
+                      });
+_logger.ZLogInformation($"Death recorded: Victim={dead.Id} Killer={deadStruct.KillerId}");
+                  }
+                 
+                 if (_selfInformation.BombHistory.TryGetValue(dead.Id, out var count))
                  {
-                     bool isRemoved = _selfInformation.BombHistory.TryRemove(dead.Id,out var _);
+                     bool isRemoved = _selfInformation.BombHistory.TryRemove(dead.Id, out var _);
                      if (isRemoved)
                      {
-                        _logger.ZLogInformation($"Removed:{dead.Id} since it is dead");
+                        _logger.ZLogInformation($"[ReadDeads] Removed:{dead.Id} since it is dead");
                      }
                      else
                      {
-
-                        _logger.ZLogInformation($"cannot remove:{dead.Id}");
+                        _logger.ZLogInformation($"[ReadDeads] cannot remove:{dead.Id}");
                      }
                  }
              }
@@ -516,8 +598,9 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         }
         catch(Exception ex)
         {
-            _logger.LogError(ex , $"error in readdead");
-        }    }
+            _logger.LogError(ex, $"[ReadDeads] error in readdead");
+        }
+    }
 
  private void ReadHitResponse1616(ReadOnlyMemory<byte> bytes, ConcurrentQueue<Reborn> reborns)
  {
@@ -528,6 +611,44 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
          
          // Get first victim's ID for ToId (single-target compatibility)
          uint toId = hitResponse.VictimCount > 0 && victims.Length > 0 ? victims[0].VictimId : 0;
+         
+         var sessionId = _selfInformation.BattleState.CurrentSessionId;
+         
+         // Track damage for each victim
+         int victimCount = Math.Min((int)hitResponse.VictimCount, victims.Length);
+         for (int i = 0; i < victimCount; i++)
+         {
+             var victim = victims[i];
+             
+             // Calculate damage from HP delta
+             uint damage = _selfInformation.BattleState.UpdatePlayerHP(
+                 victim.VictimId, 
+                 victim.AfterHitHP, 
+                 victim.AfterHitShieldHP);
+             
+             // Log damage event if in battle session (temporarily disabled)
+             // if (!string.IsNullOrEmpty(sessionId) && damage > 0)
+             // {
+             //     _battleLogChannel.Writer.TryWrite(new BattleLogEvent
+             //     {
+             //         Type = BattleEventType.Damage,
+             //         SessionId = sessionId,
+             //         Timestamp = DateTime.UtcNow,
+             //         Damage = new DamageEventRecord
+             //         {
+             //             SessionId = sessionId,
+             //             Timestamp = DateTime.UtcNow.ToString("O"),
+             //             AttackerId = hitResponse.FromId,
+             //             WeaponId = hitResponse.WeaponId,
+             //             VictimId = victim.VictimId,
+             //             Damage = damage,
+             //             VictimHPAfter = victim.AfterHitHP,
+             //             VictimShieldAfter = victim.AfterHitShieldHP,
+             //             IsKill = victim.IsDown > 0 ? 1 : 0
+             //         }
+             //     });
+             // }
+         }
 
          if (hitResponse.FromId != _selfInformation.PersonInfo.PersonId)
          {

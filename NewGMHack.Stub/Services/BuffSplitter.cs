@@ -1,71 +1,184 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using System.Buffers;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using Microsoft.Extensions.Logging;
 using NewGMHack.Stub.PacketStructs;
 using ZLogger;
 
 namespace NewGMHack.Stub.Services;
 
-public class BuffSplitter(ILogger<BuffSplitter> logger) : IBuffSplitter
+/// <summary>
+/// High-performance buffer splitter for parsing packet segments.
+/// Leverages .NET 10 APIs: SearchValues for SIMD search, MemoryMarshal for zero-copy reads.
+/// </summary>
+public sealed class BuffSplitter(ILogger<BuffSplitter> logger) : IBuffSplitter
 {
-    private static readonly byte[] Separator = [0xF0, 0x03];
+    // .NET 10: SearchValues provides SIMD-vectorized multi-byte pattern search
+    private static readonly SearchValues<byte> SeparatorSearch = SearchValues.Create([0xF0]);
+    private static ReadOnlySpan<byte> Separator => [0xF0, 0x03];
+    
+    private const int HeaderSize = 4; // 2 bytes length + 2 bytes method
+    private const int FooterSize = 2; // 2 bytes before next separator belong to current segment
 
+    /// <summary>
+    /// Splits the input buffer into packet segments based on the 0xF0 0x03 separator.
+    /// Returns a list for interface compatibility. For zero-allocation scenarios, use <see cref="Enumerate"/>.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public List<PacketSegment> Split(ReadOnlySpan<byte> input)
     {
+        // Fast path: empty or too small input
+        if (input.Length < HeaderSize)
+        {
+            return [];
+        }
+
+        List<PacketSegment>? segments = null;
+
         try
         {
-            var segments     = new List<PacketSegment>();
-            int currentIndex = 0;
-            while (currentIndex < input.Length)
+            foreach (var rawSegment in Enumerate(input))
             {
-                int delimiterIndex = input.Slice(currentIndex).IndexOf(Separator);
-                if (delimiterIndex == -1)
-                {
-                    break; // No more delimiters found
-                }
-
-                // Move to the start of the delimiter
-                currentIndex += delimiterIndex;
-
-                // Ensure we have enough bytes for version and method
-                if (currentIndex + 4 > input.Length)
-                {
-                    break; // Not enough bytes for version and method
-                }
-
-                // Extract version and method
-                var version        = input.Slice(currentIndex,     2);
-                var method         = input.Slice(currentIndex + 2, 2);
-                int bodyStartIndex = currentIndex + 4;
-                // Find the next delimiter to calculate the body length
-                delimiterIndex = input.Slice(bodyStartIndex).IndexOf(Separator);
-                ReadOnlySpan<byte> body;
-
-                if (delimiterIndex == -1)
-                {
-                    // No next delimiter, take the rest as the body
-                    body         = input.Slice(bodyStartIndex);
-                    currentIndex = input.Length; // End processing
-                }
-                else
-                {
-                    // Calculate body length based on the next delimiter
-                    body         = input.Slice(bodyStartIndex, delimiterIndex - 2);
-                    currentIndex = bodyStartIndex + (delimiterIndex - 2); // Move past the current delimiter
-                }
-
-                //var raw = input.Slice(tempIndex,   currentIndex -  currentIndex).ToArray();
-                // Create the method segment and add it to the list
-                var segment = new PacketSegment(BitConverter.ToInt16(version), BitConverter.ToInt16(method),
-                                                body.ToArray() );
-                segments.Add(segment);
+                segments ??= new List<PacketSegment>(4);
+                segments.Add(new PacketSegment(
+                    rawSegment.Length,
+                    rawSegment.Method,
+                    rawSegment.Body.ToArray()
+                ));
             }
 
-            return segments;
+            return segments ?? [];
         }
         catch (Exception ex)
         {
-            logger.ZLogInformation($"{ex.Message} | {ex.StackTrace}");
+            logger.ZLogWarning($"BuffSplitter error: {ex.Message}");
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Zero-allocation enumeration of packet segments.
+    /// Use this for hot paths where you don't need to store the segments.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static PacketEnumerator Enumerate(ReadOnlySpan<byte> input) => new(input);
+
+    /// <summary>
+    /// Finds the separator (0xF0 0x03) using .NET 10 SIMD-optimized SearchValues.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int FindSeparator(ReadOnlySpan<byte> span)
+    {
+        int searchStart = 0;
+
+        while (searchStart < span.Length)
+        {
+            // .NET 10: IndexOfAny with SearchValues uses SIMD/AVX2/AVX-512
+            int idx = span[searchStart..].IndexOfAny(SeparatorSearch);
+            if (idx < 0) return -1;
+
+            int actualIndex = searchStart + idx;
+
+            // Verify the second byte of separator
+            if (actualIndex + 1 < span.Length && span[actualIndex + 1] == 0x03)
+            {
+                return actualIndex;
+            }
+
+            searchStart = actualIndex + 1;
         }
 
-        return [];
+        return -1;
+    }
+
+    /// <summary>
+    /// A ref struct enumerator for zero-allocation segment iteration.
+    /// Compatible with foreach via duck typing.
+    /// </summary>
+    public ref struct PacketEnumerator
+    {
+        private ReadOnlySpan<byte> _remaining;
+        private RawPacketSegment _current;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal PacketEnumerator(ReadOnlySpan<byte> input)
+        {
+            _remaining = input;
+            _current = default;
+        }
+
+        public readonly RawPacketSegment Current => _current;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public readonly PacketEnumerator GetEnumerator() => this;
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public bool MoveNext()
+        {
+            if (_remaining.Length < HeaderSize)
+                return false;
+
+            // Find separator using SIMD-optimized search
+            int separatorOffset = FindSeparator(_remaining);
+            if (separatorOffset < 0)
+                return false;
+
+            // Validate header space
+            if (separatorOffset + HeaderSize > _remaining.Length)
+                return false;
+
+            // .NET 10: MemoryMarshal.Read for zero-copy struct reads
+            // Read length and method as a single ushort pair for efficiency
+            short length = MemoryMarshal.Read<short>(_remaining[separatorOffset..]);
+            short method = MemoryMarshal.Read<short>(_remaining[(separatorOffset + 2)..]);
+
+            int bodyStart = separatorOffset + HeaderSize;
+            var bodySpan = _remaining[bodyStart..];
+
+            // Find next separator
+            int nextSeparatorOffset = FindSeparator(bodySpan);
+
+            ReadOnlySpan<byte> body;
+            if (nextSeparatorOffset < 0)
+            {
+                // No more separators - rest is body
+                body = bodySpan;
+                _remaining = [];
+            }
+            else
+            {
+                // Body ends 2 bytes before next separator
+                int bodyLength = Math.Max(0, nextSeparatorOffset - FooterSize);
+                body = bodySpan[..bodyLength];
+                _remaining = bodySpan[bodyLength..];
+            }
+
+            _current = new RawPacketSegment(length, method, body);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// A zero-allocation packet segment representation using ReadOnlySpan.
+    /// </summary>
+    public readonly ref struct RawPacketSegment
+    {
+        public readonly short Length;
+        public readonly short Method;
+        public readonly ReadOnlySpan<byte> Body;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public RawPacketSegment(short length, short method, ReadOnlySpan<byte> body)
+        {
+            Length = length;
+            Method = method;
+            Body = body;
+        }
+
+        /// <summary>
+        /// Creates a heap-allocated PacketSegment from this ref struct.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public PacketSegment ToPacketSegment() => new(Length, Method, Body.ToArray());
     }
 }

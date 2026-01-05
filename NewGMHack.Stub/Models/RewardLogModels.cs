@@ -102,6 +102,11 @@ public class MatchRewardRecord
     public uint PlayerId { get; set; }
     public string CreatedAtUtc { get; set; } = "";
     
+    /// <summary>
+    /// Links this reward to a BattleSession
+    /// </summary>
+    public string? SessionId { get; set; }
+    
     // Report Data
     public string? GameStatus { get; set; }  // Stored as "Win", "Lost", "Draw"
     public int? Kills { get; set; }

@@ -8,7 +8,7 @@ namespace NewGMHack.CommunicationModel.PacketStructs.Recv
 {
     public struct FunnelPacketRecv
     {
-        public ushort Version;         // 10 00
+        public ushort Length;          // 10 00 (packet length)
         public ushort Split;           // F0 03
         public ushort Method;          // 54 08
 

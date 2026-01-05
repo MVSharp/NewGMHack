@@ -51,6 +51,11 @@ namespace NewGMHack.Stub
         public float                   AimRadius    { get; set; }
         public nint                    LastSocket   { get; set; }
         public List<Entity>            Targets      { get; set; } = Enumerable.Repeat(new Entity(), 12).ToList();
+        
+        /// <summary>
+        /// Current battle state for real-time tracking (thread-safe)
+        /// </summary>
+        public Models.BattleState BattleState { get; } = new();
         public SelfInformation()
         {
         }

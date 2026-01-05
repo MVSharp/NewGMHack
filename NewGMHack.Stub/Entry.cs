@@ -97,6 +97,7 @@ namespace NewGMHack.Stub
                                        services.AddTransient<GmMemory>();
                                        //services.AddSingleton<FullAoBScanner>();
                                        services.AddTransient<IBuffSplitter, BuffSplitter>();
+                                       services.AddSingleton<IPacketAccumulator, PacketAccumulator>();
                                        services.AddSingleton<IHostedService, MainHookService>();
                                        services.AddSingleton<IMemoryScanner, SimdMemoryScanner>();
                                        services.AddSingleton<IHostedService, EntityScannerService>();
@@ -154,6 +155,16 @@ services.AddSingleton<IReloadedHooks>(provider =>
                                            SingleReader = true,
                                            SingleWriter = false
                                        }));
+                                       
+                                       // Battle logging channel and service
+                                       services.AddSingleton(Channel.CreateBounded<BattleLogEvent>(new BoundedChannelOptions(500)
+                                       {
+                                           FullMode = BoundedChannelFullMode.DropWrite,
+                                           SingleReader = true,
+                                           SingleWriter = false
+                                       }));
+                                       services.AddHostedService<BattleLoggerService>();
+                                       
                                        services.AddSingleton<IpcNotificationService>();
                                        services.AddHostedService<RewardPersisterService>();
                                    })

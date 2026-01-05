@@ -10,7 +10,7 @@ namespace NewGMHack.CommunicationModel.PacketStructs.Send
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct AcceptGiftPacket
     {
-        public ushort Version;
+        public ushort Length;
         public ushort Splitter;
         public ushort Method;
         public uint Reserved;

@@ -162,7 +162,7 @@ namespace NewGMHack.Stub.Services
 
             var attack = new Attack1335
             {
-                Version = 167,
+                Length = 167,
                 Split   = 1008,
                 Method  = 1868,
                 //     TargetCount = 12,

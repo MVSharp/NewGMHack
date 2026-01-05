@@ -5,7 +5,7 @@ namespace NewGMHack.Stub.PacketStructs.Send;
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct Attack1335
 {
-    public ushort Version;
+    public ushort Length;
 
     public ushort Split;
 
@@ -30,7 +30,7 @@ public struct Attack1335
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct Attack1486
 {
-        public ushort Version;       // 2 bytes
+        public ushort Length;       // 2 bytes
         public ushort Split;         // 2 bytes
         public ushort Method;        // 2 bytes
         public UInt32 Unknown1;

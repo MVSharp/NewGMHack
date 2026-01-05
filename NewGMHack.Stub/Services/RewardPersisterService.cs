@@ -16,17 +16,23 @@ public class RewardPersisterService : BackgroundService
     private readonly Channel<RewardEvent> _channel;
     private readonly ILogger<RewardPersisterService> _logger;
     private readonly IpcNotificationService _ipcService;
+    private readonly SelfInformation _selfInformation;
     private readonly string _connectionString;
     
     private MatchRewardRecord? _pendingRecord;
     private DateTime _pendingSince;
     private const int FlushTimeoutMs = 2000;
 
-    public RewardPersisterService(Channel<RewardEvent> channel, ILogger<RewardPersisterService> logger, IpcNotificationService ipcService)
+    public RewardPersisterService(
+        Channel<RewardEvent> channel, 
+        ILogger<RewardPersisterService> logger, 
+        IpcNotificationService ipcService,
+        SelfInformation selfInformation)
     {
         _channel = channel;
         _logger = logger;
         _ipcService = ipcService;
+        _selfInformation = selfInformation;
         var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "NewGMHack");
         Directory.CreateDirectory(folder);
         _connectionString = $"Data Source={Path.Combine(folder, "rewards.db")}";
@@ -127,7 +133,8 @@ public class RewardPersisterService : BackgroundService
         _pendingRecord = new MatchRewardRecord
         {
             CreatedAtUtc = evt.Timestamp.ToString("O"), // ISO 8601
-            PlayerId = evt.Report?.PlayerId ?? evt.Bonus?.PlayerId ?? evt.Grade?.PlayerId ?? 0
+            PlayerId = evt.Report?.PlayerId ?? evt.Bonus?.PlayerId ?? evt.Grade?.PlayerId ?? 0,
+            SessionId = _selfInformation.BattleState.CurrentSessionId // Link to battle session
         };
         _pendingSince = evt.Timestamp;
         Merge(evt);
@@ -197,12 +204,12 @@ public class RewardPersisterService : BackgroundService
             using var conn = new SqliteConnection(_connectionString);
             string sql = @"
                 INSERT INTO MatchRewards (
-                    PlayerId, CreatedAtUtc, GameStatus,
+                    PlayerId, CreatedAtUtc, SessionId, GameStatus,
                     Kills, Deaths, Supports, Points, ExpGain, GBGain, MachineAddedExp, MachineExp, PracticeExpAdded,
                     GradeRank, DamageScore, TeamExpectationScore, SkillFulScore,
                     Bonus1, Bonus2, Bonus3, Bonus4, Bonus5, Bonus6, Bonus7, Bonus8
                 ) VALUES (
-                    @PlayerId, @CreatedAtUtc, @GameStatus,
+                    @PlayerId, @CreatedAtUtc, @SessionId, @GameStatus,
                     @Kills, @Deaths, @Supports, @Points, @ExpGain, @GBGain, @MachineAddedExp, @MachineExp, @PracticeExpAdded,
                     @GradeRank, @DamageScore, @TeamExpectationScore, @SkillFulScore,
                     @Bonus1, @Bonus2, @Bonus3, @Bonus4, @Bonus5, @Bonus6, @Bonus7, @Bonus8

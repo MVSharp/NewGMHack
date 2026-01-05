@@ -61,7 +61,7 @@ public static float DecodePosition(byte high, byte low)
                         unsafe
                         {
                             SendFunnel2129 structs = new();
-                            structs.Version = sendFunnel.Version;
+                            structs.Length = sendFunnel.Length;
                             structs.Split = sendFunnel.Split;
                             structs.Method = sendFunnel.Method;
                             structs.Count = (byte)i;
