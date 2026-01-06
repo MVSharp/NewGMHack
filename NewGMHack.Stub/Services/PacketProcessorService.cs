@@ -280,12 +280,12 @@ public class PacketProcessorService : BackgroundService
             //break;
             case 2472:
                 _selfInformation.ClientConfig.IsInGame = true;
-                ReadHitResponse(methodPacket.MethodBody, reborns);
+                ReadHitResponse2472(methodPacket.MethodBody, reborns);
                 break;
 
             case 1616:
                 _selfInformation.ClientConfig.IsInGame = true;
-                ReadHitResponse(methodPacket.MethodBody, reborns);
+                ReadHitResponse1616(methodPacket.MethodBody, reborns);
                 break;
             case 2360:
                 _selfInformation.ClientConfig.IsInGame = true;
@@ -666,63 +666,60 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
     }
 
  /// <summary>
- /// Unified hit response handler for both 1616 and 2472 packets
+ /// Hit response handler for packet 2472
+ /// Structure: MyId, AttackerId, AttackerSP, WeaponId, Unknown[3], VictimCount, Victim[]
  /// </summary>
- private void ReadHitResponse(ReadOnlyMemory<byte> bytes, ConcurrentQueue<Reborn> reborns)
+ private void ReadHitResponse2472(ReadOnlyMemory<byte> bytes, ConcurrentQueue<Reborn> reborns)
  {
      try
      {
-         var hitResponse = bytes.Span.ReadStruct<HitResponse1616>();
-         var victims = bytes.Span.SliceAfter<HitResponse1616>().CastTo<Victim>();
+         var hitResponse = bytes.Span.ReadStruct<HitResponse2472>();
+         var victims = bytes.Span.SliceAfter<HitResponse2472>().CastTo<Victim>();
          
-         // Get first victim's ID for ToId (single-target compatibility)
+         //_logger.ZLogInformation($"[2472] MyId={hitResponse.MyPlayerId} From={hitResponse.FromId} SP={hitResponse.AttackerSP} Weapon={hitResponse.WeaponId} VictimCount={hitResponse.VictimCount}");
+         
          uint toId = hitResponse.VictimCount > 0 && victims.Length > 0 ? victims[0].VictimId : 0;
-         
          var sessionId = _selfInformation.BattleState.CurrentSessionId;
          
-         // Track damage for each victim
          int victimCount = Math.Min((int)hitResponse.VictimCount, victims.Length);
          for (int i = 0; i < victimCount; i++)
          {
              var victim = victims[i];
              
-             // Calculate HP delta (positive=damage, negative=healing)
              int hpDelta = _selfInformation.BattleState.UpdatePlayerHP(
                  victim.VictimId, 
                  victim.AfterHitHP, 
                  victim.AfterHitShieldHP);
 
-                // Log damage/healing event if in battle session and HP changed
-                // DISABLED: investigating data issues
-                //if (!string.IsNullOrEmpty(sessionId) && hpDelta != 0)
-                //{
-                //    _battleLogChannel.Writer.TryWrite(new BattleLogEvent
-                //    {
-                //        Type = BattleEventType.Damage,
-                //        SessionId = sessionId,
-                //        Timestamp = DateTime.UtcNow,
-                //        Damage = new DamageEventRecord
-                //        {
-                //            SessionId = sessionId,
-                //            Timestamp = DateTime.UtcNow.ToString("O"),
-                //            AttackerId = hitResponse.FromId,
-                //            WeaponId = hitResponse.WeaponId,
-                //            VictimId = victim.VictimId,
-                //            Damage = hpDelta, // positive = damage, negative = healing
-                //            VictimHPAfter = victim.AfterHitHP,
-                //            VictimShieldAfter = victim.AfterHitShieldHP,
-                //            IsKill = 0 // Ignore IsDown flag for now
-                //        }
-                //    });
-                //}
-            }
+             if (!string.IsNullOrEmpty(sessionId) && hpDelta != 0)
+             {
+                 _battleLogChannel.Writer.TryWrite(new BattleLogEvent
+                 {
+                     Type = BattleEventType.Damage,
+                     SessionId = sessionId,
+                     Timestamp = DateTime.UtcNow,
+                     Damage = new DamageEventRecord
+                     {
+                         SessionId = sessionId,
+                         Timestamp = DateTime.UtcNow.ToString("O"),
+                         AttackerId = hitResponse.FromId,
+                         WeaponId = hitResponse.WeaponId,
+                         VictimId = victim.VictimId,
+                         Damage = hpDelta,
+                         VictimHPAfter = victim.AfterHitHP,
+                         VictimShieldAfter = victim.AfterHitShieldHP,
+                         IsKill = 0
+                     }
+                 });
+             }
+         }
 
          if (hitResponse.FromId != _selfInformation.PersonInfo.PersonId)
          {
              if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
                  _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
              {
-                 reborns.Enqueue(new Reborn(hitResponse.PlayerId, toId, 0));
+                 reborns.Enqueue(new Reborn(hitResponse.MyPlayerId, toId, 0));
              }
          }
 
@@ -730,12 +727,85 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
          {
              if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsRebound))
              {
-                 reborns.Enqueue(new Reborn(hitResponse.PlayerId, hitResponse.FromId, 0));
+                 reborns.Enqueue(new Reborn(hitResponse.MyPlayerId, hitResponse.FromId, 0));
              }
          }
      }
-     catch
+      catch(Exception ex)
+      {
+             _logger.ZLogError(ex,$"Error in hit response 2472");
+      }
+ }
+
+ /// <summary>
+ /// Hit response handler for packet 1616
+ /// Structure: MyId, AttackerId, Unknown1, AttackerSP, WeaponId, Unknown2, VictimCount, Victim[]
+ /// </summary>
+ private void ReadHitResponse1616(ReadOnlyMemory<byte> bytes, ConcurrentQueue<Reborn> reborns)
+ {
+     try
      {
+         var hitResponse = bytes.Span.ReadStruct<HitResponse1616>();
+         var victims = bytes.Span.SliceAfter<HitResponse1616>().CastTo<Victim>();
+         
+         //_logger.ZLogInformation($"[1616] MyId={hitResponse.MyPlayerId} From={hitResponse.FromId} SP={hitResponse.AttackerSP} Weapon={hitResponse.WeaponId} VictimCount={hitResponse.VictimCount}");
+         
+         uint toId = hitResponse.VictimCount > 0 && victims.Length > 0 ? victims[0].VictimId : 0;
+         var sessionId = _selfInformation.BattleState.CurrentSessionId;
+         
+         int victimCount = Math.Min((int)hitResponse.VictimCount, victims.Length);
+         for (int i = 0; i < victimCount; i++)
+         {
+             var victim = victims[i];
+             
+             int hpDelta = _selfInformation.BattleState.UpdatePlayerHP(
+                 victim.VictimId, 
+                 victim.AfterHitHP, 
+                 victim.AfterHitShieldHP);
+
+             if (!string.IsNullOrEmpty(sessionId) && hpDelta != 0)
+             {
+                 _battleLogChannel.Writer.TryWrite(new BattleLogEvent
+                 {
+                     Type = BattleEventType.Damage,
+                     SessionId = sessionId,
+                     Timestamp = DateTime.UtcNow,
+                     Damage = new DamageEventRecord
+                     {
+                         SessionId = sessionId,
+                         Timestamp = DateTime.UtcNow.ToString("O"),
+                         AttackerId = hitResponse.FromId,
+                         WeaponId = hitResponse.WeaponId,
+                         VictimId = victim.VictimId,
+                         Damage = hpDelta,
+                         VictimHPAfter = victim.AfterHitHP,
+                         VictimShieldAfter = victim.AfterHitShieldHP,
+                         IsKill = 0
+                     }
+                 });
+             }
+         }
+
+         if (hitResponse.FromId != _selfInformation.PersonInfo.PersonId)
+         {
+             if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
+                 _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+             {
+                 reborns.Enqueue(new Reborn(hitResponse.MyPlayerId, toId, 0));
+             }
+         }
+
+         if (toId == _selfInformation.PersonInfo.PersonId)
+         {
+             if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsRebound))
+             {
+                 reborns.Enqueue(new Reborn(hitResponse.MyPlayerId, hitResponse.FromId, 0));
+             }
+         }
+     }
+     catch(Exception ex)
+     {
+            _logger.ZLogError(ex,$"Error in hit response 1616");
      }
  }
 
