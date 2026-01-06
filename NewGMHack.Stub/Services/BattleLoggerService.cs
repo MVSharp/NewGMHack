@@ -96,8 +96,8 @@ public class BattleLoggerService : BackgroundService
     {
         using var conn = new SqliteConnection(_connectionString);
         await conn.ExecuteAsync(@"
-            INSERT INTO BattleSessions (SessionId, MyPlayerId, MapId, GameType, IsTeam, PlayerCount, StartedAt)
-            VALUES (@SessionId, @MyPlayerId, @MapId, @GameType, @IsTeam, @PlayerCount, @StartedAt)",
+            INSERT INTO BattleSessions (SessionId, PlayerId, MapId, GameType, IsTeam, PlayerCount, StartedAt)
+            VALUES (@SessionId, @PlayerId, @MapId, @GameType, @IsTeam, @PlayerCount, @StartedAt)",
             session);
         _logger.ZLogInformation($"Battle session started: {session.SessionId} Map={session.MapId} Players={session.PlayerCount}");
     }
@@ -106,8 +106,8 @@ public class BattleLoggerService : BackgroundService
     {
         using var conn = new SqliteConnection(_connectionString);
         await conn.ExecuteAsync(@"
-            INSERT INTO BattlePlayers (SessionId, MyPlayerId, TeamId, MachineId, MaxHP, Attack, Defense, Shield)
-            VALUES (@SessionId, @MyPlayerId, @TeamId, @MachineId, @MaxHP, @Attack, @Defense, @Shield)",
+            INSERT INTO BattlePlayers (SessionId, PlayerId, TeamId, MachineId, MaxHP, Attack, Defense, Shield)
+            VALUES (@SessionId, @PlayerId, @TeamId, @MachineId, @MaxHP, @Attack, @Defense, @Shield)",
             player);
     }
 
@@ -134,9 +134,9 @@ public class BattleLoggerService : BackgroundService
     {
         using var conn = new SqliteConnection(_connectionString);
         await conn.ExecuteAsync(@"
-            INSERT INTO RebornEvents (SessionId, Timestamp, MyPlayerId)
-            VALUES (@SessionId, @Timestamp, @MyPlayerId)",
-            new { SessionId = sessionId, Timestamp = timestamp.ToString("O"), MyPlayerId = playerId });
+            INSERT INTO RebornEvents (SessionId, Timestamp, PlayerId)
+            VALUES (@SessionId, @Timestamp, @PlayerId)",
+            new { SessionId = sessionId, Timestamp = timestamp.ToString("O"), PlayerId = playerId });
         _logger.ZLogInformation($"Reborn recorded: Player={playerId}");
     }
 
@@ -160,7 +160,7 @@ public class BattleLoggerService : BackgroundService
         await conn.ExecuteAsync(@"
             CREATE TABLE IF NOT EXISTS BattleSessions (
                 SessionId TEXT PRIMARY KEY,
-                MyPlayerId INTEGER NOT NULL,
+                PlayerId INTEGER NOT NULL,
                 MapId INTEGER,
                 GameType INTEGER,
                 IsTeam INTEGER,
@@ -173,14 +173,14 @@ public class BattleLoggerService : BackgroundService
         await conn.ExecuteAsync(@"
             CREATE TABLE IF NOT EXISTS BattlePlayers (
                 SessionId TEXT NOT NULL,
-                MyPlayerId INTEGER NOT NULL,
+                PlayerId INTEGER NOT NULL,
                 TeamId INTEGER,
                 MachineId INTEGER,
                 MaxHP INTEGER,
                 Attack INTEGER,
                 Defense INTEGER,
                 Shield INTEGER,
-                PRIMARY KEY (SessionId, MyPlayerId)
+                PRIMARY KEY (SessionId, PlayerId)
             )");
 
         // Create DamageEvents table
@@ -214,7 +214,7 @@ public class BattleLoggerService : BackgroundService
                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
                 SessionId TEXT NOT NULL,
                 Timestamp TEXT NOT NULL,
-                MyPlayerId INTEGER
+                PlayerId INTEGER
             )");
 
         // Add SessionId column to MatchRewards if not exists

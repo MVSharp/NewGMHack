@@ -150,7 +150,7 @@ public class PacketProcessorService : BackgroundService
             // case 1992 or 1338 or 2312 or 1525 or 1521 or 2103:
             //1342 player reborn in battle
             case 2245: //after F5
-                ReadGameReady(methodPacket.MethodBody);
+                await ReadGameReady(methodPacket.MethodBody.AsMemory(), token);
                 break;
             case 2143: // battle reborn
                 _selfInformation.ClientConfig.IsInGame = true;
@@ -368,12 +368,15 @@ public class PacketProcessorService : BackgroundService
             _logger.ZLogInformation($"Battle session ended: {sessionId}");
         }
     }
-    private void ReadGameReady(ReadOnlySpan<byte> bytes)
+    private async Task ReadGameReady(ReadOnlyMemory<byte> bytes, CancellationToken token)
     {
         try
         {
-            var header = bytes.ReadStruct<GameReadyStruct>();
-            var players = bytes.SliceAfter<GameReadyStruct>().CastTo<PlayerBattleStruct>();
+            var header = bytes.Span.ReadStruct<GameReadyStruct>();
+            // Convert to array since Span can't cross await boundaries
+            var playersSpan = bytes.Span.SliceAfter<GameReadyStruct>().CastTo<PlayerBattleStruct>();
+            int count = Math.Min(header.PlayerCount, playersSpan.Length);
+            var players = playersSpan.Slice(0, count).ToArray();
             
             _logger.ZLogInformation($"GameReady: MyPlayerId={header.PlayerId} Map={header.MapId} GameType={header.GameType} IsTeam={header.IsTeam} PlayerCount={header.PlayerCount}");
             
@@ -387,9 +390,8 @@ public class PacketProcessorService : BackgroundService
             
             // Build player records for persistence
             var playerRecords = new List<BattlePlayerRecord>();
-            int count = Math.Min(header.PlayerCount, players.Length);
             
-            for (int i = 0; i < count; i++)
+            for (int i = 0; i < players.Length; i++)
             {
                 var p = players[i];
                 _logger.ZLogInformation($"Player[{p.RoomSlot}]: Id={p.Player} Team={p.TeamId1},{p.TeamId2} Machine={p.MachineId} HP={p.MaxHP} Atk={p.Attack} Def={p.Defense} Shield={p.Shield}");
@@ -409,11 +411,42 @@ public class PacketProcessorService : BackgroundService
                     Defense = p.Defense,
                     Shield = p.Shield
                 });
-
+                
+                // Scan machine only for self (to avoid blocking)
+                if (p.Player == header.PlayerId)
+                {
+                    try
+                    {
+                        var machineInfo = await ScanCondom(p.MachineId, token: token);
+                        
+                        if (machineInfo != null)
+                        {
+                            _selfInformation.CurrentMachineModel = new MachineModel
+                            {
+                                MachineId = p.MachineId,
+                                Slot = p.RoomSlot
+                            };
+                            _selfInformation.PersonInfo.Slot = p.RoomSlot;
+                            
+                            _logger.ZLogInformation($"Set current machine from GameReady: MachineId={p.MachineId}");
+                            
+                            // Notify Frontend via IPC
+                            var response = new NewGMHack.CommunicationModel.IPC.Responses.MachineInfoResponse
+                            {
+                                MachineModel = _selfInformation.CurrentMachineModel,
+                                MachineBaseInfo = machineInfo
+                            };
+                            await _ipcService.SendMachineInfoUpdateAsync(response);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.ZLogError($"ScanCondom error for self: {ex.Message}");
+                    }
+                }
             }
 
-            //Send to battle logger for persistence(temporarily disabled)
-
+            // Send to battle logger for persistence
             _battleLogChannel.Writer.TryWrite(new BattleLogEvent
             {
                 Type = BattleEventType.SessionStart,

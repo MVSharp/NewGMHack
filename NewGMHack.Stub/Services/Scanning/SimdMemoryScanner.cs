@@ -176,17 +176,48 @@ namespace NewGMHack.Stub.Services.Scanning
                     if (readSize <= 0) return;
                 }
 
-                unsafe
+                ReadOnlySpan<byte> bufferSpan;
+                try
                 {
-                    // Direct memory access - no syscall!
-                    byte* ptr = (byte*)job.BaseAddress;
-                    var bufferSpan = new ReadOnlySpan<byte>(ptr, readSize);
+                    unsafe
+                    {
+                        // Direct memory access - no syscall!
+                        byte* ptr = (byte*)job.BaseAddress;
+                        bufferSpan = new ReadOnlySpan<byte>(ptr, readSize);
+                    }
+                }
+                catch (AccessViolationException)
+                {
+                    // Memory became invalid between VirtualQuery and span creation
+                    return;
+                }
+                catch
+                {
+                    return;
+                }
 
-                    // Run ALL patterns against this buffer
-                    foreach (var pat in patterns)
+                // Run ALL patterns against this buffer - with individual try-catch
+                foreach (var pat in patterns)
+                {
+                    try
                     {
                         if (readSize < pat.PatternLength) continue;
                         ScanSpan(bufferSpan, pat.Pattern, pat.Mask, pat.AnchorByte, pat.AnchorOffset, job.BaseAddress.ToInt64(), job.Size, results[pat.Id]);
+                    }
+                    catch (AccessViolationException)
+                    {
+                        // Memory changed during pattern scan - skip this pattern
+                        continue;
+                    }
+                    catch (IndexOutOfRangeException)
+                    {
+                        // Race condition: buffer size changed
+                        continue;
+                    }
+                    catch
+                    {
+                        // Any other error - skip this pattern
+                        continue;
                     }
                 }
             }
@@ -202,14 +233,29 @@ namespace NewGMHack.Stub.Services.Scanning
 
         private void ScanSpan(ReadOnlySpan<byte> data, byte[] pattern, bool[] mask, byte anchorByte, int anchorOffset, long baseAddress, int scanLimit, ConcurrentBag<long> results)
         {
-            var matches = FindPatternSIMD(data, pattern, mask, anchorByte, anchorOffset);
-            foreach (var offset in matches)
+            try
             {
-                // Filter overlap
-                if (offset < scanLimit)
+                var matches = FindPatternSIMD(data, pattern, mask, anchorByte, anchorOffset);
+                foreach (var offset in matches)
                 {
-                    results.Add(baseAddress + offset);
+                    // Filter overlap
+                    if (offset < scanLimit)
+                    {
+                        results.Add(baseAddress + offset);
+                    }
                 }
+            }
+            catch (IndexOutOfRangeException)
+            {
+                // Race condition: data changed during scan
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                // Span slice went out of bounds
+            }
+            catch
+            {
+                // Silently ignore any other errors
             }
         }
 
