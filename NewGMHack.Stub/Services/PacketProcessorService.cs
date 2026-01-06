@@ -712,6 +712,19 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
                      }
                  });
              }
+             
+             // Queue floating damage for overlay display (only when I am the attacker)
+             if (hitResponse.FromId == _selfInformation.PersonInfo.PersonId && hpDelta != 0)
+             {
+                 _selfInformation.DamageNumbers.Enqueue(new FloatingDamage
+                 {
+                     Amount = hpDelta,
+                     SpawnTime = Environment.TickCount64,
+                     VictimId = victim.VictimId,
+                     X = _selfInformation.CrossHairX,  // Start at crosshair, will update in overlay
+                     Y = _selfInformation.CrossHairY
+                 });
+             }
          }
 
          if (hitResponse.FromId != _selfInformation.PersonInfo.PersonId)
@@ -782,6 +795,19 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
                          VictimShieldAfter = victim.AfterHitShieldHP,
                          IsKill = 0
                      }
+                 });
+             }
+             
+             // Queue floating damage for overlay display (only when I am the attacker)
+             if (hitResponse.FromId == _selfInformation.PersonInfo.PersonId && hpDelta != 0)
+             {
+                 _selfInformation.DamageNumbers.Enqueue(new FloatingDamage
+                 {
+                     Amount = hpDelta,
+                     SpawnTime = Environment.TickCount64,
+                     VictimId = victim.VictimId,
+                     X = _selfInformation.CrossHairX,
+                     Y = _selfInformation.CrossHairY
                  });
              }
          }

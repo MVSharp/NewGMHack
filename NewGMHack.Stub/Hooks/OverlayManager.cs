@@ -44,6 +44,9 @@ public class OverlayManager(SelfInformation self)
 
     // Warning flash
     private const float WarningDistance = 150f;
+    
+    // Larger font for damage numbers
+    private SharpDX.Direct3D9.Font _damageFont;
 
     public void Initialize(Device device)
     {
@@ -58,6 +61,18 @@ public class OverlayManager(SelfInformation self)
         };
 
         _font = new SharpDX.Direct3D9.Font(device, fontDesc);
+        
+        // Create larger font for damage numbers
+        var damageFontDesc = new FontDescription
+        {
+            Height         = 24,
+            FaceName       = "Arial",
+            Weight         = FontWeight.Bold,
+            Quality        = FontQuality.ClearType,
+            PitchAndFamily = FontPitchAndFamily.Default
+        };
+        _damageFont = new SharpDX.Direct3D9.Font(device, damageFontDesc);
+        
         _line = new Line(device)
         {
             Width     = 1.0f,
@@ -347,6 +362,9 @@ public class OverlayManager(SelfInformation self)
 
             // NEW: Warning Flash if enemy close
             DrawWarningFlash(device, closestDistance, viewport);
+            
+            // NEW: Floating damage numbers
+            DrawFloatingDamage(viewport);
 
             if (_isDrawing)
             {
@@ -589,6 +607,67 @@ public class OverlayManager(SelfInformation self)
         _font.DrawText(null, fpsText, new Rectangle(20, 20, 80, 16), FontDrawFlags.NoClip, new ColorBGRA(0, 255, 0, 180));
     }
 
+    // Active damage numbers being displayed
+    private readonly List<FloatingDamage> _activeDamageNumbers = new();
+    
+    /// <summary>
+    /// Draw floating damage numbers that animate upward and fade out
+    /// </summary>
+    private void DrawFloatingDamage(Viewport viewport)
+    {
+        if (_damageFont == null) return;
+        
+        long now = Environment.TickCount64;
+        var rng = new Random();
+        
+        // Pull new damage from queue (max 10 per frame to avoid lag)
+        int pulled = 0;
+        int activeCount = _activeDamageNumbers.Count;
+        while (self.DamageNumbers.TryDequeue(out var dmg) && pulled < 10)
+        {
+            // Position at crosshair with larger spread + stagger based on existing count
+            float spreadX = (float)(rng.NextDouble() * 120 - 60);  // ±60 pixels
+            float spreadY = (float)(rng.NextDouble() * 60 - 30);   // ±30 pixels
+            float staggerOffset = (activeCount + pulled) * 25;     // Stagger each by 25px
+            
+            dmg.X = self.CrossHairX + spreadX;
+            dmg.Y = self.CrossHairY - 50 + spreadY - staggerOffset;
+            _activeDamageNumbers.Add(dmg);
+            pulled++;
+        }
+        
+        // Remove expired
+        _activeDamageNumbers.RemoveAll(d => now - d.SpawnTime > FloatingDamage.DurationMs);
+        
+        // Draw each active damage number
+        foreach (var dmg in _activeDamageNumbers)
+        {
+            float elapsed = now - dmg.SpawnTime;
+            float progress = elapsed / FloatingDamage.DurationMs;  // 0 to 1
+            
+            // Animation: float upward
+            float yOffset = progress * 100f;  // Move up 100 pixels over duration
+            float drawY = dmg.Y - yOffset;
+            
+            // Animation: fade out (keep visible longer before fading)
+            float fadeStart = 0.4f;  // Start fading at 40% progress
+            byte alpha = progress < fadeStart 
+                ? (byte)255 
+                : (byte)(255 * (1 - (progress - fadeStart) / (1 - fadeStart)));
+            
+            // Color: red for damage, green for heal (brighter colors)
+            ColorBGRA color = dmg.Amount > 0 
+                ? new ColorBGRA(255, 80, 80, alpha)   // Bright red for damage
+                : new ColorBGRA(80, 255, 80, alpha);  // Bright green for heal
+            
+            string text = dmg.Amount > 0 ? $"-{dmg.Amount}" : $"+{Math.Abs(dmg.Amount)}";
+            
+            // Use larger damage font
+            _damageFont.DrawText(null, text, new Rectangle((int)dmg.X - 50, (int)drawY, 100, 30), 
+                FontDrawFlags.Center | FontDrawFlags.NoClip, color);
+        }
+    }
+
     // ==================== END NEW FEATURES ====================
 
     public void Reset()
@@ -597,10 +676,12 @@ public class OverlayManager(SelfInformation self)
         _isDrawing = false;
 
         _font?.Dispose();
+        _damageFont?.Dispose();
         _line?.Dispose();
         //_backgroundTexture?.Dispose();
 
         _font              = null;
+        _damageFont        = null;
         _line              = null;
         //_backgroundTexture = null;
         _initialized       = false;
@@ -610,6 +691,7 @@ public class OverlayManager(SelfInformation self)
         _crosshairCacheH = null;
         _crosshairCacheV = null;
         _lastScreenWidth = -1;
+        _activeDamageNumbers.Clear();
     }
     public void OnLostDevice()
     {

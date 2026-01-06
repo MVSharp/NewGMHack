@@ -26,6 +26,19 @@ namespace NewGMHack.Stub
         public uint EntityPosPtrAddress { get; set; }
     }
     
+    /// <summary>
+    /// Floating damage number for overlay display
+    /// </summary>
+    public class FloatingDamage
+    {
+        public int Amount { get; set; }           // Damage value (positive=damage, negative=heal)
+        public long SpawnTime { get; set; }       // Environment.TickCount64 when spawned
+        public float X { get; set; }              // Screen X position
+        public float Y { get; set; }              // Screen Y position
+        public uint VictimId { get; set; }        // For position lookup
+        public const int DurationMs = 1500;       // How long to display
+    }
+    
     public class SelfInformation
     {
         //public Machine CurrentMachine { get; set; } = new();
@@ -56,6 +69,12 @@ namespace NewGMHack.Stub
         /// Current battle state for real-time tracking (thread-safe)
         /// </summary>
         public Models.BattleState BattleState { get; } = new();
+        
+        /// <summary>
+        /// Queue of floating damage numbers to display on overlay
+        /// </summary>
+        public ConcurrentQueue<FloatingDamage> DamageNumbers { get; } = new();
+        
         public SelfInformation()
         {
         }
