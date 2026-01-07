@@ -208,6 +208,66 @@ namespace NewGMHack.Stub
                     await MessagePackSerializer.SerializeAsync(stream, response, _options);
                     break;
                 }
+                case Operation.GetSkill:
+                {
+                    var response = new DynamicOperationResponse<SkillBaseInfo?>();
+                    try
+                    {
+                        uint skillId = 0;
+                        if (dynamicRequest.Parameters is List<object> paramList && paramList.Count > 0)
+                        {
+                            skillId = Convert.ToUInt32(paramList[0]);
+                        }
+                        
+                        if (skillId > 0)
+                        {
+                            var gmMemory = sp.GetService<GmMemory>();
+                            if (gmMemory != null)
+                            {
+                                response.Result = await gmMemory.ScanSkill(skillId, CancellationToken.None);
+                                response.Success = true;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        response.Success = false;
+                        response.ErrorMessage = ex.Message;
+                        logger.ZLogError(ex, $"Error handling GetSkill");
+                    }
+                    await MessagePackSerializer.SerializeAsync(stream, response, _options);
+                    break;
+                }
+                case Operation.GetWeapon:
+                {
+                    var response = new DynamicOperationResponse<WeaponBaseInfo?>();
+                    try
+                    {
+                        uint weaponId = 0;
+                        if (dynamicRequest.Parameters is List<object> paramList && paramList.Count > 0)
+                        {
+                            weaponId = Convert.ToUInt32(paramList[0]);
+                        }
+                        
+                        if (weaponId > 0)
+                        {
+                            var gmMemory = sp.GetService<GmMemory>();
+                            if (gmMemory != null)
+                            {
+                                response.Result = await gmMemory.ScanWeapon(weaponId, CancellationToken.None);
+                                response.Success = true;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        response.Success = false;
+                        response.ErrorMessage = ex.Message;
+                        logger.ZLogError(ex, $"Error handling GetWeapon");
+                    }
+                    await MessagePackSerializer.SerializeAsync(stream, response, _options);
+                    break;
+                }
                 case Operation.None:
                 default:
                 {

@@ -75,6 +75,11 @@ namespace NewGMHack.Stub
         /// </summary>
         public ConcurrentQueue<FloatingDamage> DamageNumbers { get; } = new();
         
+        /// <summary>
+        /// Queue of fake recv packets to inject (e.g., damage received messages)
+        /// </summary>
+        public ConcurrentQueue<byte[]> PendingRecvMessages { get; } = new();
+        
         public SelfInformation()
         {
         }

@@ -725,6 +725,14 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
                      Y = _selfInformation.CrossHairY
                  });
              }
+             
+             // Send damage received message (only when I am the victim and attacker is someone else)
+             if (victim.VictimId == _selfInformation.PersonInfo.PersonId && 
+                 hitResponse.FromId != _selfInformation.PersonInfo.PersonId && 
+                 hpDelta > 0)
+             {
+                 SendDamageReceivedMessage(hitResponse.FromId, hitResponse.WeaponId, hpDelta);
+             }
          }
 
          if (hitResponse.FromId != _selfInformation.PersonInfo.PersonId)
@@ -809,6 +817,14 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
                      X = _selfInformation.CrossHairX,
                      Y = _selfInformation.CrossHairY
                  });
+             }
+             
+             // Send damage received message (only when I am the victim and attacker is someone else)
+             if (victim.VictimId == _selfInformation.PersonInfo.PersonId && 
+                 hitResponse.FromId != _selfInformation.PersonInfo.PersonId && 
+                 hpDelta > 0)
+             {
+                 SendDamageReceivedMessage(hitResponse.FromId, hitResponse.WeaponId, hpDelta);
              }
          }
 
@@ -1116,5 +1132,53 @@ ReadOnlySpan<byte> zone3 = [0x17, 0x00, 0xF0, 0x03, 0x6A, 0x09, 0x00, 0x00, 0x00
         //_winsockHookManager.SendPacket(socket, zone3);
 
         //_winsockHookManager.SendPacket(socket, unknownSkip);
+    }
+    
+    /// <summary>
+    /// Build and send a fake game message packet for damage received notification
+    /// </summary>
+    private void SendDamageReceivedMessage(uint attackerId, uint weaponId, int damage)
+    {
+        string message = $"{attackerId} use {weaponId} Dmg:{damage}";
+        SendReceivedMessage(message);
+    }
+    
+    /// <summary>
+    /// Send a fake game message to the game client
+    /// Uses the loopback socket to inject as recv to the game
+    /// </summary>
+    private void SendReceivedMessage(string message, string name = "Michael Van", string tag = "Michael Van")
+    {
+        try
+        {
+            // Create GameMessage2574 struct
+            var gameMsg = GameMessage2574.Create(
+                _selfInformation.PersonInfo.PersonId,
+                name,
+                tag,
+                message
+            );
+            
+            // Build packet: [Length:2][Split:2][Method:2][Struct:123] = 129 bytes
+            Span<byte> packet = stackalloc byte[129];
+            
+            // Header
+            packet[0] = 0x81;  // Length low byte (129)
+            packet[1] = 0x00;  // Length high byte
+            packet[2] = 0xF0;  // Split marker
+            packet[3] = 0x03;
+            packet[4] = 0x0E;  // Method ID 2574 (0x0A0E) low byte
+            packet[5] = 0x0A;  // Method ID high byte
+            
+            // Write struct to packet at offset 6
+            System.Runtime.InteropServices.MemoryMarshal.Write(packet.Slice(6), in gameMsg);
+            
+            // Send directly via loopback socket
+            _winsockHookManager.SendRecvPacket(packet);
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, $"Failed to send received message");
+        }
     }
 }

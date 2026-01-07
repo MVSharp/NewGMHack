@@ -20,6 +20,8 @@ namespace NewGMHack.CommunicationModel.IPC
         GetMachine,
         GetMachineInfo,
         MachineInfoUpdate,
+        GetSkill,
+        GetWeapon,
     }
 
     [MessagePackObject]

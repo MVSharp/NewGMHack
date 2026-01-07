@@ -291,7 +291,7 @@ namespace NewGMHack.Stub.MemoryScanner
 
             try
             {
-                // WEAPONS
+                // WEAPONS - Cache found weapons
                 foreach (var id in weaponIds)
                 {
                     WeaponBaseInfo? foundInfo = null;
@@ -309,6 +309,8 @@ namespace NewGMHack.Stub.MemoryScanner
                                     {
                                         logger.ZLogInformation($"Found weapon at addr:0x{addr:X}");
                                         LogWeaponResult(foundInfo);
+                                        // Cache the weapon
+                                        await _weaponCache.SetAsync(id, foundInfo);
                                         break;
                                     }
                                 }
@@ -325,7 +327,7 @@ namespace NewGMHack.Stub.MemoryScanner
                     }
                 }
 
-                // SKILLS
+                // SKILLS - Cache found skills
                 foreach (var id in skillIds)
                 {
                     int lookupId = (int)id + 1000000;
@@ -345,6 +347,7 @@ namespace NewGMHack.Stub.MemoryScanner
                                         LogSkillResult(result);
                                         if (id == info.SkillID1) info.Skill1Info = result;
                                         else if (id == info.SkillID2) info.Skill2Info = result;
+                                        await _skillCache.SetAsync(id, result);
                                         break; 
                                     }
                                 }

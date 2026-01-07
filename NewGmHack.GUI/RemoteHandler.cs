@@ -56,6 +56,16 @@ namespace NewGmHack.GUI
         {
             return SendRequestAsync<MachineInfoResponse?>(Operation.GetMachineInfo);
         }
+        
+        public Task<SkillBaseInfo?> GetSkill(uint skillId)
+        {
+            return SendRequestAsync<SkillBaseInfo?>(Operation.GetSkill, [skillId]);
+        }
+        
+        public Task<WeaponBaseInfo?> GetWeapon(uint weaponId)
+        {
+            return SendRequestAsync<WeaponBaseInfo?>(Operation.GetWeapon, [weaponId]);
+        }
     }
 
     public class RemoteHandlerBase(RpcBuffer master)
