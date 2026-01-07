@@ -27,7 +27,7 @@ public class IpcNotificationService
     {
         try
         {
-            using var stream = _streamManager.GetStream();
+            await using var stream = _streamManager.GetStream();
             
             var request = new DynamicOperationRequest
             {
@@ -49,7 +49,7 @@ public class IpcNotificationService
     {
         try
         {
-            using var stream = _streamManager.GetStream();
+            await using var stream = _streamManager.GetStream();
             
             var request = new DynamicOperationRequest
             {

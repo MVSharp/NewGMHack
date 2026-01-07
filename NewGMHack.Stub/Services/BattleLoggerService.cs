@@ -209,7 +209,7 @@ public class BattleLoggerService : BackgroundService
 
     private async Task InsertSession(BattleSessionRecord session)
     {
-        using var conn = new SqliteConnection(_connectionString);
+        await using var conn = new SqliteConnection(_connectionString);
         await conn.ExecuteAsync(@"
             INSERT INTO BattleSessions (SessionId, PlayerId, MapId, GameType, IsTeam, PlayerCount, StartedAt)
             VALUES (@SessionId, @PlayerId, @MapId, @GameType, @IsTeam, @PlayerCount, @StartedAt)",
@@ -219,7 +219,7 @@ public class BattleLoggerService : BackgroundService
 
     private async Task InsertPlayer(BattlePlayerRecord player)
     {
-        using var conn = new SqliteConnection(_connectionString);
+        await using var conn = new SqliteConnection(_connectionString);
         await conn.ExecuteAsync(@"
             INSERT INTO BattlePlayers (SessionId, PlayerId, TeamId, MachineId, MaxHP, Attack, Defense, Shield)
             VALUES (@SessionId, @PlayerId, @TeamId, @MachineId, @MaxHP, @Attack, @Defense, @Shield)",
@@ -228,7 +228,7 @@ public class BattleLoggerService : BackgroundService
 
     private async Task InsertDamage(DamageEventRecord damage)
     {
-        using var conn = new SqliteConnection(_connectionString);
+        await using var conn = new SqliteConnection(_connectionString);
         await conn.ExecuteAsync(@"
             INSERT INTO DamageEvents (SessionId, Timestamp, AttackerId, WeaponId, VictimId, Damage, VictimHPAfter, VictimShieldAfter, IsKill)
             VALUES (@SessionId, @Timestamp, @AttackerId, @WeaponId, @VictimId, @Damage, @VictimHPAfter, @VictimShieldAfter, @IsKill)",
@@ -237,9 +237,9 @@ public class BattleLoggerService : BackgroundService
     
     private async Task BulkInsertDamage(IEnumerable<DamageEventRecord> damages)
     {
-        using var conn = new SqliteConnection(_connectionString);
+        await using var conn = new SqliteConnection(_connectionString);
         await conn.OpenAsync();
-        using var transaction = conn.BeginTransaction();
+        await using var transaction = conn.BeginTransaction();
         try
         {
             await conn.ExecuteAsync(@"
@@ -257,7 +257,7 @@ public class BattleLoggerService : BackgroundService
 
     private async Task InsertDeath(DeathEventRecord death)
     {
-        using var conn = new SqliteConnection(_connectionString);
+        await using var conn = new SqliteConnection(_connectionString);
         await conn.ExecuteAsync(@"
             INSERT INTO DeathEvents (SessionId, Timestamp, VictimId, KillerId)
             VALUES (@SessionId, @Timestamp, @VictimId, @KillerId)",
@@ -267,7 +267,7 @@ public class BattleLoggerService : BackgroundService
 
     private async Task InsertReborn(string sessionId, uint playerId, DateTime timestamp)
     {
-        using var conn = new SqliteConnection(_connectionString);
+        await using var conn = new SqliteConnection(_connectionString);
         await conn.ExecuteAsync(@"
             INSERT INTO RebornEvents (SessionId, Timestamp, PlayerId)
             VALUES (@SessionId, @Timestamp, @PlayerId)",
@@ -277,7 +277,7 @@ public class BattleLoggerService : BackgroundService
 
     private async Task UpdateSessionEnd(string sessionId, DateTime endedAt)
     {
-        using var conn = new SqliteConnection(_connectionString);
+        await using var conn = new SqliteConnection(_connectionString);
         await conn.ExecuteAsync(@"
             UPDATE BattleSessions SET EndedAt = @EndedAt WHERE SessionId = @SessionId",
             new { SessionId = sessionId, EndedAt = endedAt.ToString("O") });
@@ -287,8 +287,8 @@ public class BattleLoggerService : BackgroundService
     private async Task InitializeDb()
     {
         if (_initialized) return;
-        
-        using var conn = new SqliteConnection(_connectionString);
+
+        await using var conn = new SqliteConnection(_connectionString);
         await conn.OpenAsync();
 
         // Create BattleSessions table

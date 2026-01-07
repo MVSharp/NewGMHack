@@ -99,8 +99,8 @@ namespace NewGmHack.GUI.Services
                                 {
                                     try
                                     {
-                                        using var conn = new SqliteConnection(db.ConnectionString);
-                                        await conn.OpenAsync();
+                                        await using var conn = new SqliteConnection(db.ConnectionString);
+                                        await conn.OpenAsync(stoppingToken);
                                         
                                         // Check if GameStatus column exists
                                         var columns = await conn.QueryAsync<string>("SELECT name FROM pragma_table_info('MatchRewards')");
@@ -220,7 +220,7 @@ namespace NewGmHack.GUI.Services
                                 {
                                     try
                                     {
-                                        using var conn = new SqliteConnection(db.ConnectionString);
+                                        await using var conn = new SqliteConnection(db.ConnectionString);
                                         var sql = @"
                                             SELECT *, 
                                             (ifnull(Bonus1,0) + ifnull(Bonus2,0) + ifnull(Bonus3,0) + ifnull(Bonus4,0) + ifnull(Bonus5,0) + ifnull(Bonus6,0) + ifnull(Bonus7,0) + ifnull(Bonus8,0)) as TotalBonus 

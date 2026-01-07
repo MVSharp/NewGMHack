@@ -795,9 +795,10 @@ public class PacketProcessorService : BackgroundService
                     hitResponse.FromId != _selfInformation.PersonInfo.PersonId &&
                     hpDelta            > 0)
                 {
+                    bool found = _selfInformation.WeaponNameCache.TryGetValue(hitResponse.WeaponId , out var name);
                     _selfInformation.ReceivedDamageLogs.Enqueue(new DamageLog
                     {
-                        Message   = $"{hitResponse.FromId} use {hitResponse.WeaponId} dmg : {hpDelta}",
+                        Message   = $"{hitResponse.FromId} use { (found ?  name : hitResponse.WeaponId)} dmg : {hpDelta}",
                         TimeAdded = Environment.TickCount64
                     });
                 }
@@ -892,9 +893,11 @@ public class PacketProcessorService : BackgroundService
                     hitResponse.FromId != _selfInformation.PersonInfo.PersonId &&
                     hpDelta            > 0)
                 {
+
+                    bool found = _selfInformation.WeaponNameCache.TryGetValue(hitResponse.WeaponId , out var name);
                     _selfInformation.ReceivedDamageLogs.Enqueue(new DamageLog
                     {
-                        Message   = $"{hitResponse.FromId} use {hitResponse.WeaponId} dmg : {hpDelta}",
+                        Message   = $"{hitResponse.FromId} use {( found ? name : hitResponse.WeaponId  )} dmg : {hpDelta}",
                         TimeAdded = Environment.TickCount64
                     });
                 }

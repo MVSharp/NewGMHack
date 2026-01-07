@@ -201,7 +201,7 @@ public class RewardPersisterService : BackgroundService
         
         try
         {
-            using var conn = new SqliteConnection(_connectionString);
+            await using var conn = new SqliteConnection(_connectionString);
             string sql = @"
                 INSERT INTO MatchRewards (
                     PlayerId, CreatedAtUtc, SessionId, GameStatus,
@@ -246,7 +246,7 @@ public class RewardPersisterService : BackgroundService
     {
         try
         {
-            using var conn = new SqliteConnection(_connectionString);
+            await using var conn = new SqliteConnection(_connectionString);
             await conn.OpenAsync();
             
             // Step 1: Create table if not exists (for fresh installs)

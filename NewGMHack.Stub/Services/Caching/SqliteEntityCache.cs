@@ -36,7 +36,7 @@ public class SqliteEntityCache<T> : IEntityCache<T> where T : class
         
         try
         {
-            using var conn = new SqliteConnection(_connectionString);
+            await using var conn = new SqliteConnection(_connectionString);
             await conn.OpenAsync();
             
             string createTableSql = $@"
@@ -62,8 +62,8 @@ public class SqliteEntityCache<T> : IEntityCache<T> where T : class
         try
         {
             await EnsureInitializedAsync();
-            
-            using var conn = new SqliteConnection(_connectionString);
+
+            await using var conn = new SqliteConnection(_connectionString);
             var row = await conn.QueryFirstOrDefaultAsync<CacheRow>(
                 $"SELECT Id, Data, LastUpdatedAt FROM {_tableName} WHERE Id = @Id",
                 new { Id = (long)id });
@@ -87,8 +87,8 @@ public class SqliteEntityCache<T> : IEntityCache<T> where T : class
             
             var data = MessagePackSerializer.Serialize(entity);
             var now = DateTime.UtcNow.ToString("O");
-            
-            using var conn = new SqliteConnection(_connectionString);
+
+            await using var conn = new SqliteConnection(_connectionString);
             await conn.ExecuteAsync(
                 $@"INSERT OR REPLACE INTO {_tableName} (Id, Data, LastUpdatedAt) 
                    VALUES (@Id, @Data, @LastUpdatedAt)",
@@ -107,8 +107,8 @@ public class SqliteEntityCache<T> : IEntityCache<T> where T : class
         try
         {
             await EnsureInitializedAsync();
-            
-            using var conn = new SqliteConnection(_connectionString);
+
+            await using var conn = new SqliteConnection(_connectionString);
             var lastUpdated = await conn.QueryFirstOrDefaultAsync<string>(
                 $"SELECT LastUpdatedAt FROM {_tableName} WHERE Id = @Id",
                 new { Id = (long)id });
