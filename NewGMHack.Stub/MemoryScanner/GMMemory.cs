@@ -110,7 +110,7 @@ namespace NewGMHack.Stub.MemoryScanner
                 var cached = await _machineCache.GetAsync(id);
                 if (cached != null)
                 {
-                    logger.ZLogInformation($"ScanMachine cache hit: {id}");
+                    //logger.ZLogInformation($"ScanMachine cache hit: {id}");
                     return cached;
                 }
             }
@@ -486,7 +486,7 @@ namespace NewGMHack.Stub.MemoryScanner
                        // Assign immediately
                        if (id == info.SkillID1) info.Skill1Info = cached;
                        else if (id == info.SkillID2) info.Skill2Info = cached;
-                       logger.ZLogInformation($"AssignDetails cache hit for Skill:{id}");
+                       //logger.ZLogInformation($"AssignDetails cache hit for Skill:{id}");
                        continue;
                    }
                 }
@@ -506,7 +506,7 @@ namespace NewGMHack.Stub.MemoryScanner
                         if (id == info.Weapon2Code) info.Weapon2Info = cached;
                         if (id == info.Weapon3Code) info.Weapon3Info = cached;
                         if (id == info.SpecialAttackCode) info.SpecialAttack = cached;
-                        logger.ZLogInformation($"AssignDetails cache hit for Weapon:{id}");
+                        //logger.ZLogInformation($"AssignDetails cache hit for Weapon:{id}");
                         continue;
                     }
                 }

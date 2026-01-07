@@ -1217,7 +1217,11 @@ public class PacketProcessorService : BackgroundService
 //ReadOnlySpan<byte>   unknownSkip  = [0x0C, 0x00, 0xF0, 0x03, 0x1E, 0x08, 0x00, 0x00, 0x00, 0x00, 0xFA, 0x52, 0x00, 0x80, 0x00, 0x02
 //];
         _winsockHookManager.SendPacket(socket, escBuffer);
-
+        if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
+            _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+        {
+            DestroyAllBuildings();
+        }
         //_winsockHookManager.SendPacket(socket, zone1);
 
         //_winsockHookManager.SendPacket(socket, zone2);
@@ -1263,14 +1267,83 @@ public class PacketProcessorService : BackgroundService
             packet[4] = 0x0E; // Method ID 2574 (0x0A0E) low byte
             packet[5] = 0x0A; // Method ID high byte
 
-            // Write struct to packet at offset 6
             System.Runtime.InteropServices.MemoryMarshal.Write(packet.Slice(6), in gameMsg);
             _winsockHookManager.SendRecvPacket(packet);
         }
         catch (Exception ex)
         {
-            _logger.ZLogError(ex, $"Failed to send received message");
+            _logger.ZLogError($"Failed to send received message: {ex.Message}");
         }
     }
+
+    /// <summary>
+    /// Destroy all buildings from ID 7000 to 8000
+    /// </summary>
+    public void DestroyAllBuildings()
+    {
+        var socket = _selfInformation.LastSocket;
+        if (socket == IntPtr.Zero)
+        {
+            _logger.ZLogError($"Cannot destroy buildings: No active socket.");
+            return;
+        }
+
+        _logger.ZLogInformation($"Starting DestroyAllBuildings (7000-8000)...");
+        
+        // Generate range 7000-8000 (inclusive)
+        var buildingIds = Enumerable.Range(7000, 1001).Select(i => (uint)i).ToList();
+        
+        // Process in batches of 8
+        foreach (var batch in buildingIds.Chunk(8))
+        {
+            SendBuildingDamage(socket, batch);
+        }
+        
+        _logger.ZLogInformation($"Finished DestroyAllBuildings.");
+    }
+
+  
+    private unsafe void SendBuildingDamage(nint socket, uint[] ids)
+    {
+        try 
+        {
+            var packet = new BuildingDamageFrame
+            {
+                // Header
+                Length      = (ushort)sizeof(BuildingDamageFrame), // Should be 79 (0x4F)
+                Split       = 0x03F0,
+                Method      = 0x08E6,
+                Padding1    = 0,
+                AttackerUID = _selfInformation.PersonInfo.PersonId,
+                Count       = (byte)ids.Length
+            };
+
+            // Fill Arrays
+            for (int i = 0; i < 8; i++)
+            {
+                if (i < ids.Length)
+                {
+                    packet.Buildings[i] = ids[i];
+                    packet.Damages[i]   = 999999; // Massive damage to ensure destruction
+                }
+                else
+                {
+                    packet.Buildings[i] = 0;
+                    packet.Damages[i]   = 0;
+                }
+            }
+
+            // Serialize and Send
+            Span<byte> buffer = stackalloc byte[sizeof(BuildingDamageFrame)];
+            System.Runtime.InteropServices.MemoryMarshal.Write(buffer, in packet);
+            
+            _winsockHookManager.SendPacket(socket, buffer);
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, $"Error sending building damage packet");
+        }
+    }
+    
 }
 
