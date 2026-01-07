@@ -46,16 +46,130 @@ public class BattleLoggerService : BackgroundService
             return;
         }
 
-        await foreach (var evt in _channel.Reader.ReadAllAsync(stoppingToken))
+        var damageBuffer = new List<DamageEventRecord>();
+        DateTime lastFlush = DateTime.UtcNow;
+
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                await ProcessEvent(evt);
+                // Determine timeout to enforce 5s flush
+                var timeSinceFlush = DateTime.UtcNow - lastFlush;
+                var remainingMs = 5000 - (int)timeSinceFlush.TotalMilliseconds;
+                if (remainingMs < 0) remainingMs = 0;
+
+                // If we have items and time is up, flush immediately before waiting
+                if (damageBuffer.Count > 0 && remainingMs == 0)
+                {
+                    await FlushDamageBuffer(damageBuffer);
+                    lastFlush = DateTime.UtcNow;
+                    damageBuffer.Clear();
+                    remainingMs = 5000;
+                }
+
+                // Wait for event or timeout
+                // If buffer is empty, we can wait indefinitely (timeout = -1)
+                // If buffer has items, wait for remainingMs
+                
+                var readTask = _channel.Reader.ReadAsync(stoppingToken).AsTask();
+                Task? delayTask = null;
+                
+                if (damageBuffer.Count > 0)
+                {
+                    delayTask = Task.Delay(remainingMs, stoppingToken);
+                }
+
+                Task completedTask;
+                if (delayTask != null)
+                {
+                    completedTask = await Task.WhenAny(readTask, delayTask);
+                }
+                else
+                {
+                    // Buffer empty, wait indefinitely for read
+                    completedTask = readTask;
+                    try
+                    {
+                        await completedTask; 
+                    }
+                    catch (OperationCanceledException) { break; } 
+                }
+
+                if (completedTask == readTask)
+                {
+                    // Available item
+                    try
+                    {
+                        var evt = await readTask;
+                        if (evt.Type == BattleEventType.Damage && evt.Damage != null)
+                        {
+                            damageBuffer.Add(evt.Damage);
+                            if (damageBuffer.Count >= 50)
+                            {
+                                await FlushDamageBuffer(damageBuffer);
+                                lastFlush = DateTime.UtcNow;
+                                damageBuffer.Clear();
+                            }
+                        }
+                        else
+                        {
+                            // For non-damage events, flush buffer first to maintain order, then process
+                            if (damageBuffer.Count > 0)
+                            {
+                                await FlushDamageBuffer(damageBuffer);
+                                lastFlush = DateTime.UtcNow;
+                                damageBuffer.Clear();
+                            }
+                            await ProcessEvent(evt);
+                        }
+                    }
+                    catch (ChannelClosedException)
+                    {
+                        // Channel closed
+                        break;
+                    }
+                }
+                else
+                {
+                    // Timeout occurred, flush processing
+                    if (damageBuffer.Count > 0)
+                    {
+                        await FlushDamageBuffer(damageBuffer);
+                        lastFlush = DateTime.UtcNow;
+                        damageBuffer.Clear();
+                    }
+                }
             }
-            catch (Exception ex)
+        }
+        catch (OperationCanceledException)
+        {
+            // Graceful stop
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, "Error in BattleLoggerService loop");
+        }
+        finally
+        {
+            // Flush remaining on exit
+            if (damageBuffer.Count > 0)
             {
-                _logger.ZLogError(ex, $"Error processing battle event: {evt.Type}");
+                try { await FlushDamageBuffer(damageBuffer); } catch { }
             }
+        }
+    }
+
+    private async Task FlushDamageBuffer(List<DamageEventRecord> buffer)
+    {
+        if (buffer.Count == 0) return;
+        try
+        {
+            await BulkInsertDamage(buffer);
+            _logger.ZLogInformation($"Flushed {buffer.Count} damage events");
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, "Error flushing damage buffer");
         }
     }
 
@@ -75,6 +189,7 @@ public class BattleLoggerService : BackgroundService
                 break;
                 
             case BattleEventType.Damage:
+                // Should not happen here in new logic, but safe fallback
                 await InsertDamage(evt.Damage!);
                 break;
                 
@@ -118,6 +233,26 @@ public class BattleLoggerService : BackgroundService
             INSERT INTO DamageEvents (SessionId, Timestamp, AttackerId, WeaponId, VictimId, Damage, VictimHPAfter, VictimShieldAfter, IsKill)
             VALUES (@SessionId, @Timestamp, @AttackerId, @WeaponId, @VictimId, @Damage, @VictimHPAfter, @VictimShieldAfter, @IsKill)",
             damage);
+    }
+    
+    private async Task BulkInsertDamage(IEnumerable<DamageEventRecord> damages)
+    {
+        using var conn = new SqliteConnection(_connectionString);
+        await conn.OpenAsync();
+        using var transaction = conn.BeginTransaction();
+        try
+        {
+            await conn.ExecuteAsync(@"
+                INSERT INTO DamageEvents (SessionId, Timestamp, AttackerId, WeaponId, VictimId, Damage, VictimHPAfter, VictimShieldAfter, IsKill)
+                VALUES (@SessionId, @Timestamp, @AttackerId, @WeaponId, @VictimId, @Damage, @VictimHPAfter, @VictimShieldAfter, @IsKill)",
+                damages, transaction: transaction);
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
     }
 
     private async Task InsertDeath(DeathEventRecord death)
