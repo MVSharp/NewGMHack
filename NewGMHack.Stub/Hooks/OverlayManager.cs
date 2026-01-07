@@ -365,6 +365,9 @@ public class OverlayManager(SelfInformation self)
             
             // NEW: Floating damage numbers
             DrawFloatingDamage(viewport);
+            
+            // NEW: Damage Log Panel
+            DrawDamageLog(viewport);
 
             if (_isDrawing)
             {
@@ -607,6 +610,65 @@ public class OverlayManager(SelfInformation self)
         _font.DrawText(null, fpsText, new Rectangle(20, 20, 80, 16), FontDrawFlags.NoClip, new ColorBGRA(0, 255, 0, 180));
     }
 
+    /// <summary>
+    /// Draw damage log panel at bottom-left
+    /// </summary>
+    private void DrawDamageLog(Viewport viewport)
+    {
+        if (_font == null) return;
+        
+        long now = Environment.TickCount64;
+        
+        // Use a temporary list to extract valid log entries from ConcurrentQueue
+        // Queue is ordered by time (Oldest to Newest)
+        // We peek head to remove expired messages
+        
+        while (self.ReceivedDamageLogs.TryPeek(out var oldest))
+        {
+            if (now - oldest.TimeAdded > 1500) // 1.5 seconds life as requested
+            {
+                self.ReceivedDamageLogs.TryDequeue(out _);
+            }
+            else
+            {
+                break; // Oldest is valid, so all subsequent are valid (Queue property)
+            }
+        }
+        
+        // Snapshot current queue
+        var logs = self.ReceivedDamageLogs.ToArray(); 
+        
+        // We want to display max 48 items
+        // And render NEWEST at TOP
+        // Queue: [Oldest, ..., Newest]
+        // Reverse for display: [Newest, ..., Oldest]
+        
+        int count = logs.Length;
+        int startIndex = Math.Max(0, count - 48);
+        int drawn = 0;
+        
+        int startX = 20;
+        // Dynamic StartY: Anchor to bottom. List grows UPWARDS as count increases.
+        // Bottom margin = 50px
+        int bottomY = viewport.Height - 50;
+        int totalHeight = Math.Min(count, 48) * 18;
+        int startY = bottomY - totalHeight; 
+        
+        // Loop backwards from Newest to Oldest (or up to limit relative to newest)
+        for (int i = count - 1; i >= startIndex; i--)
+        {
+            var log = logs[i];
+            
+            // Stack downwards from startY: Newest at startY, Older at startY + 18
+            int currentY = startY + (drawn * 18);
+            
+            _font.DrawText(null, log.Message, new Rectangle(startX, currentY, 400, 18), 
+                FontDrawFlags.Left | FontDrawFlags.NoClip, new ColorBGRA(255, 50, 50, 255));
+            
+            drawn++;
+        }
+    }
+
     // Active damage numbers being displayed
     private readonly List<FloatingDamage> _activeDamageNumbers = new();
     
@@ -620,18 +682,32 @@ public class OverlayManager(SelfInformation self)
         long now = Environment.TickCount64;
         var rng = new Random();
         
-        // Pull new damage from queue (max 10 per frame to avoid lag)
+        // Pull new damage from queue (max 100 per frame to avoid lag, but fast enough for bursts)
         int pulled = 0;
         int activeCount = _activeDamageNumbers.Count;
-        while (self.DamageNumbers.TryDequeue(out var dmg) && pulled < 10)
+        while (self.DamageNumbers.TryDequeue(out var dmg) && pulled < 100)
         {
-            // Position at crosshair with larger spread + stagger based on existing count
-            float spreadX = (float)(rng.NextDouble() * 120 - 60);  // ±60 pixels
-            float spreadY = (float)(rng.NextDouble() * 60 - 30);   // ±30 pixels
-            float staggerOffset = (activeCount + pulled) * 25;     // Stagger each by 25px
-            
-            dmg.X = self.CrossHairX + spreadX;
-            dmg.Y = self.CrossHairY - 50 + spreadY - staggerOffset;
+            // Skip expired items that were stuck in queue
+            if (now - dmg.SpawnTime > FloatingDamage.DurationMs) continue;
+
+            if (dmg.IsReceivedDamage)
+            {
+                // Position at bottom left for received damage
+                // Stagger upwards based on count to prevent overlap
+                float staggerOffset = (activeCount + pulled) * 35;
+                dmg.X = 150 + (float)(rng.NextDouble() * 20 - 10);
+                dmg.Y = viewport.Height - 200 - staggerOffset;
+            }
+            else
+            {
+                // Position at crosshair for outgoing damage
+                float spreadX = (float)(rng.NextDouble() * 120 - 60);  // ±60 pixels
+                float spreadY = (float)(rng.NextDouble() * 60 - 30);   // ±30 pixels
+                float staggerOffset = (activeCount + pulled) * 25;     // Stagger each by 25px
+                
+                dmg.X = self.CrossHairX + spreadX;
+                dmg.Y = self.CrossHairY - 50 + spreadY - staggerOffset;
+            }
             _activeDamageNumbers.Add(dmg);
             pulled++;
         }
@@ -655,16 +731,26 @@ public class OverlayManager(SelfInformation self)
                 ? (byte)255 
                 : (byte)(255 * (1 - (progress - fadeStart) / (1 - fadeStart)));
             
-            // Color: red for damage, green for heal (brighter colors)
-            ColorBGRA color = dmg.Amount > 0 
-                ? new ColorBGRA(255, 80, 80, alpha)   // Bright red for damage
-                : new ColorBGRA(80, 255, 80, alpha);  // Bright green for heal
+            ColorBGRA color;
+            if (dmg.IsReceivedDamage)
+            {
+                // Deep red for damage TAKEN
+                color = new ColorBGRA(255, 0, 0, alpha);
+            }
+            else
+            {
+                // Brighter red/orange for damage DEALT, green for heal
+                color = dmg.Amount > 0 
+                    ? new ColorBGRA(255, 100, 50, alpha)   // Orange-Red for outgoing
+                    : new ColorBGRA(80, 255, 80, alpha);  // Bright green for heal
+            }
             
             string text = dmg.Amount > 0 ? $"-{dmg.Amount}" : $"+{Math.Abs(dmg.Amount)}";
+            if (dmg.IsReceivedDamage) text = $"Hit {text}"; // Optional prefix for clarity
             
             // Use larger damage font
-            _damageFont.DrawText(null, text, new Rectangle((int)dmg.X - 50, (int)drawY, 100, 30), 
-                FontDrawFlags.Center | FontDrawFlags.NoClip, color);
+            _damageFont.DrawText(null, text, new Rectangle((int)dmg.X - 50, (int)drawY, 200, 30), 
+                FontDrawFlags.Left | FontDrawFlags.NoClip, color);
         }
     }
 

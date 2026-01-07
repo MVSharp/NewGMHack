@@ -178,31 +178,32 @@ public sealed class WinsockHookManager(
     {
         // First check if this is the loopback recv socket (local 4000-7000, remote 10000-65535)
         // Save it for injecting fake recv data
-        SOCKADDR_IN checkLocalAddr = new SOCKADDR_IN();
-        int         checkAddrSize  = Marshal.SizeOf(checkLocalAddr);
-        if (getsockname(socket, ref checkLocalAddr, ref checkAddrSize) == 0)
-        {
-            if ((checkLocalAddr.sin_addr & 0xFF) == 127)
-            {
-                ushort localPort = ntohs(checkLocalAddr.sin_port);
-                if (localPort >= 4000 && localPort <= 7000)
-                {
-                    SOCKADDR_IN checkRemoteAddr = new SOCKADDR_IN();
-                    checkAddrSize = Marshal.SizeOf(checkRemoteAddr);
-                    if (getpeername(socket, ref checkRemoteAddr, ref checkAddrSize) == 0)
-                    {
-                        if ((checkRemoteAddr.sin_addr & 0xFF) == 127)
-                        {
-                            ushort remotePort = ntohs(checkRemoteAddr.sin_port);
-                            if (remotePort >= 10000 && remotePort <= 65535)
-                            {
-                                _loopbackRecvSocket = socket;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        //SOCKADDR_IN checkLocalAddr = new SOCKADDR_IN();
+        //int         checkAddrSize  = Marshal.SizeOf(checkLocalAddr);
+        //if (getsockname(socket, ref checkLocalAddr, ref checkAddrSize) == 0)
+        //{
+        //    if ((checkLocalAddr.sin_addr & 0xFF) == 127)
+        //    {
+        //        ushort localPort = ntohs(checkLocalAddr.sin_port);
+        //        if (localPort >= 4000 && localPort <= 7000)
+        //        {
+        //            SOCKADDR_IN checkRemoteAddr = new SOCKADDR_IN();
+        //            checkAddrSize = Marshal.SizeOf(checkRemoteAddr);
+        //            if (getpeername(socket, ref checkRemoteAddr, ref checkAddrSize) == 0)
+        //            {
+        //                if ((checkRemoteAddr.sin_addr & 0xFF) == 127)
+        //                {
+        //                    ushort remotePort = ntohs(checkRemoteAddr.sin_port);
+        //                    if (remotePort >= 10000 && remotePort <= 65535)
+        //                    {
+        //                        _loopbackRecvSocket = socket;
+        //                        return _originalSend!(socket, buffer, length, flags);
+        //                    }
+        //                }
+        //            }
+        //        }
+        //    }
+        //}
 
         // Avoid string allocations! Use cached structs methods or direct check.
         // Logic: 

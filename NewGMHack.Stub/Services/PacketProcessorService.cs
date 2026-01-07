@@ -65,15 +65,16 @@ public class PacketProcessorService : BackgroundService
     {
         try
         {
-        _logger.ZLogInformation($"Starting Parse for packet");
-         await foreach (var packet in _packetChannel.Reader.ReadAllAsync(stoppingToken))
-         {
-             if (packet.Data.Length > 0)
-             {
-                 await Parse(packet, stoppingToken);
-             }
-         }     
-        _logger.ZLogInformation($"Finished Parse");
+            _logger.ZLogInformation($"Starting Parse for packet");
+            await foreach (var packet in _packetChannel.Reader.ReadAllAsync(stoppingToken))
+            {
+                if (packet.Data.Length > 0)
+                {
+                    await Parse(packet, stoppingToken);
+                }
+            }
+
+            _logger.ZLogInformation($"Finished Parse");
             //await foreach (var packet in _packetChannel.Reader.ReadAllAsync(stoppingToken))
             //{
             //    try
@@ -87,59 +88,63 @@ public class PacketProcessorService : BackgroundService
             //    }
             //}
         }
-        catch(Exception ex)
+        catch (Exception ex)
         {
-            _logger.ZLogCritical(ex,$"the packet processor stopped");
+            _logger.ZLogCritical(ex, $"the packet processor stopped");
         }
     }
 
-    private async Task Parse(PacketContext packet,CancellationToken token)
+    private async Task Parse(PacketContext packet, CancellationToken token)
     {
         try
         {
 
-        if (packet.Data.Length == 0) return;
-        var methodPackets = _buffSplitter.Split(packet.Data);
-        if (methodPackets.Count == 0) return;
-        var reborns = new ConcurrentQueue<Reborn>(); // Use Queue for better performance than Bag
-            
-        if (methodPackets.Count >= 20)
-        {
-             // Use 50% of processors or at least 2, cap at 8 to avoid saturation
-             int maxDegree = Math.Max(2, Math.Min(Environment.ProcessorCount / 2, 8));
-             
-            await Parallel.ForEachAsync(methodPackets, new ParallelOptions() { MaxDegreeOfParallelism = maxDegree ,CancellationToken = token},
-                                        async (methodPacket, ct) =>
-                                        {
-                                            await DoParseWork(packet.Socket, methodPacket, reborns ,ct);
-                                        });
-        }
-        else
-        {
-            foreach (var methodPacket in methodPackets)
+            if (packet.Data.Length == 0) return;
+            var methodPackets = _buffSplitter.Split(packet.Data);
+            if (methodPackets.Count == 0) return;
+            var reborns = new ConcurrentQueue<Reborn>(); // Use Queue for better performance than Bag
+
+            if (methodPackets.Count >= 20)
             {
-                await DoParseWork(packet.Socket, methodPacket, reborns,token);
+                // Use 50% of processors or at least 2, cap at 8 to avoid saturation
+                int maxDegree = Math.Max(2, Math.Min(Environment.ProcessorCount / 2, 8));
+
+                await Parallel.ForEachAsync(methodPackets,
+                                            new ParallelOptions()
+                                                { MaxDegreeOfParallelism = maxDegree, CancellationToken = token },
+                                            async (methodPacket, ct) =>
+                                            {
+                                                await DoParseWork(packet.Socket, methodPacket, reborns, ct);
+                                            });
+            }
+            else
+            {
+                foreach (var methodPacket in methodPackets)
+                {
+                    await DoParseWork(packet.Socket, methodPacket, reborns, token);
+                }
+            }
+
+            if (!reborns.IsEmpty)
+            {
+                await SendToBombServices(packet, reborns, token);
             }
         }
-
-        if (!reborns.IsEmpty)
+        catch (Exception ex)
         {
-            await SendToBombServices(packet, reborns,token);
-        }
-        }
-        catch(Exception ex)
-        {
-            _logger.ZLogError(ex,$"Error occur in packet processor");
+            _logger.ZLogError(ex, $"Error occur in packet processor");
         }
     }
-       /// <summary>
-       /// TODO large amount of hacks lost in this switch , need fix for new packet
-       /// </summary>
-       /// <param name="socket"></param>
-       /// <param name="methodPacket"></param>
-       /// <param name="reborns"></param>
-       /// <returns></returns>
-    private async Task DoParseWork(IntPtr socket, PacketSegment methodPacket, ConcurrentQueue<Reborn> reborns,CancellationToken token)
+
+    /// <summary>
+    /// TODO large amount of hacks lost in this switch , need fix for new packet
+    /// </summary>
+    /// <param name="socket"></param>
+    /// <param name="methodPacket"></param>
+    /// <param name="reborns"></param>
+    /// <returns></returns>
+    private async Task DoParseWork(IntPtr socket, PacketSegment methodPacket, ConcurrentQueue<Reborn> reborns,
+                                   CancellationToken token)
     {
         var method = methodPacket.Method;
         var reader = new ByteReader(methodPacket.MethodBody);
@@ -175,7 +180,7 @@ public class PacketProcessorService : BackgroundService
                 ChargeCondom(socket, _selfInformation.PersonInfo.Slot);
                 break;
 
-            case 2107 or 2108 or 2109 or 2110:// these are possible back room`
+            case 2107 or 2108 or 2109 or 2110: // these are possible back room`
                 ChargeCondom(socket, _selfInformation.PersonInfo.Slot);
                 SendF5(socket);
                 break;
@@ -195,21 +200,21 @@ public class PacketProcessorService : BackgroundService
                 // Store both raw and processed machine data
                 //_selfInformation.CurrentMachine = changed;
                 _selfInformation.CurrentMachineModel = MachineModel.FromRaw(changed);
-                
+
                 var slot = changed.Slot;
                 _selfInformation.PersonInfo.Slot = slot;
-                
-                try 
+
+                try
                 {
                     var machineInfo = await ScanCondom(changed.MachineId, token: token);
 
                     if (machineInfo != null)
                     {
-                         // Notify Frontend via IPC -> SignalR
+                        // Notify Frontend via IPC -> SignalR
                         _logger.ZLogInformation($"Sending MachineInfoUpdate for machine {changed.MachineId}");
                         var response = new NewGMHack.CommunicationModel.IPC.Responses.MachineInfoResponse
                         {
-                            MachineModel = _selfInformation.CurrentMachineModel,
+                            MachineModel    = _selfInformation.CurrentMachineModel,
                             MachineBaseInfo = machineInfo
                         };
                         await _ipcService.SendMachineInfoUpdateAsync(response);
@@ -231,7 +236,7 @@ public class PacketProcessorService : BackgroundService
 
                 _selfInformation.ClientConfig.IsInGame = false;
                 break;
-            case 1550 or 1282 or 1490 or 2253 or 1933 or 2326 : // 1691 or 2337 or 1550:
+            case 1550 or 1282 or 1490 or 2253 or 1933 or 2326: // 1691 or 2337 or 1550:
                 _selfInformation.BombHistory.Clear();
                 _selfInformation.ClientConfig.IsInGame = true;
                 SendSkipScreen(socket);
@@ -317,7 +322,7 @@ public class PacketProcessorService : BackgroundService
                 // No-op
                 break;
             case 2070: // gift recv 16 08
-                 ReadGifts(socket,methodPacket.MethodBody.AsMemory());
+                ReadGifts(socket, methodPacket.MethodBody.AsMemory());
                 break;
             //case 2132 : //funnel recv
             //    _selfInformation.ClientConfig.IsInGame = true;
@@ -334,14 +339,14 @@ public class PacketProcessorService : BackgroundService
         {
             _selfInformation.ClientConfig.IsInGame = false;
             var header = bytes.ReadStruct<PlayerBasicInfoStruct>();
-            
+
             _selfInformation.PersonInfo.PersonId = header.PlayerId;
-            
+
             // Get name from fixed byte array - decode as GB2312
-            int nameLen = Math.Min((int)header.NameLength, 30);
+            int                nameLen   = Math.Min((int)header.NameLength, 30);
             ReadOnlySpan<byte> nameBytes = new ReadOnlySpan<byte>(header.Name, nameLen);
             _selfInformation.PersonInfo.PlayerName = chs.GetString(nameBytes).Trim('\0').Trim();
-            
+
             _logger.ZLogInformation($"PlayerBasicInfo: Id={header.PlayerId} Name={_selfInformation.PersonInfo.PlayerName}");
         }
         catch (Exception ex)
@@ -360,14 +365,17 @@ public class PacketProcessorService : BackgroundService
         {
             _battleLogChannel.Writer.TryWrite(new BattleLogEvent
             {
-                Type = BattleEventType.SessionEnd,
+                Type      = BattleEventType.SessionEnd,
                 SessionId = sessionId,
                 Timestamp = DateTime.UtcNow
             });
             _selfInformation.BattleState.EndSession();
             _logger.ZLogInformation($"Battle session ended: {sessionId}");
         }
+
+        _selfInformation.WeaponNameCache.Clear();
     }
+
     private async Task ReadGameReady(ReadOnlyMemory<byte> bytes, CancellationToken token)
     {
         try
@@ -375,65 +383,118 @@ public class PacketProcessorService : BackgroundService
             var header = bytes.Span.ReadStruct<GameReadyStruct>();
             // Convert to array since Span can't cross await boundaries
             var playersSpan = bytes.Span.SliceAfter<GameReadyStruct>().CastTo<PlayerBattleStruct>();
-            int count = Math.Min(header.PlayerCount, playersSpan.Length);
-            var players = playersSpan.Slice(0, count).ToArray();
-            
+            int count       = Math.Min(header.PlayerCount, playersSpan.Length);
+            var players     = playersSpan.Slice(0, count).ToArray();
+
             _logger.ZLogInformation($"GameReady: MyPlayerId={header.PlayerId} Map={header.MapId} GameType={header.GameType} IsTeam={header.IsTeam} PlayerCount={header.PlayerCount}");
-            
+
             // Store self info
-            _selfInformation.PersonInfo.PersonId = header.PlayerId;
+            _selfInformation.PersonInfo.PersonId   = header.PlayerId;
             _selfInformation.ClientConfig.IsInGame = true;
-            
+
             // Start new battle session
             _selfInformation.BattleState.StartSession(header.MapId, header.GameType, header.IsTeam);
             var sessionId = _selfInformation.BattleState.CurrentSessionId!;
-            
+
             // Build player records for persistence
             var playerRecords = new List<BattlePlayerRecord>();
-            
+
+            // ---------------------------------------------------------
+            // OPTIMIZED BATCH SCANNING START
+            // ---------------------------------------------------------
+            try
+            {
+                // 1. Batch Scan Machines
+                var distinctMachineIds = players.Select(p => p.MachineId).Where(id => id > 0).Distinct().ToList();
+                _logger.ZLogInformation($"Batch scanning {distinctMachineIds.Count} machines");
+                var loadedMachines = await gm.ScanMachines(distinctMachineIds, token);
+
+                // 2. Batch Scan Transforms
+                // Filter out IDs we just scanned to avoid duplicates (though cache handles it, this saves logic in ScanMachines)
+                var transIds = loadedMachines
+                              .Where(m => m.HasTransform && m.TransformId != 0 &&
+                                          !distinctMachineIds.Contains(m.TransformId))
+                              .Select(m => m.TransformId)
+                              .Distinct()
+                              .ToList();
+
+                var loadedTrans = new List<MachineBaseInfo>();
+                if (transIds.Count > 0)
+                {
+                    _logger.ZLogInformation($"Batch scanning {transIds.Count} transformed machines");
+                    loadedTrans = await gm.ScanMachines(transIds, token);
+                }
+
+                // 3. Collect Weapon IDs from ALL machines (base + transforms)
+                var allWeaponIds = new HashSet<uint>();
+                foreach (var m in loadedMachines.Concat(loadedTrans))
+                {
+                    if (m.Weapon1Code       != 0) allWeaponIds.Add(m.Weapon1Code);
+                    if (m.Weapon2Code       != 0) allWeaponIds.Add(m.Weapon2Code);
+                    if (m.Weapon3Code       != 0) allWeaponIds.Add(m.Weapon3Code);
+                    if (m.SpecialAttackCode != 0) allWeaponIds.Add(m.SpecialAttackCode);
+                }
+
+                // 4. Batch Scan Weapons
+                if (allWeaponIds.Count > 0)
+                {
+                    _logger.ZLogInformation($"Batch scanning {allWeaponIds.Count} weapons");
+                    await gm.ScanWeapons(allWeaponIds, token);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.ZLogError(ex, $"Error during batch scanning phase in ReadGameReady");
+            }
+            // ---------------------------------------------------------
+            // OPTIMIZED BATCH SCANNING END
+            // ---------------------------------------------------------
+
             for (int i = 0; i < players.Length; i++)
             {
                 var p = players[i];
+                if (p.RoomSlot != i) continue;
                 _logger.ZLogInformation($"Player[{p.RoomSlot}]: Id={p.Player} Team={p.TeamId1},{p.TeamId2} Machine={p.MachineId} HP={p.MaxHP} Atk={p.Attack} Def={p.Defense} Shield={p.Shield}");
-                
                 // Update in-memory state for HP tracking
-                _selfInformation.BattleState.SetPlayer(p.Player, p.TeamId1, p.MachineId, p.MaxHP, p.Attack, p.Defense, p.Shield);
-                
+                _selfInformation.BattleState.SetPlayer(p.Player, p.TeamId1, p.MachineId, p.MaxHP, p.Attack, p.Defense,
+                                                       p.Shield);
+
                 // Build record for SQLite
                 playerRecords.Add(new BattlePlayerRecord
                 {
                     SessionId = sessionId,
-                    PlayerId = p.Player,
-                    TeamId = p.TeamId1,
+                    PlayerId  = p.Player,
+                    TeamId    = p.TeamId1,
                     MachineId = p.MachineId,
-                    MaxHP = p.MaxHP,
-                    Attack = p.Attack,
-                    Defense = p.Defense,
-                    Shield = p.Shield
+                    MaxHP     = p.MaxHP,
+                    Attack    = p.Attack,
+                    Defense   = p.Defense,
+                    Shield    = p.Shield
                 });
-                
-                // Scan machine only for self (to avoid blocking)
+
+                // ORIGINAL LOGIC: Scan machine only for self (to avoid blocking)
+                // Note: Thanks to the batch scan above, ScanCondom here will likely hit the cache instantly for machine/weapons!
                 if (p.Player == header.PlayerId)
                 {
                     try
                     {
                         var machineInfo = await ScanCondom(p.MachineId, token: token);
-                        
+
                         if (machineInfo != null)
                         {
                             _selfInformation.CurrentMachineModel = new MachineModel
                             {
                                 MachineId = p.MachineId,
-                                Slot = p.RoomSlot
+                                Slot      = p.RoomSlot
                             };
                             _selfInformation.PersonInfo.Slot = p.RoomSlot;
-                            
+
                             _logger.ZLogInformation($"Set current machine from GameReady: MachineId={p.MachineId}");
-                            
+
                             // Notify Frontend via IPC
                             var response = new NewGMHack.CommunicationModel.IPC.Responses.MachineInfoResponse
                             {
-                                MachineModel = _selfInformation.CurrentMachineModel,
+                                MachineModel    = _selfInformation.CurrentMachineModel,
                                 MachineBaseInfo = machineInfo
                             };
                             await _ipcService.SendMachineInfoUpdateAsync(response);
@@ -449,18 +510,18 @@ public class PacketProcessorService : BackgroundService
             // Send to battle logger for persistence
             _battleLogChannel.Writer.TryWrite(new BattleLogEvent
             {
-                Type = BattleEventType.SessionStart,
+                Type      = BattleEventType.SessionStart,
                 SessionId = sessionId,
                 Timestamp = DateTime.UtcNow,
                 Session = new BattleSessionRecord
                 {
-                    SessionId = sessionId,
-                    PlayerId = header.PlayerId,
-                    MapId = header.MapId,
-                    GameType = header.GameType,
-                    IsTeam = header.IsTeam,
+                    SessionId   = sessionId,
+                    PlayerId    = header.PlayerId,
+                    MapId       = header.MapId,
+                    GameType    = header.GameType,
+                    IsTeam      = header.IsTeam,
                     PlayerCount = count,
-                    StartedAt = DateTime.UtcNow.ToString("O")
+                    StartedAt   = DateTime.UtcNow.ToString("O")
                 },
                 Players = playerRecords
             });
@@ -476,23 +537,23 @@ public class PacketProcessorService : BackgroundService
         try
         {
             var playerState = bytes.ReadStruct<PlayerStateStruct>();
-            
+
             // Reset HP for player reborn
             _selfInformation.BattleState.ResetPlayerHP(playerState.SpawnId);
-            
+
             // Log reborn event
             var sessionId = _selfInformation.BattleState.CurrentSessionId;
             if (!string.IsNullOrEmpty(sessionId))
             {
                 _battleLogChannel.Writer.TryWrite(new BattleLogEvent
                 {
-                    Type = BattleEventType.Reborn,
-                    SessionId = sessionId,
-                    Timestamp = DateTime.UtcNow,
+                    Type           = BattleEventType.Reborn,
+                    SessionId      = sessionId,
+                    Timestamp      = DateTime.UtcNow,
                     RebornPlayerId = playerState.SpawnId
                 });
             }
-            
+
             if (!_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
                 return;
 
@@ -532,9 +593,9 @@ public class PacketProcessorService : BackgroundService
             }
 
         }
-        catch(Exception ex)
+        catch (Exception ex)
         {
-            _logger.LogError(ex,$"error occur in readdeads 1506");
+            _logger.LogError(ex, $"error occur in readdeads 1506");
         }
 
     }
@@ -555,366 +616,379 @@ public class PacketProcessorService : BackgroundService
     public void SendF5(IntPtr socket)
     {
         if (!_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoReady)) return;
-        ReadOnlySpan<byte> msg5 = new byte[] { 0x0A, 0x00, 0xF0, 0x03, 0x89, 0x09, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00 };
-        ReadOnlySpan<byte> msg6 = [0x06 ,0x00 ,0xF0 ,0x03,0x1A,0x09, 0x00,0x00 ,0x00 ,0x00];
-        _winsockHookManager.SendPacket(socket,msg5);
-        _winsockHookManager.SendPacket(socket,msg6);
+        ReadOnlySpan<byte> msg5 = new byte[]
+            { 0x0A, 0x00, 0xF0, 0x03, 0x89, 0x09, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00 };
+        ReadOnlySpan<byte> msg6 = [0x06, 0x00, 0xF0, 0x03, 0x1A, 0x09, 0x00, 0x00, 0x00, 0x00];
+        _winsockHookManager.SendPacket(socket, msg5);
+        _winsockHookManager.SendPacket(socket, msg6);
     }
-  public  void ReadGifts(IntPtr socket,ReadOnlyMemory<byte> buffer)
-{
-_logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select(b => b.ToString("X2")))}");
-       if (!_selfInformation.ClientConfig.Features.GetFeature(FeatureName.CollectGift).IsEnabled) return;
-    var personId = BitConverter.ToUInt32(buffer.Span.Slice(0, 4)); // EB 02 00 00 → 0x000002EB
-    _selfInformation.PersonInfo.PersonId = personId;
 
-    var giftStructs = buffer.Slice(4).Span.CastTo<GiftStruct>().ToArray();
+    public void ReadGifts(IntPtr socket, ReadOnlyMemory<byte> buffer)
+    {
+        _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select(b => b.ToString("X2")))}");
+        if (!_selfInformation.ClientConfig.Features.GetFeature(FeatureName.CollectGift).IsEnabled) return;
+        var personId = BitConverter.ToUInt32(buffer.Span.Slice(0, 4)); // EB 02 00 00 → 0x000002EB
+        _selfInformation.PersonInfo.PersonId = personId;
+
+        var giftStructs = buffer.Slice(4).Span.CastTo<GiftStruct>().ToArray();
 
         _logger.ZLogInformation($"gifts count : {giftStructs.Length}");
-    foreach (var gift in giftStructs.Where(x=>x.ItemType != 301 ))
-    {
+        foreach (var gift in giftStructs.Where(x => x.ItemType != 301))
+        {
 
-        //_logger.ZLogInformation($"accepting gift:{gift.GiftId}");
+            //_logger.ZLogInformation($"accepting gift:{gift.GiftId}");
             AcceptGiftPacket acceptGiftPacket = new AcceptGiftPacket()
             {
-                Length = 14 ,
+                Length   = 14,
                 Splitter = 1008,
-                Method = 2071,
-                GiftId = gift.GiftId
+                Method   = 2071,
+                GiftId   = gift.GiftId
             };
 
             AcceptGiftPacket acceptGiftPacket2 = new AcceptGiftPacket()
             {
-                Length = 14 ,
+                Length   = 14,
                 Splitter = 1008,
-                Method = 2074,
-                GiftId = gift.GiftId
+                Method   = 2074,
+                GiftId   = gift.GiftId
             };
-             _winsockHookManager.SendPacket(socket,acceptGiftPacket.ToByteArray().AsSpan());
-             _winsockHookManager.SendPacket(socket,acceptGiftPacket2.ToByteArray().AsSpan());
+            _winsockHookManager.SendPacket(socket, acceptGiftPacket.ToByteArray().AsSpan());
+            _winsockHookManager.SendPacket(socket, acceptGiftPacket2.ToByteArray().AsSpan());
 
+        }
     }
-}
+
     private void ReadDeads(ReadOnlyMemory<byte> buffer)
     {
-      try
+        try
         {
-         var deadStruct = buffer.Span.ReadStruct<DeadStruct>();
-         var deads      = buffer.Span.SliceAfter<DeadStruct>().CastTo<Deads>();
-             // _logger.ZLogInformation($"sstruct : {deadStruct.PersonId}|{deadStruct.KillerId}|{deadStruct.Count}");
-         
-         // Enhanced logging: show header info
-         _logger.ZLogInformation($"[ReadDeads] PersonId={deadStruct.PersonId} KillerId={deadStruct.KillerId} Count={deadStruct.Count} BufferLen={buffer.Length}");
-         
-         if (deadStruct.Count > 0)
-         {
-             var sessionId = _selfInformation.BattleState.CurrentSessionId;
+            var deadStruct = buffer.Span.ReadStruct<DeadStruct>();
+            var deads      = buffer.Span.SliceAfter<DeadStruct>().CastTo<Deads>();
+            // _logger.ZLogInformation($"sstruct : {deadStruct.PersonId}|{deadStruct.KillerId}|{deadStruct.Count}");
 
-             // Only process Count entries, not the entire array
-             int actualCount = Math.Min(deadStruct.Count, deads.Length);
-             
-             // Log only the valid dead IDs
-             var deadIds = new uint[actualCount];
-             for (int i = 0; i < actualCount; i++)
-             {
-                 deadIds[i] = deads[i].Id;
-             }
-             //_logger.ZLogInformation($"[ReadDeads] deads:{string.Join("|", deadIds)}");
-             
-             for (int i = 0; i < actualCount; i++)
-             {
-                 var dead = deads[i];
+            // Enhanced logging: show header info
+            _logger.ZLogInformation($"[ReadDeads] PersonId={deadStruct.PersonId} KillerId={deadStruct.KillerId} Count={deadStruct.Count} BufferLen={buffer.Length}");
+
+            if (deadStruct.Count > 0)
+            {
+                var sessionId = _selfInformation.BattleState.CurrentSessionId;
+
+                // Only process Count entries, not the entire array
+                int actualCount = Math.Min(deadStruct.Count, deads.Length);
+
+                // Log only the valid dead IDs
+                var deadIds = new uint[actualCount];
+                for (int i = 0; i < actualCount; i++)
+                {
+                    deadIds[i] = deads[i].Id;
+                }
+                //_logger.ZLogInformation($"[ReadDeads] deads:{string.Join("|", deadIds)}");
+
+                for (int i = 0; i < actualCount; i++)
+                {
+                    var dead = deads[i];
                     //Log death event if in battle session (temporarily disabled)
-                  if (!string.IsNullOrEmpty(sessionId))
-                  {
-                      // Set player HP to 0 on death
-                      _selfInformation.BattleState.UpdatePlayerHP(dead.Id, 0, 0);
-                      
-                      _battleLogChannel.Writer.TryWrite(new BattleLogEvent
-                      {
-                          Type = BattleEventType.Death,
-                          SessionId = sessionId,
-                          Timestamp = DateTime.UtcNow,
-                          Death = new DeathEventRecord
-                          {
-                              SessionId = sessionId,
-                              Timestamp = DateTime.UtcNow.ToString("O"),
-                              VictimId = dead.Id,
-                              KillerId = deadStruct.KillerId
-                          }
-                      });
-                  }
-                 
-                 if (_selfInformation.BombHistory.TryGetValue(dead.Id, out var count))
-                 {
-                     bool isRemoved = _selfInformation.BombHistory.TryRemove(dead.Id, out var _);
-                     if (isRemoved)
-                     {
-                        //_logger.ZLogInformation($"[ReadDeads] Removed:{dead.Id} since it is dead");
-                     }
-                     else
-                     {
-                        _logger.ZLogInformation($"[ReadDeads] cannot remove:{dead.Id}");
-                     }
-                 }
-             }
-         }
+                    if (!string.IsNullOrEmpty(sessionId))
+                    {
+                        // Set player HP to 0 on death
+                        _selfInformation.BattleState.UpdatePlayerHP(dead.Id, 0, 0);
+
+                        _battleLogChannel.Writer.TryWrite(new BattleLogEvent
+                        {
+                            Type      = BattleEventType.Death,
+                            SessionId = sessionId,
+                            Timestamp = DateTime.UtcNow,
+                            Death = new DeathEventRecord
+                            {
+                                SessionId = sessionId,
+                                Timestamp = DateTime.UtcNow.ToString("O"),
+                                VictimId  = dead.Id,
+                                KillerId  = deadStruct.KillerId
+                            }
+                        });
+                    }
+
+                    if (_selfInformation.BombHistory.TryGetValue(dead.Id, out var count))
+                    {
+                        bool isRemoved = _selfInformation.BombHistory.TryRemove(dead.Id, out var _);
+                        if (isRemoved)
+                        {
+                            //_logger.ZLogInformation($"[ReadDeads] Removed:{dead.Id} since it is dead");
+                        }
+                        else
+                        {
+                            _logger.ZLogInformation($"[ReadDeads] cannot remove:{dead.Id}");
+                        }
+                    }
+                }
+            }
         }
-        catch(Exception ex)
+        catch (Exception ex)
         {
             _logger.LogError(ex, $"[ReadDeads] error in readdead");
         }
     }
 
- /// <summary>
- /// Hit response handler for packet 2472
- /// Structure: MyId, AttackerId, AttackerSP, WeaponId, Unknown[3], VictimCount, Victim[]
- /// </summary>
- private void ReadHitResponse2472(ReadOnlyMemory<byte> bytes, ConcurrentQueue<Reborn> reborns)
- {
-     try
-     {
-         var hitResponse = bytes.Span.ReadStruct<HitResponse2472>();
-         var victims = bytes.Span.SliceAfter<HitResponse2472>().CastTo<Victim>();
-         
-         //_logger.ZLogInformation($"[2472] MyId={hitResponse.MyPlayerId} From={hitResponse.FromId} SP={hitResponse.AttackerSP} Weapon={hitResponse.WeaponId} VictimCount={hitResponse.VictimCount}");
-         
-         uint toId = hitResponse.VictimCount > 0 && victims.Length > 0 ? victims[0].VictimId : 0;
-         var sessionId = _selfInformation.BattleState.CurrentSessionId;
-         
-         int victimCount = Math.Min((int)hitResponse.VictimCount, victims.Length);
-         for (int i = 0; i < victimCount; i++)
-         {
-             var victim = victims[i];
-             
-             int hpDelta = _selfInformation.BattleState.UpdatePlayerHP(
-                 victim.VictimId, 
-                 victim.AfterHitHP, 
-                 victim.AfterHitShieldHP);
+    /// <summary>
+    /// Hit response handler for packet 2472
+    /// Structure: MyId, AttackerId, AttackerSP, WeaponId, Unknown[3], VictimCount, Victim[]
+    /// </summary>
+    private void ReadHitResponse2472(ReadOnlyMemory<byte> bytes, ConcurrentQueue<Reborn> reborns)
+    {
+        try
+        {
+            var hitResponse = bytes.Span.ReadStruct<HitResponse2472>();
+            var victims     = bytes.Span.SliceAfter<HitResponse2472>().CastTo<Victim>();
 
-             if (!string.IsNullOrEmpty(sessionId) && hpDelta != 0)
-             {
-                 _battleLogChannel.Writer.TryWrite(new BattleLogEvent
-                 {
-                     Type = BattleEventType.Damage,
-                     SessionId = sessionId,
-                     Timestamp = DateTime.UtcNow,
-                     Damage = new DamageEventRecord
-                     {
-                         SessionId = sessionId,
-                         Timestamp = DateTime.UtcNow.ToString("O"),
-                         AttackerId = hitResponse.FromId,
-                         WeaponId = hitResponse.WeaponId,
-                         VictimId = victim.VictimId,
-                         Damage = hpDelta,
-                         VictimHPAfter = victim.AfterHitHP,
-                         VictimShieldAfter = victim.AfterHitShieldHP,
-                         IsKill = 0
-                     }
-                 });
-             }
-             
-             // Queue floating damage for overlay display (only when I am the attacker)
-             if (hitResponse.FromId == _selfInformation.PersonInfo.PersonId && hpDelta != 0)
-             {
-                 _selfInformation.DamageNumbers.Enqueue(new FloatingDamage
-                 {
-                     Amount = hpDelta,
-                     SpawnTime = Environment.TickCount64,
-                     VictimId = victim.VictimId,
-                     X = _selfInformation.CrossHairX,  // Start at crosshair, will update in overlay
-                     Y = _selfInformation.CrossHairY
-                 });
-             }
-             
-             // Send damage received message (only when I am the victim and attacker is someone else)
-             if (victim.VictimId == _selfInformation.PersonInfo.PersonId && 
-                 hitResponse.FromId != _selfInformation.PersonInfo.PersonId && 
-                 hpDelta > 0)
-             {
-                 SendDamageReceivedMessage(hitResponse.FromId, hitResponse.WeaponId, hpDelta);
-             }
-         }
+            //_logger.ZLogInformation($"[2472] MyId={hitResponse.MyPlayerId} From={hitResponse.FromId} SP={hitResponse.AttackerSP} Weapon={hitResponse.WeaponId} VictimCount={hitResponse.VictimCount}");
 
-         if (hitResponse.FromId != _selfInformation.PersonInfo.PersonId)
-         {
-             if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
-                 _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
-             {
-                 reborns.Enqueue(new Reborn(hitResponse.MyPlayerId, toId, 0));
-             }
-         }
+            uint toId      = hitResponse.VictimCount > 0 && victims.Length > 0 ? victims[0].VictimId : 0;
+            var  sessionId = _selfInformation.BattleState.CurrentSessionId;
 
-         if (toId == _selfInformation.PersonInfo.PersonId)
-         {
-             if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsRebound))
-             {
-                 reborns.Enqueue(new Reborn(hitResponse.MyPlayerId, hitResponse.FromId, 0));
-             }
-         }
-     }
-      catch(Exception ex)
-      {
-             _logger.ZLogError(ex,$"Error in hit response 2472");
-      }
- }
+            int victimCount = Math.Min((int)hitResponse.VictimCount, victims.Length);
+            for (int i = 0; i < victimCount; i++)
+            {
+                var victim = victims[i];
 
- /// <summary>
- /// Hit response handler for packet 1616
- /// Structure: MyId, AttackerId, Unknown1, AttackerSP, WeaponId, Unknown2, VictimCount, Victim[]
- /// </summary>
- private void ReadHitResponse1616(ReadOnlyMemory<byte> bytes, ConcurrentQueue<Reborn> reborns)
- {
-     try
-     {
-         var hitResponse = bytes.Span.ReadStruct<HitResponse1616>();
-         var victims = bytes.Span.SliceAfter<HitResponse1616>().CastTo<Victim>();
-         
-         //_logger.ZLogInformation($"[1616] MyId={hitResponse.MyPlayerId} From={hitResponse.FromId} SP={hitResponse.AttackerSP} Weapon={hitResponse.WeaponId} VictimCount={hitResponse.VictimCount}");
-         
-         uint toId = hitResponse.VictimCount > 0 && victims.Length > 0 ? victims[0].VictimId : 0;
-         var sessionId = _selfInformation.BattleState.CurrentSessionId;
-         
-         int victimCount = Math.Min((int)hitResponse.VictimCount, victims.Length);
-         for (int i = 0; i < victimCount; i++)
-         {
-             var victim = victims[i];
-             
-             int hpDelta = _selfInformation.BattleState.UpdatePlayerHP(
-                 victim.VictimId, 
-                 victim.AfterHitHP, 
-                 victim.AfterHitShieldHP);
+                int hpDelta = _selfInformation.BattleState.UpdatePlayerHP(
+                                                                          victim.VictimId,
+                                                                          victim.AfterHitHP,
+                                                                          victim.AfterHitShieldHP);
 
-             if (!string.IsNullOrEmpty(sessionId) && hpDelta != 0)
-             {
-                 _battleLogChannel.Writer.TryWrite(new BattleLogEvent
-                 {
-                     Type = BattleEventType.Damage,
-                     SessionId = sessionId,
-                     Timestamp = DateTime.UtcNow,
-                     Damage = new DamageEventRecord
-                     {
-                         SessionId = sessionId,
-                         Timestamp = DateTime.UtcNow.ToString("O"),
-                         AttackerId = hitResponse.FromId,
-                         WeaponId = hitResponse.WeaponId,
-                         VictimId = victim.VictimId,
-                         Damage = hpDelta,
-                         VictimHPAfter = victim.AfterHitHP,
-                         VictimShieldAfter = victim.AfterHitShieldHP,
-                         IsKill = 0
-                     }
-                 });
-             }
-             
-             // Queue floating damage for overlay display (only when I am the attacker)
-             if (hitResponse.FromId == _selfInformation.PersonInfo.PersonId && hpDelta != 0)
-             {
-                 _selfInformation.DamageNumbers.Enqueue(new FloatingDamage
-                 {
-                     Amount = hpDelta,
-                     SpawnTime = Environment.TickCount64,
-                     VictimId = victim.VictimId,
-                     X = _selfInformation.CrossHairX,
-                     Y = _selfInformation.CrossHairY
-                 });
-             }
-             
-             // Send damage received message (only when I am the victim and attacker is someone else)
-             if (victim.VictimId == _selfInformation.PersonInfo.PersonId && 
-                 hitResponse.FromId != _selfInformation.PersonInfo.PersonId && 
-                 hpDelta > 0)
-             {
-                 SendDamageReceivedMessage(hitResponse.FromId, hitResponse.WeaponId, hpDelta);
-             }
-         }
+                if (!string.IsNullOrEmpty(sessionId) && hpDelta != 0)
+                {
+                    _battleLogChannel.Writer.TryWrite(new BattleLogEvent
+                    {
+                        Type      = BattleEventType.Damage,
+                        SessionId = sessionId,
+                        Timestamp = DateTime.UtcNow,
+                        Damage = new DamageEventRecord
+                        {
+                            SessionId         = sessionId,
+                            Timestamp         = DateTime.UtcNow.ToString("O"),
+                            AttackerId        = hitResponse.FromId,
+                            WeaponId          = hitResponse.WeaponId,
+                            VictimId          = victim.VictimId,
+                            Damage            = hpDelta,
+                            VictimHPAfter     = victim.AfterHitHP,
+                            VictimShieldAfter = victim.AfterHitShieldHP,
+                            IsKill            = 0
+                        }
+                    });
+                }
 
-         if (hitResponse.FromId != _selfInformation.PersonInfo.PersonId)
-         {
-             if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
-                 _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
-             {
-                 reborns.Enqueue(new Reborn(hitResponse.MyPlayerId, toId, 0));
-             }
-         }
+                // Queue floating damage for overlay display (only when I am the attacker)
+                if (hitResponse.FromId == _selfInformation.PersonInfo.PersonId && hpDelta != 0)
+                {
+                    _selfInformation.DamageNumbers.Enqueue(new FloatingDamage
+                    {
+                        Amount    = hpDelta,
+                        SpawnTime = Environment.TickCount64,
+                        VictimId  = victim.VictimId,
+                        X         = _selfInformation.CrossHairX, // Start at crosshair, will update in overlay
+                        Y         = _selfInformation.CrossHairY
+                    });
+                }
 
-         if (toId == _selfInformation.PersonInfo.PersonId)
-         {
-             if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsRebound))
-             {
-                 reborns.Enqueue(new Reborn(hitResponse.MyPlayerId, hitResponse.FromId, 0));
-             }
-         }
-     }
-     catch(Exception ex)
-     {
-            _logger.ZLogError(ex,$"Error in hit response 1616");
-     }
- }
+                // Send damage received message (only when I am the victim and attacker is someone else)
+                if (victim.VictimId    == _selfInformation.PersonInfo.PersonId &&
+                    hitResponse.FromId != _selfInformation.PersonInfo.PersonId &&
+                    hpDelta            > 0)
+                {
+                    _selfInformation.ReceivedDamageLogs.Enqueue(new DamageLog
+                    {
+                        Message   = $"{hitResponse.FromId} use {hitResponse.WeaponId} dmg : {hpDelta}",
+                        TimeAdded = Environment.TickCount64
+                    });
+                }
+            }
 
- private void ReadRewardGrade(ReadOnlySpan<byte> bytes)
- {
-     var gradeReport = bytes.ReadStruct<RewardGrade>();
-     
-     var transformedGrade = RewardTransformations.ToGradeRank(gradeReport.Grade);
-     _logger.ZLogInformation($"Grade Player:{gradeReport.PlayerId} Grade:{RewardTransformations.GradeRankToString(transformedGrade)} Damage:{gradeReport.DamageScore} Team:{gradeReport.TeamExpectationScore} Skill:{gradeReport.SkillFulScore}");
-     
-     var safeGrade = new SafeRewardGrade
-     {
-         PlayerId = gradeReport.PlayerId,
-         Grade = transformedGrade,
-         DamageScore = gradeReport.DamageScore,
-         TeamExpectationScore = gradeReport.TeamExpectationScore,
-         SkillFulScore = gradeReport.SkillFulScore
-     };
-     
-     _rewardChannel.Writer.TryWrite(new RewardEvent 
-     { 
-         Timestamp = DateTime.UtcNow, 
-         Grade = safeGrade 
-     });
- }
- private void ReadReport(ReadOnlySpan<byte> bytes)
- {
-     var report = bytes.ReadStruct<RewardReport>();
-     var gameStatus = RewardTransformations.ToGameStatus(report.WinOrLostOrDraw);
-     _logger.ZLogInformation($"Report Player[{RewardTransformations.GameStatusToString(gameStatus)}]:{report.PlayerId} K:{report.Kills} D:{report.Deaths} S:{report.Supports} Point:{report.Points} Exp:{report.ExpGain} GB:{report.GBGain} MachineAddedExp:{report.MachineAddedExp} MachineExp:{report.MachineExp} Practice:{report.PracticeExpAdded}");
-     
-     _rewardChannel.Writer.TryWrite(new RewardEvent 
-     { 
-         Timestamp = DateTime.UtcNow, 
-         Report = report 
-     });
- }
+            if (hitResponse.FromId != _selfInformation.PersonInfo.PersonId)
+            {
+                if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
+                    _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+                {
+                    reborns.Enqueue(new Reborn(hitResponse.MyPlayerId, toId, 0));
+                }
+            }
 
- private unsafe void ReadBonus(ReadOnlySpan<byte> bytes)
- {
-     var rewardsBonus = bytes.ReadStruct<RewardBonus>();
-     //LLM,create log
-     _logger.ZLogInformation($"Bonus Player:{rewardsBonus.PlayerId} Values: {rewardsBonus.Bonuses[0]}|{rewardsBonus.Bonuses[1]}|{rewardsBonus.Bonuses[2]}|{rewardsBonus.Bonuses[3]}|{rewardsBonus.Bonuses[4]}|{rewardsBonus.Bonuses[5]}|{rewardsBonus.Bonuses[6]}|{rewardsBonus.Bonuses[7]}");
-     
-     var safeBonus = new SafeRewardBonus
-     {
-         PlayerId = rewardsBonus.PlayerId,
-         Bonuses = [ 
-             rewardsBonus.Bonuses[0], rewardsBonus.Bonuses[1], rewardsBonus.Bonuses[2], rewardsBonus.Bonuses[3], 
-             rewardsBonus.Bonuses[4], rewardsBonus.Bonuses[5], rewardsBonus.Bonuses[6], rewardsBonus.Bonuses[7] 
-         ]
-     };
+            if (toId == _selfInformation.PersonInfo.PersonId)
+            {
+                if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsRebound))
+                {
+                    reborns.Enqueue(new Reborn(hitResponse.MyPlayerId, hitResponse.FromId, 0));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, $"Error in hit response 2472");
+        }
+    }
 
-     _rewardChannel.Writer.TryWrite(new RewardEvent 
-     { 
-         Timestamp = DateTime.UtcNow, 
-         Bonus = safeBonus 
-     });
- }
+    /// <summary>
+    /// Hit response handler for packet 1616
+    /// Structure: MyId, AttackerId, Unknown1, AttackerSP, WeaponId, Unknown2, VictimCount, Victim[]
+    /// </summary>
+    private void ReadHitResponse1616(ReadOnlyMemory<byte> bytes, ConcurrentQueue<Reborn> reborns)
+    {
+        try
+        {
+            var hitResponse = bytes.Span.ReadStruct<HitResponse1616>();
+            var victims     = bytes.Span.SliceAfter<HitResponse1616>().CastTo<Victim>();
+
+            //_logger.ZLogInformation($"[1616] MyId={hitResponse.MyPlayerId} From={hitResponse.FromId} SP={hitResponse.AttackerSP} Weapon={hitResponse.WeaponId} VictimCount={hitResponse.VictimCount}");
+
+            uint toId      = hitResponse.VictimCount > 0 && victims.Length > 0 ? victims[0].VictimId : 0;
+            var  sessionId = _selfInformation.BattleState.CurrentSessionId;
+
+            int victimCount = Math.Min((int)hitResponse.VictimCount, victims.Length);
+            for (int i = 0; i < victimCount; i++)
+            {
+                var victim = victims[i];
+
+                int hpDelta = _selfInformation.BattleState.UpdatePlayerHP(
+                                                                          victim.VictimId,
+                                                                          victim.AfterHitHP,
+                                                                          victim.AfterHitShieldHP);
+
+                if (!string.IsNullOrEmpty(sessionId) && hpDelta != 0)
+                {
+                    _battleLogChannel.Writer.TryWrite(new BattleLogEvent
+                    {
+                        Type      = BattleEventType.Damage,
+                        SessionId = sessionId,
+                        Timestamp = DateTime.UtcNow,
+                        Damage = new DamageEventRecord
+                        {
+                            SessionId         = sessionId,
+                            Timestamp         = DateTime.UtcNow.ToString("O"),
+                            AttackerId        = hitResponse.FromId,
+                            WeaponId          = hitResponse.WeaponId,
+                            VictimId          = victim.VictimId,
+                            Damage            = hpDelta,
+                            VictimHPAfter     = victim.AfterHitHP,
+                            VictimShieldAfter = victim.AfterHitShieldHP,
+                            IsKill            = 0
+                        }
+                    });
+                }
+
+                // Queue floating damage for overlay display (only when I am the attacker)
+                if (hitResponse.FromId == _selfInformation.PersonInfo.PersonId && hpDelta != 0)
+                {
+                    _selfInformation.DamageNumbers.Enqueue(new FloatingDamage
+                    {
+                        Amount    = hpDelta,
+                        SpawnTime = Environment.TickCount64,
+                        VictimId  = victim.VictimId,
+                        X         = _selfInformation.CrossHairX,
+                        Y         = _selfInformation.CrossHairY
+                    });
+                }
+
+                // Send damage received message (only when I am the victim and attacker is someone else)
+                if (victim.VictimId    == _selfInformation.PersonInfo.PersonId &&
+                    hitResponse.FromId != _selfInformation.PersonInfo.PersonId &&
+                    hpDelta            > 0)
+                {
+                    _selfInformation.ReceivedDamageLogs.Enqueue(new DamageLog
+                    {
+                        Message   = $"{hitResponse.FromId} use {hitResponse.WeaponId} dmg : {hpDelta}",
+                        TimeAdded = Environment.TickCount64
+                    });
+                }
+            }
+
+            if (hitResponse.FromId != _selfInformation.PersonInfo.PersonId)
+            {
+                if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
+                    _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+                {
+                    reborns.Enqueue(new Reborn(hitResponse.MyPlayerId, toId, 0));
+                }
+            }
+
+            if (toId == _selfInformation.PersonInfo.PersonId)
+            {
+                if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsRebound))
+                {
+                    reborns.Enqueue(new Reborn(hitResponse.MyPlayerId, hitResponse.FromId, 0));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, $"Error in hit response 1616");
+        }
+    }
+
+    private void ReadRewardGrade(ReadOnlySpan<byte> bytes)
+    {
+        var gradeReport = bytes.ReadStruct<RewardGrade>();
+
+        var transformedGrade = RewardTransformations.ToGradeRank(gradeReport.Grade);
+        _logger.ZLogInformation($"Grade Player:{gradeReport.PlayerId} Grade:{RewardTransformations.GradeRankToString(transformedGrade)} Damage:{gradeReport.DamageScore} Team:{gradeReport.TeamExpectationScore} Skill:{gradeReport.SkillFulScore}");
+
+        var safeGrade = new SafeRewardGrade
+        {
+            PlayerId             = gradeReport.PlayerId,
+            Grade                = transformedGrade,
+            DamageScore          = gradeReport.DamageScore,
+            TeamExpectationScore = gradeReport.TeamExpectationScore,
+            SkillFulScore        = gradeReport.SkillFulScore
+        };
+
+        _rewardChannel.Writer.TryWrite(new RewardEvent
+        {
+            Timestamp = DateTime.UtcNow,
+            Grade     = safeGrade
+        });
+    }
+
+    private void ReadReport(ReadOnlySpan<byte> bytes)
+    {
+        var report     = bytes.ReadStruct<RewardReport>();
+        var gameStatus = RewardTransformations.ToGameStatus(report.WinOrLostOrDraw);
+        _logger.ZLogInformation($"Report Player[{RewardTransformations.GameStatusToString(gameStatus)}]:{report.PlayerId} K:{report.Kills} D:{report.Deaths} S:{report.Supports} Point:{report.Points} Exp:{report.ExpGain} GB:{report.GBGain} MachineAddedExp:{report.MachineAddedExp} MachineExp:{report.MachineExp} Practice:{report.PracticeExpAdded}");
+
+        _rewardChannel.Writer.TryWrite(new RewardEvent
+        {
+            Timestamp = DateTime.UtcNow,
+            Report    = report
+        });
+    }
+
+    private unsafe void ReadBonus(ReadOnlySpan<byte> bytes)
+    {
+        var rewardsBonus = bytes.ReadStruct<RewardBonus>();
+        //LLM,create log
+        _logger.ZLogInformation($"Bonus Player:{rewardsBonus.PlayerId} Values: {rewardsBonus.Bonuses[0]}|{rewardsBonus.Bonuses[1]}|{rewardsBonus.Bonuses[2]}|{rewardsBonus.Bonuses[3]}|{rewardsBonus.Bonuses[4]}|{rewardsBonus.Bonuses[5]}|{rewardsBonus.Bonuses[6]}|{rewardsBonus.Bonuses[7]}");
+
+        var safeBonus = new SafeRewardBonus
+        {
+            PlayerId = rewardsBonus.PlayerId,
+            Bonuses =
+            [
+                rewardsBonus.Bonuses[0], rewardsBonus.Bonuses[1], rewardsBonus.Bonuses[2], rewardsBonus.Bonuses[3],
+                rewardsBonus.Bonuses[4], rewardsBonus.Bonuses[5], rewardsBonus.Bonuses[6], rewardsBonus.Bonuses[7]
+            ]
+        };
+
+        _rewardChannel.Writer.TryWrite(new RewardEvent
+        {
+            Timestamp = DateTime.UtcNow,
+            Bonus     = safeBonus
+        });
+    }
     // ReadHitResponse2472 removed - consolidated into ReadHitResponse
 
-    private void ReadHitResponse1525(ReadOnlyMemory<byte> bytes, ConcurrentBag<Reborn> reborns )
+    private void ReadHitResponse1525(ReadOnlyMemory<byte> bytes, ConcurrentBag<Reborn> reborns)
     {
         // _logger.ZLogInformation($"hit");
-           var  hitResponse = bytes.Span.ReadStruct<HitResponse1525>();
+        var hitResponse = bytes.Span.ReadStruct<HitResponse1525>();
 
-             // hitResponse = bytes.ReadStruct<HitResponse1525>();
+        // hitResponse = bytes.ReadStruct<HitResponse1525>();
         // _logger.ZLogInformation($"hit:{hitResponse.MyPlayerId} | {hitResponse.FromId} | {hitResponse.ToId}  ");
         // lock (_lock)
         // {
@@ -988,6 +1062,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         {
             return [];
         }
+
         List<Roommate> roomates = new(12);
         //normally , the first mother fucker is the room leader once join room (of cuz reassign when room leader fucked off)
         foreach (var roommateByte in roommateBytes)
@@ -1004,7 +1079,8 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         return roomates;
     }
 
-    private async Task SendToBombServices(PacketContext packet, ConcurrentQueue<Reborn> reborns,CancellationToken token)
+    private async Task SendToBombServices(PacketContext     packet, ConcurrentQueue<Reborn> reborns,
+                                          CancellationToken token)
     {
         try
         {
@@ -1013,10 +1089,10 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
                                           //.Distinct()
                                          .ToList();
             int targetCount = distinctTargets.Count;
-            _logger.ZLogInformation($"target counts : {targetCount} -- {string.Join(",",distinctTargets.Select(c=>c.TargetId))}");
+            _logger.ZLogInformation($"target counts : {targetCount} -- {string.Join(",", distinctTargets.Select(c => c.TargetId))}");
             if (targetCount > 0)
             {
-                await _bombChannel.Writer.WriteAsync((packet.Socket, distinctTargets),token);
+                await _bombChannel.Writer.WriteAsync((packet.Socket, distinctTargets), token);
             }
         }
         catch (Exception ex)
@@ -1025,7 +1101,7 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         }
     }
 
-    private void ReadReborns(ByteReader reader, ConcurrentQueue<Reborn> reborns , bool isReadLocation = true)
+    private void ReadReborns(ByteReader reader, ConcurrentQueue<Reborn> reborns, bool isReadLocation = true)
     {
         try
         {
@@ -1043,7 +1119,8 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         {
         }
     }
-    private  void ChargeCondom(IntPtr socket  ,UInt32 slot)
+
+    private void ChargeCondom(IntPtr socket, UInt32 slot)
     {
         //return;//TODO fix
         if (slot == 0) return;
@@ -1051,36 +1128,37 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         if (!_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoCharge)) return;
         ChargeRequest r = new();
         r.Version = 14;
-        r.Split = 1008;
-        r.Method = 1437;
-        r.Slot = slot;
+        r.Split   = 1008;
+        r.Method  = 1437;
+        r.Slot    = slot;
         _winsockHookManager.SendPacket(socket, r.ToByteArray().AsSpan());
     }
+
     private async Task<MachineBaseInfo?> ScanCondom(UInt32 machineId, CancellationToken token)
     {
         _logger.ZLogInformation($"Machine id begin scan: {machineId}");
-        
+
         var machineInfo = await gm.ScanMachineWithDetails(machineId, token);
-        
+
         _logger.ZLogInformation($"Machine id scan completed: {machineId}");
-        
+
         if (machineInfo == null) return null;
-        
+
         lock (_lock)
         {
             _selfInformation.PersonInfo.CondomId = machineId;
-            if (!string.IsNullOrEmpty(machineInfo.ChineseName)) 
+            if (!string.IsNullOrEmpty(machineInfo.ChineseName))
                 _selfInformation.PersonInfo.CondomName = machineInfo.ChineseName;
             else if (!string.IsNullOrEmpty(machineInfo.EnglishName))
                 _selfInformation.PersonInfo.CondomName = machineInfo.EnglishName;
-                
-            if (machineInfo.Weapon1Code != 0) 
+
+            if (machineInfo.Weapon1Code != 0)
                 _selfInformation.PersonInfo.Weapon1 = machineInfo.Weapon1Code;
-            if (machineInfo.Weapon2Code != 0) 
+            if (machineInfo.Weapon2Code != 0)
                 _selfInformation.PersonInfo.Weapon2 = machineInfo.Weapon2Code;
-            if (machineInfo.Weapon3Code != 0) 
+            if (machineInfo.Weapon3Code != 0)
                 _selfInformation.PersonInfo.Weapon3 = machineInfo.Weapon3Code;
-                
+
             // Store the full machine info for API access
             _selfInformation.CurrentMachineBaseInfo = machineInfo;
         }
@@ -1109,18 +1187,27 @@ _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select
         //    0x00, 0x00, 0x00, 0x00, 0x00, 0x00
         //];
 
-byte[] escBuffer =
-[
-    0x0E, 0x00, 0xF0, 0x03, 0x39, 0x09, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00 , 0x00
-];
-ReadOnlySpan<byte> zone1 = [0x17, 0x00, 0xF0, 0x03, 0x6A, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x8D, 0xF6, 0xE1, 0x44, 0xD2, 0x3F, 0x2C, 0x45, 0x7D, 0x68, 0x31, 0x00, 0x01
-]; 
-ReadOnlySpan<byte> zone2 = [0x17, 0x00, 0xF0, 0x03, 0x6A, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xB0, 0x21, 0x09, 0x45, 0x0C, 0xF4, 0xEC, 0xC3, 0x7E, 0x68, 0x31, 0x00, 0x02
-];
-ReadOnlySpan<byte> zone3 = [0x17, 0x00, 0xF0, 0x03, 0x6A, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xD0, 0x91, 0x1A, 0xC5, 0x89, 0x47, 0xF1, 0xC4, 0x7F, 0x68, 0x31, 0x00, 0x03
-];
+        byte[] escBuffer =
+        [
+            0x0E, 0x00, 0xF0, 0x03, 0x39, 0x09, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00
+        ];
+        ReadOnlySpan<byte> zone1 =
+        [
+            0x17, 0x00, 0xF0, 0x03, 0x6A, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x8D, 0xF6, 0xE1, 0x44,
+            0xD2, 0x3F, 0x2C, 0x45, 0x7D, 0x68, 0x31, 0x00, 0x01
+        ];
+        ReadOnlySpan<byte> zone2 =
+        [
+            0x17, 0x00, 0xF0, 0x03, 0x6A, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xB0, 0x21, 0x09, 0x45,
+            0x0C, 0xF4, 0xEC, 0xC3, 0x7E, 0x68, 0x31, 0x00, 0x02
+        ];
+        ReadOnlySpan<byte> zone3 =
+        [
+            0x17, 0x00, 0xF0, 0x03, 0x6A, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xD0, 0x91, 0x1A, 0xC5,
+            0x89, 0x47, 0xF1, 0xC4, 0x7F, 0x68, 0x31, 0x00, 0x03
+        ];
 //ReadOnlySpan<byte>   unknownSkip  = [0x0C, 0x00, 0xF0, 0x03, 0x1E, 0x08, 0x00, 0x00, 0x00, 0x00, 0xFA, 0x52, 0x00, 0x80, 0x00, 0x02
 //];
         _winsockHookManager.SendPacket(socket, escBuffer);
@@ -1133,7 +1220,7 @@ ReadOnlySpan<byte> zone3 = [0x17, 0x00, 0xF0, 0x03, 0x6A, 0x09, 0x00, 0x00, 0x00
 
         //_winsockHookManager.SendPacket(socket, unknownSkip);
     }
-    
+
     /// <summary>
     /// Build and send a fake game message packet for damage received notification
     /// </summary>
@@ -1142,7 +1229,7 @@ ReadOnlySpan<byte> zone3 = [0x17, 0x00, 0xF0, 0x03, 0x6A, 0x09, 0x00, 0x00, 0x00
         string message = $"{attackerId} use {weaponId} Dmg:{damage}";
         SendReceivedMessage(message);
     }
-    
+
     /// <summary>
     /// Send a fake game message to the game client
     /// Uses the loopback socket to inject as recv to the game
@@ -1153,27 +1240,25 @@ ReadOnlySpan<byte> zone3 = [0x17, 0x00, 0xF0, 0x03, 0x6A, 0x09, 0x00, 0x00, 0x00
         {
             // Create GameMessage2574 struct
             var gameMsg = GameMessage2574.Create(
-                _selfInformation.PersonInfo.PersonId,
-                name,
-                tag,
-                message
-            );
-            
+                                                 _selfInformation.PersonInfo.PersonId,
+                                                 name,
+                                                 tag,
+                                                 message
+                                                );
+
             // Build packet: [Length:2][Split:2][Method:2][Struct:123] = 129 bytes
             Span<byte> packet = stackalloc byte[129];
-            
+
             // Header
-            packet[0] = 0x81;  // Length low byte (129)
-            packet[1] = 0x00;  // Length high byte
-            packet[2] = 0xF0;  // Split marker
+            packet[0] = 0x81; // Length low byte (129)
+            packet[1] = 0x00; // Length high byte
+            packet[2] = 0xF0; // Split marker
             packet[3] = 0x03;
-            packet[4] = 0x0E;  // Method ID 2574 (0x0A0E) low byte
-            packet[5] = 0x0A;  // Method ID high byte
-            
+            packet[4] = 0x0E; // Method ID 2574 (0x0A0E) low byte
+            packet[5] = 0x0A; // Method ID high byte
+
             // Write struct to packet at offset 6
             System.Runtime.InteropServices.MemoryMarshal.Write(packet.Slice(6), in gameMsg);
-            
-            // Send directly via loopback socket
             _winsockHookManager.SendRecvPacket(packet);
         }
         catch (Exception ex)
@@ -1182,3 +1267,4 @@ ReadOnlySpan<byte> zone3 = [0x17, 0x00, 0xF0, 0x03, 0x6A, 0x09, 0x00, 0x00, 0x00
         }
     }
 }
+

@@ -26,17 +26,24 @@ namespace NewGMHack.Stub
         public uint EntityPosPtrAddress { get; set; }
     }
     
+    public class DamageLog
+    {
+        public string Message { get; set; }
+        public long TimeAdded { get; set; }
+    }
+
     /// <summary>
-    /// Floating damage number for overlay display
+    /// Floating damage number for overlay display (outgoing only)
     /// </summary>
     public class FloatingDamage
     {
-        public int Amount { get; set; }           // Damage value (positive=damage, negative=heal)
+        public int Amount { get; set; }           // Damage value 
         public long SpawnTime { get; set; }       // Environment.TickCount64 when spawned
         public float X { get; set; }              // Screen X position
         public float Y { get; set; }              // Screen Y position
         public uint VictimId { get; set; }        // For position lookup
-        public const int DurationMs = 1500;       // How long to display
+        public bool IsReceivedDamage { get; set; } // Legacy flag (kept for safety, mainly unused now)
+        public const int DurationMs = 2500;       
     }
     
     public class SelfInformation
@@ -79,6 +86,16 @@ namespace NewGMHack.Stub
         /// Queue of fake recv packets to inject (e.g., damage received messages)
         /// </summary>
         public ConcurrentQueue<byte[]> PendingRecvMessages { get; } = new();
+
+        /// <summary>
+        /// Log of received damage messages for bottom-left panel
+        /// </summary>
+        public ConcurrentQueue<DamageLog> ReceivedDamageLogs { get; } = new();
+
+        /// <summary>
+        /// Cache of weapon names by ID (cleared on session end)
+        /// </summary>
+        public ConcurrentDictionary<uint, string> WeaponNameCache { get; } = new();
         
         public SelfInformation()
         {

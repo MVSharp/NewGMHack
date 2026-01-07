@@ -231,6 +231,233 @@ namespace NewGMHack.Stub.MemoryScanner
             return machineInfo;
         }
 
+        public async Task<List<SkillBaseInfo>> ScanSkills(IEnumerable<uint> skillIds, CancellationToken token)
+        {
+            var results = new List<SkillBaseInfo>();
+            var missingIds = new List<uint>();
+            var distinctIds = skillIds.Where(id => id > 0).Distinct().ToList();
+
+            if (distinctIds.Count == 0) return results;
+
+            // 1. Check Cache
+            foreach (var id in distinctIds)
+            {
+                if (await _skillCache.IsValidAsync(id, CacheTTL))
+                {
+                    var cached = await _skillCache.GetAsync(id);
+                    if (cached != null)
+                    {
+                        results.Add(cached);
+                        continue;
+                    }
+                }
+                missingIds.Add(id);
+            }
+
+            if (missingIds.Count == 0) return results;
+
+            // 2. Scan Missing
+            string processName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ=="));
+            var process = Process.GetProcessesByName(processName).FirstOrDefault();
+            if (process == null) return results;
+
+            var batchInput = missingIds.Select(id => (BuildSkillPattern(id), (string?)null, (int)id)).ToList();
+            
+            logger.ZLogInformation($"ScanSkills Batch: {missingIds.Count} items");
+            var scanResults = await _scanner.ScanBatchAsync(process, batchInput, token);
+
+            // 3. Process & Cache
+            var bufferPool = ArrayPool<byte>.Shared;
+            byte[] buffer = bufferPool.Rent(SKILL_BUFFER_SIZE);
+
+            try
+            {
+                foreach (var id in missingIds)
+                {
+                    if (scanResults.TryGetValue((int)id, out var addresses))
+                    {
+                        foreach (var addr in addresses)
+                        {
+                            if (TryReadMemory((IntPtr)addr, buffer, SKILL_BUFFER_SIZE))
+                            {
+                                var span = buffer.AsSpan(0, SKILL_BUFFER_SIZE);
+                                if (ValidateSkillData(span, id))
+                                {
+                                    var info = ParseSkillData(span);
+                                    if (info != null)
+                                    {
+                                        logger.ZLogInformation($"Found skill {id} at 0x{addr:X}");
+                                        await _skillCache.SetAsync(id, info);
+                                        results.Add(info);
+                                        break; 
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                bufferPool.Return(buffer);
+            }
+
+            return results;
+        }
+
+        public async Task<List<WeaponBaseInfo>> ScanWeapons(IEnumerable<uint> weaponIds, CancellationToken token)
+        {
+            var results = new List<WeaponBaseInfo>();
+            var missingIds = new List<uint>();
+            var distinctIds = weaponIds.Where(id => id > 0).Distinct().ToList();
+
+            if (distinctIds.Count == 0) return results;
+
+            // 1. Check Cache
+            foreach (var id in distinctIds)
+            {
+                if (await _weaponCache.IsValidAsync(id, CacheTTL))
+                {
+                    var cached = await _weaponCache.GetAsync(id);
+                    if (cached != null)
+                    {
+                        results.Add(cached);
+                        continue;
+                    }
+                }
+                missingIds.Add(id);
+            }
+
+            if (missingIds.Count == 0) return results;
+
+            // 2. Scan Missing
+            string processName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ=="));
+            var process = Process.GetProcessesByName(processName).FirstOrDefault();
+            if (process == null) return results;
+
+            var batchInput = missingIds.Select(id => (BuildWeaponPattern(id), (string?)null, (int)id)).ToList();
+            
+            logger.ZLogInformation($"ScanWeapons Batch: {missingIds.Count} items");
+            var scanResults = await _scanner.ScanBatchAsync(process, batchInput, token);
+
+            // 3. Process & Cache
+            var bufferPool = ArrayPool<byte>.Shared;
+            byte[] buffer = bufferPool.Rent(WEAPON_BUFFER_SIZE);
+
+            try
+            {
+                foreach (var id in missingIds)
+                {
+                    if (scanResults.TryGetValue((int)id, out var addresses))
+                    {
+                        foreach (var addr in addresses)
+                        {
+                            if (TryReadMemory((IntPtr)addr, buffer, WEAPON_BUFFER_SIZE))
+                            {
+                                var span = buffer.AsSpan(0, WEAPON_BUFFER_SIZE);
+                                if (ValidateWeaponData(span, id))
+                                {
+                                    var info = ParseWeaponData(span);
+                                    if (info != null)
+                                    {
+                                        logger.ZLogInformation($"Found weapon {id} at 0x{addr:X}");
+                                        await _weaponCache.SetAsync(id, info);
+                                        results.Add(info);
+                                        break; 
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                bufferPool.Return(buffer);
+            }
+
+            return results;
+        }
+
+        public async Task<List<MachineBaseInfo>> ScanMachines(IEnumerable<uint> machineIds, CancellationToken token)
+        {
+            var results = new List<MachineBaseInfo>();
+            var missingIds = new List<uint>();
+            var distinctIds = machineIds.Where(id => id > 0).Distinct().ToList();
+
+            if (distinctIds.Count == 0) return results;
+
+            // 1. Check Cache
+            foreach (var id in distinctIds)
+            {
+                if (await _machineCache.IsValidAsync(id, CacheTTL))
+                {
+                    var cached = await _machineCache.GetAsync(id);
+                    if (cached != null)
+                    {
+                        results.Add(cached);
+                        continue;
+                    }
+                }
+                missingIds.Add(id);
+            }
+
+            if (missingIds.Count == 0) return results;
+
+            // 2. Scan Missing
+            string processName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ=="));
+            var process = Process.GetProcessesByName(processName).FirstOrDefault();
+            if (process == null) return results;
+
+            var batchInput = missingIds.Select(id => 
+            {
+                var (pattern, mask) = BuildMachinePattern(id);
+                return (pattern, mask, (int)id);
+            }).ToList();
+            
+            logger.ZLogInformation($"ScanMachines Batch: {missingIds.Count} items");
+            var scanResults = await _scanner.ScanBatchAsync(process, batchInput, token);
+
+            // 3. Process & Cache
+            var bufferPool = ArrayPool<byte>.Shared;
+            byte[] buffer = bufferPool.Rent(MACHINE_BUFFER_SIZE);
+
+            try
+            {
+                foreach (var id in missingIds)
+                {
+                    if (scanResults.TryGetValue((int)id, out var addresses))
+                    {
+                        foreach (var addr in addresses)
+                        {
+                            if (TryReadMemory((IntPtr)addr, buffer, MACHINE_BUFFER_SIZE))
+                            {
+                                var span = buffer.AsSpan(0, MACHINE_BUFFER_SIZE);
+                                if (ValidateMachineData(span, id))
+                                {
+                                    var info = ParseMachineData(span);
+                                    if (info != null)
+                                    {
+                                        logger.ZLogInformation($"Found machine {id} at 0x{addr:X}");
+                                        LogMachineResult(info);
+                                        await _machineCache.SetAsync(id, info);
+                                        results.Add(info);
+                                        break; 
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                bufferPool.Return(buffer);
+            }
+
+            return results;
+        }
+
         private async Task AssignDetailsAsync(MachineBaseInfo info, CancellationToken token)
         {
             // Collect all IDs
@@ -247,28 +474,60 @@ namespace NewGMHack.Stub.MemoryScanner
 
             if (skillIds.Count == 0 && weaponIds.Count == 0) return;
 
+            // PRE-CHECK CACHE to unnecessary scanning
+            var missingSkillIds = new List<uint>();
+            foreach (var id in skillIds)
+            {
+                if (await _skillCache.IsValidAsync(id, CacheTTL))
+                {
+                   var cached = await _skillCache.GetAsync(id);
+                   if (cached != null)
+                   {
+                       // Assign immediately
+                       if (id == info.SkillID1) info.Skill1Info = cached;
+                       else if (id == info.SkillID2) info.Skill2Info = cached;
+                       logger.ZLogInformation($"AssignDetails cache hit for Skill:{id}");
+                       continue;
+                   }
+                }
+                missingSkillIds.Add(id);
+            }
+
+            var missingWeaponIds = new List<uint>();
+            foreach (var id in weaponIds)
+            {
+                if (await _weaponCache.IsValidAsync(id, CacheTTL))
+                {
+                    var cached = await _weaponCache.GetAsync(id);
+                    if (cached != null)
+                    {
+                        // Assign immediately
+                        if (id == info.Weapon1Code) info.Weapon1Info = cached;
+                        if (id == info.Weapon2Code) info.Weapon2Info = cached;
+                        if (id == info.Weapon3Code) info.Weapon3Info = cached;
+                        if (id == info.SpecialAttackCode) info.SpecialAttack = cached;
+                        logger.ZLogInformation($"AssignDetails cache hit for Weapon:{id}");
+                        continue;
+                    }
+                }
+                missingWeaponIds.Add(id);
+            }
+
+            if (missingSkillIds.Count == 0 && missingWeaponIds.Count == 0) return;
+
+
             string processName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ=="));
             var process = Process.GetProcessesByName(processName).FirstOrDefault();
             if (process == null) return;
 
-            // 1. Build Batch Patterns
+            // 1. Build Batch Patterns (Only for missing items)
             var batchInput = new List<(byte[], string, int)>();
             
-            // We use positive IDs for everything, assuming no overlap in ID space or we just check context.
-            // Skill and Weapon IDs might overlap? 
-            // SkillId 70227, WeaponId 28698. Seems distinct ranges.
-            // But to be safe, we could use negative IDs for Skills or mask them?
-            // Let's assume unique or use a differentiation. 
-            // Actually, dictionary `ID -> Addresses`. If ID=1 exists in both, we scan pattern for ID=1.
-            // If patterns are different, we add both (Tuple in input is unique pattern).
-            // But result dictionary key is `int`. 
-            // Fix: Use 1000000 offset for Skills to guarantee uniqueness if ranges overlap.
-            
-            foreach (var id in weaponIds)
+            foreach (var id in missingWeaponIds)
             {
                 batchInput.Add((BuildWeaponPattern(id), null, (int)id));
             }
-            foreach (var id in skillIds)
+            foreach (var id in missingSkillIds)
             {
                 // Offset Skill IDs just in case
                 batchInput.Add((BuildSkillPattern(id), null, (int)id + 1000000));
@@ -276,7 +535,7 @@ namespace NewGMHack.Stub.MemoryScanner
 
             // 2. Scan Batch
             var sw = Stopwatch.StartNew();
-            logger.ZLogInformation($"BatchScan Input: {weaponIds.Count} Weapons, {skillIds.Count} Skills");
+            logger.ZLogInformation($"BatchScan Input: {missingWeaponIds.Count} Weapons, {missingSkillIds.Count} Skills");
             
             var results = await _scanner.ScanBatchAsync(process, batchInput, token);
             
@@ -292,7 +551,7 @@ namespace NewGMHack.Stub.MemoryScanner
             try
             {
                 // WEAPONS - Cache found weapons
-                foreach (var id in weaponIds)
+                foreach (var id in missingWeaponIds)
                 {
                     WeaponBaseInfo? foundInfo = null;
                     if (results.TryGetValue((int)id, out var addresses))
@@ -328,7 +587,7 @@ namespace NewGMHack.Stub.MemoryScanner
                 }
 
                 // SKILLS - Cache found skills
-                foreach (var id in skillIds)
+                foreach (var id in missingSkillIds)
                 {
                     int lookupId = (int)id + 1000000;
                     if (results.TryGetValue(lookupId, out var addresses))
