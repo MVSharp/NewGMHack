@@ -29,7 +29,7 @@ namespace NewGMHack.Stub.MemoryScanner
         /// <summary>
         /// Cache TTL - entries older than this will trigger a rescan
         /// </summary>
-        private static readonly TimeSpan CacheTTL = TimeSpan.FromMinutes(30);
+        private static readonly TimeSpan CacheTTL = TimeSpan.FromMinutes(60);
 
         [StructLayout(LayoutKind.Sequential)]
         public struct MEMORY_BASIC_INFORMATION
