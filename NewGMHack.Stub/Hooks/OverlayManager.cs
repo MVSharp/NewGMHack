@@ -48,6 +48,42 @@ public class OverlayManager(SelfInformation self)
     // Larger font for damage numbers
     private SharpDX.Direct3D9.Font _damageFont;
 
+    #region Static Resources
+    // Colors
+    private static readonly ColorBGRA ColorWhite = new(255, 255, 255, 255);
+    private static readonly ColorBGRA ColorRed = new(255, 0, 0, 255);
+    private static readonly ColorBGRA ColorOrange = new(255, 128, 0, 255);
+    private static readonly ColorBGRA ColorGreen = new(0, 255, 0, 255);
+    private static readonly ColorBGRA ColorBlack = new(0, 0, 0, 255);
+    private static readonly ColorBGRA ColorGlassBg = new(0, 0, 0, 100);
+    private static readonly ColorBGRA ColorAccentRed = new(255, 60, 60, 200);
+    private static readonly ColorBGRA ColorTextWhite = new(230, 230, 230, 255);
+    private static readonly ColorBGRA ColorShadow = new(0, 0, 0, 255);
+    private static readonly ColorBGRA ColorCrosshair = new(255, 255, 255, 200);
+    private static readonly ColorBGRA ColorAimCircle = new(0, 255, 255, 100);
+    private static readonly ColorBGRA ColorBestLine = new(0, 255, 255, 140);
+    private static readonly ColorBGRA ColorBestCircle = new(0, 255, 255, 180);
+    private static readonly ColorBGRA ColorUIEnabled = new(0, 255, 0, 140);
+    private static readonly ColorBGRA ColorUIDisabled = new(255, 0, 0, 140);
+    private static readonly ColorBGRA ColorUIHeader = new(255, 255, 255, 180);
+    private static readonly ColorBGRA ColorInfoLabel = new(173, 216, 230, 140);
+    private static readonly ColorBGRA ColorRadarBg = new(100, 100, 100, 80);
+    private static readonly ColorBGRA ColorRadarLines = new(80, 80, 80, 60);
+    private static readonly ColorBGRA ColorRadarIndicator = new(255, 255, 255, 150);
+    private static readonly ColorBGRA ColorRadarPlayer = new(255, 255, 255, 200);
+    private static readonly ColorBGRA ColorRadarEnemy = new(255, 50, 50, 180);
+    private static readonly ColorBGRA ColorRadarBest = new(255, 255, 0, 220);
+    private static readonly ColorBGRA ColorDistText = new(255, 255, 255, 180);
+
+    // Strings
+    private const string StrSuperDanger = "!! SUPER DANGER !!";
+    private const string StrDanger = "! DANGER !";
+    private const string StrTitle = "== SD Hack By Michael Van ==";
+    private const string StrPlayerInfo = "== Player Info ==";
+    private const string StrEnabled = "Enabled";
+    private const string StrDisabled = "Disabled";
+    #endregion
+
     public void Initialize(Device device)
     {
         if (_initialized || device == null) return;
@@ -199,6 +235,21 @@ public class OverlayManager(SelfInformation self)
         _line.Draw(_lineBuffer, color);
     }
 
+    private void FillRect(Rectangle rect, ColorBGRA color)
+    {
+        if (_line == null || _line.IsDisposed) return;
+        
+        // Use line to draw a filled rectangle by setting width = height
+        // Draw horizontal line in the middle
+        float midY = rect.Y + rect.Height / 2.0f;
+        _lineBuffer[0] = new Vector2(rect.X, midY);
+        _lineBuffer[1] = new Vector2(rect.X + rect.Width, midY);
+        float oldWidth = _line.Width;
+        _line.Width = rect.Height;
+        _line.Draw(_lineBuffer, color);
+        _line.Width = oldWidth; // Restore width
+    }
+
     private ColorBGRA GetHpGradientColor(float hpRatio)
     {
         if (hpRatio > 0.5f)
@@ -280,18 +331,17 @@ public class OverlayManager(SelfInformation self)
             _line.Begin();
             _isDrawing = true;
 
-            // Draw cached Crosshair (white, thin)
+                // Draw cached Crosshair (white, thin)
             if (_crosshairCacheH != null && _crosshairCacheV != null)
             {
-                ColorBGRA chColor = new ColorBGRA(255, 255, 255, 200);
-                _line.Draw(_crosshairCacheH, chColor);
-                _line.Draw(_crosshairCacheV, chColor);
+                _line.Draw(_crosshairCacheH, ColorCrosshair);
+                _line.Draw(_crosshairCacheV, ColorCrosshair);
             }
 
             // Draw cached Aim Circle (semi-transparent cyan)
             if (_aimCircleCache != null)
             {
-                _line.Draw(_aimCircleCache, new ColorBGRA(0, 255, 255, 100));
+                _line.Draw(_aimCircleCache, ColorAimCircle);
             }
 
             var playerPos = new Vector3(self.PersonInfo.X, self.PersonInfo.Y, self.PersonInfo.Z);
@@ -348,14 +398,16 @@ public class OverlayManager(SelfInformation self)
 
                     // NEW: Distance Indicator
                     DrawDistanceIndicator(screenPos, distance, viewport);
+                    
+                    // NEW: Danger Indicator (SP based)
+                    DrawDangerIndicator(screenPos, (uint)entity.Id);
 
                     if (entity.IsBest)
                     {
                         // Draw line to center (subtle cyan gradient)
-                        ColorBGRA bestLineColor = new ColorBGRA(0, 255, 255, 140);
-                        DrawLine(new Vector2(entity.ScreenX, entity.ScreenY), new Vector2(viewport.Width / 2, viewport.Height / 2), bestLineColor);
+                        DrawLine(new Vector2(entity.ScreenX, entity.ScreenY), new Vector2(viewport.Width / 2, viewport.Height / 2), ColorBestLine);
                         // Draw small circle around head
-                        DrawEllipse(entity.ScreenX, entity.ScreenY, 30, 30, new ColorBGRA(0, 255, 255, 180));
+                        DrawEllipse(entity.ScreenX, entity.ScreenY, 30, 30, ColorBestCircle);
                     }
                 }
             }
@@ -508,18 +560,18 @@ public class OverlayManager(SelfInformation self)
             _radarCircle[i].X = radarX + (RadarSize / 2) * _unitCircle[i].X;
             _radarCircle[i].Y = radarY + (RadarSize / 2) * _unitCircle[i].Y;
         }
-        _line.Draw(_radarCircle, new ColorBGRA(100, 100, 100, 80));
+        _line.Draw(_radarCircle, ColorRadarBg);
 
         // Draw cross lines on radar (vertical line = forward direction)
-        DrawLine(new Vector2(radarX - RadarSize / 2, radarY), new Vector2(radarX + RadarSize / 2, radarY), new ColorBGRA(80, 80, 80, 60));
-        DrawLine(new Vector2(radarX, radarY - RadarSize / 2), new Vector2(radarX, radarY + RadarSize / 2), new ColorBGRA(80, 80, 80, 60));
+        DrawLine(new Vector2(radarX - RadarSize / 2, radarY), new Vector2(radarX + RadarSize / 2, radarY), ColorRadarLines);
+        DrawLine(new Vector2(radarX, radarY - RadarSize / 2), new Vector2(radarX, radarY + RadarSize / 2), ColorRadarLines);
 
         // Draw forward indicator (small triangle at top of radar)
-        DrawLine(new Vector2(radarX - 5, radarY - RadarSize / 2 + 5), new Vector2(radarX, radarY - RadarSize / 2 - 2), new ColorBGRA(255, 255, 255, 150));
-        DrawLine(new Vector2(radarX + 5, radarY - RadarSize / 2 + 5), new Vector2(radarX, radarY - RadarSize / 2 - 2), new ColorBGRA(255, 255, 255, 150));
+        DrawLine(new Vector2(radarX - 5, radarY - RadarSize / 2 + 5), new Vector2(radarX, radarY - RadarSize / 2 - 2), ColorRadarIndicator);
+        DrawLine(new Vector2(radarX + 5, radarY - RadarSize / 2 + 5), new Vector2(radarX, radarY - RadarSize / 2 - 2), ColorRadarIndicator);
 
         // Draw player at center (white dot)
-        DrawEllipse(radarX, radarY, 3, 3, new ColorBGRA(255, 255, 255, 200));
+        DrawEllipse(radarX, radarY, 3, 3, ColorRadarPlayer);
 
         // Precompute rotation values
         float cosYaw = (float)Math.Cos(-cameraYaw);
@@ -556,7 +608,7 @@ public class OverlayManager(SelfInformation self)
             }
 
             // Color based on IsBest
-            var dotColor = entity.IsBest ? new ColorBGRA(255, 255, 0, 220) : new ColorBGRA(255, 50, 50, 180);
+            var dotColor = entity.IsBest ? ColorRadarBest : ColorRadarEnemy;
             DrawEllipse(dotX, dotY, 4, 4, dotColor);
         }
     }
@@ -654,16 +706,36 @@ public class OverlayManager(SelfInformation self)
         int totalHeight = Math.Min(count, 48) * 18;
         int startY = bottomY - totalHeight; 
         
+        
         // Loop backwards from Newest to Oldest (or up to limit relative to newest)
         for (int i = count - 1; i >= startIndex; i--)
         {
             var log = logs[i];
             
             // Stack downwards from startY: Newest at startY, Older at startY + 18
-            int currentY = startY + (drawn * 18);
+            int currentY = startY + (drawn * 20); // 20px spacing
             
-            _font.DrawText(null, log.Message, new Rectangle(startX, currentY, 400, 18), 
-                FontDrawFlags.Left | FontDrawFlags.NoClip, new ColorBGRA(255, 50, 50, 255));
+            int rectX = startX;
+            int rectY = currentY;
+            int rectW = 400;
+            int rectH = 18;
+            
+            // Background Panel (Glass look)
+            FillRect(new Rectangle(rectX, rectY, rectW, rectH), ColorGlassBg);
+            
+            // Accent Bar (Left side)
+            FillRect(new Rectangle(rectX, rectY, 4, rectH), ColorAccentRed);
+            
+            // Text padding
+            int textX = rectX + 10;
+            
+            // Draw Shadow (Offset +1, +1)
+            Rectangle shadowRect = new Rectangle(textX + 1, currentY + 1, rectW, rectH);
+            _font.DrawText(null, log.Message, shadowRect, FontDrawFlags.Left | FontDrawFlags.VerticalCenter | FontDrawFlags.NoClip, ColorShadow);
+
+            // Draw Main Text
+            Rectangle textRect = new Rectangle(textX, currentY, rectW, rectH);
+            _font.DrawText(null, log.Message, textRect, FontDrawFlags.Left | FontDrawFlags.VerticalCenter | FontDrawFlags.NoClip, ColorTextWhite);
             
             drawn++;
         }
@@ -680,7 +752,7 @@ public class OverlayManager(SelfInformation self)
         if (_damageFont == null) return;
         
         long now = Environment.TickCount64;
-        var rng = new Random();
+        var rng = Random.Shared;
         
         // Pull new damage from queue (max 100 per frame to avoid lag, but fast enough for bursts)
         int pulled = 0;
@@ -751,6 +823,28 @@ public class OverlayManager(SelfInformation self)
             // Use larger damage font
             _damageFont.DrawText(null, text, new Rectangle((int)dmg.X - 50, (int)drawY, 200, 30), 
                 FontDrawFlags.Left | FontDrawFlags.NoClip, color);
+        }
+    }
+
+    private void DrawDangerIndicator(Vector2 screenPos, uint entityId)
+    {
+        // Lookup by EntityId (which maps to RoomSlot + 1)
+        var state = self.BattleState.GetPlayerByEntityId(entityId);
+        if (state != null)
+        {
+            if (state.SP >= 30000)
+            {
+                // Super Danger
+                // Draw slightly above entity
+                Rectangle rect = new Rectangle((int)screenPos.X - 60, (int)screenPos.Y - 80, 120, 20);
+                _font.DrawText(null, StrSuperDanger, rect, FontDrawFlags.Center | FontDrawFlags.NoClip, ColorRed);
+            }
+            else if (state.SP > 20000)
+            {
+                // Danger
+                Rectangle rect = new Rectangle((int)screenPos.X - 40, (int)screenPos.Y - 60, 80, 20);
+                _font.DrawText(null, StrDanger, rect, FontDrawFlags.Center | FontDrawFlags.NoClip, ColorOrange);
+            }
         }
     }
 

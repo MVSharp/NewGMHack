@@ -147,7 +147,7 @@ public class BattleLoggerService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.ZLogError(ex, "Error in BattleLoggerService loop");
+            _logger.ZLogError(ex, $"Error in BattleLoggerService loop");
         }
         finally
         {
@@ -169,7 +169,7 @@ public class BattleLoggerService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.ZLogError(ex, "Error flushing damage buffer");
+            _logger.ZLogError(ex, $"Error flushing damage buffer");
         }
     }
 

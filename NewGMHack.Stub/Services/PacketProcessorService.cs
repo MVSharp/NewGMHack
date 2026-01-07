@@ -457,7 +457,7 @@ public class PacketProcessorService : BackgroundService
                 _logger.ZLogInformation($"Player[{p.RoomSlot}]: Id={p.Player} Team={p.TeamId1},{p.TeamId2} Machine={p.MachineId} HP={p.MaxHP} Atk={p.Attack} Def={p.Defense} Shield={p.Shield}");
                 // Update in-memory state for HP tracking
                 _selfInformation.BattleState.SetPlayer(p.Player, p.TeamId1, p.MachineId, p.MaxHP, p.Attack, p.Defense,
-                                                       p.Shield);
+                                                       p.Shield, p.RoomSlot);
 
                 // Build record for SQLite
                 playerRecords.Add(new BattlePlayerRecord
@@ -842,6 +842,9 @@ public class PacketProcessorService : BackgroundService
 
             uint toId      = hitResponse.VictimCount > 0 && victims.Length > 0 ? victims[0].VictimId : 0;
             var  sessionId = _selfInformation.BattleState.CurrentSessionId;
+
+            // Update Attacker SP (Note: 1616 struct has AttackerSP too)
+            _selfInformation.BattleState.UpdatePlayerSP(hitResponse.FromId, hitResponse.AttackerSP);
 
             int victimCount = Math.Min((int)hitResponse.VictimCount, victims.Length);
             for (int i = 0; i < victimCount; i++)

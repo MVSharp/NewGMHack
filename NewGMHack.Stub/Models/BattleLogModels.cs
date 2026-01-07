@@ -74,7 +74,7 @@ public class BattleState
     /// <summary>
     /// Add or update player state
     /// </summary>
-    public void SetPlayer(uint playerId, uint teamId, uint machineId, uint maxHP, ushort attack, ushort defense, uint shield)
+    public void SetPlayer(uint playerId, uint teamId, uint machineId, uint maxHP, ushort attack, ushort defense, uint shield, uint roomSlot)
     {
         Players[playerId] = new PlayerBattleState
         {
@@ -86,8 +86,17 @@ public class BattleState
             Attack = attack,
             Defense = defense,
             Shield = shield,
-            CurrentShield = shield
+            CurrentShield = shield,
+            RoomSlot = roomSlot
         };
+    }
+    
+    /// <summary>
+    /// Get player state by EntityId (RoomSlot + 1)
+    /// </summary>
+    public PlayerBattleState? GetPlayerByEntityId(uint entityId)
+    {
+        return Players.Values.FirstOrDefault(p => p.EntityId == entityId);
     }
     
     /// <summary>
@@ -116,6 +125,16 @@ public class BattleState
             state.CurrentShield = state.Shield;
         }
     }
+    /// <summary>
+    /// Update player SP (from HitResponse)
+    /// </summary>
+    public void UpdatePlayerSP(uint playerId, uint sp)
+    {
+        if (Players.TryGetValue(playerId, out var state))
+        {
+            state.SP = sp;
+        }
+    }
 }
 
 /// <summary>
@@ -132,6 +151,9 @@ public class PlayerBattleState
     public ushort Defense { get; set; }
     public uint Shield { get; set; }
     public uint CurrentShield { get; set; }
+    public uint SP { get; set; } // Special Points
+    public uint RoomSlot { get; set; }
+    public uint EntityId => RoomSlot + 1;
 }
 
 #endregion
