@@ -179,12 +179,9 @@ public class BattleLoggerService : BackgroundService
         {
             case BattleEventType.SessionStart:
                 await InsertSession(evt.Session!);
-                if (evt.Players != null)
+                if (evt.Players != null && evt.Players.Count > 0)
                 {
-                    foreach (var player in evt.Players)
-                    {
-                        await InsertPlayer(player);
-                    }
+                    await BulkInsertPlayers(evt.Players);
                 }
                 break;
                 
@@ -217,13 +214,24 @@ public class BattleLoggerService : BackgroundService
         _logger.ZLogInformation($"Battle session started: {session.SessionId} Map={session.MapId} Players={session.PlayerCount}");
     }
 
-    private async Task InsertPlayer(BattlePlayerRecord player)
+    private async Task BulkInsertPlayers(IEnumerable<BattlePlayerRecord> players)
     {
         await using var conn = new SqliteConnection(_connectionString);
-        await conn.ExecuteAsync(@"
-            INSERT INTO BattlePlayers (SessionId, PlayerId, TeamId, MachineId, MaxHP, Attack, Defense, Shield)
-            VALUES (@SessionId, @PlayerId, @TeamId, @MachineId, @MaxHP, @Attack, @Defense, @Shield)",
-            player);
+        await conn.OpenAsync();
+        await using var transaction = conn.BeginTransaction();
+        try
+        {
+            await conn.ExecuteAsync(@"
+                INSERT INTO BattlePlayers (SessionId, PlayerId, TeamId, MachineId, MaxHP, Attack, Defense, Shield)
+                VALUES (@SessionId, @PlayerId, @TeamId, @MachineId, @MaxHP, @Attack, @Defense, @Shield)",
+                players, transaction: transaction);
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
     }
 
     private async Task InsertDamage(DamageEventRecord damage)

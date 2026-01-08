@@ -487,6 +487,7 @@ public class OverlayManager(SelfInformation self)
         y += LineHeight + SectionSpacing;
 
         DrawInfoRow(device, x, ref y, "PersonId", self.PersonInfo.PersonId.ToString());
+        DrawInfoRow(device, x, ref y, "PersonName", self.PersonInfo.PlayerName);
         DrawInfoRow(device, x, ref y, "LastSocket", self.LastSocket.ToString());
         DrawInfoRow(device, x, ref y, "CondomId", self.PersonInfo.CondomId.ToString());
         DrawInfoRow(device, x, ref y, "Weapons", $"{self.PersonInfo.Weapon1}, {self.PersonInfo.Weapon2}, {self.PersonInfo.Weapon3}");
