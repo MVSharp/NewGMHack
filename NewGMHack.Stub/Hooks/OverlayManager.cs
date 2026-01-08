@@ -10,6 +10,7 @@ namespace NewGMHack.Stub.Hooks;
 public class OverlayManager(SelfInformation self)
 {
     private SharpDX.Direct3D9.Font _font;
+    private Sprite                 _textSprite;
     private bool                   _initialized;
 
     // Reusable buffers to avoid allocations per frame
@@ -41,6 +42,11 @@ public class OverlayManager(SelfInformation self)
     private const float RadarSize = 120f;
     private const float RadarRange = 800f; // World units
     private readonly Vector2[] _radarCircle = new Vector2[CircleSegments + 1];
+    private readonly List<D3DVertex> _radarLineBuffer = new();
+    private readonly List<D3DVertex> _radarDotBuffer = new();
+    
+    // Damage Log Cache
+    private readonly List<D3DVertex> _logBackgroundBuffer = new();
 
     // Warning flash
     private const float WarningDistance = 150f;
@@ -108,6 +114,7 @@ public class OverlayManager(SelfInformation self)
             PitchAndFamily = FontPitchAndFamily.Default
         };
         _damageFont = new SharpDX.Direct3D9.Font(device, damageFontDesc);
+        _textSprite = new Sprite(device);
         
 
 
@@ -346,6 +353,10 @@ public class OverlayManager(SelfInformation self)
 
         if (self.Targets == null || self.Targets.Count == 0) return;
 
+        // CAPTURE GAME STATE (Fixes White Screen / State Corruption)
+        // This ensures whatever we change (Textures, RenderStates, VertexDecls) is restored exactly.
+        using var stateBlock = new StateBlock(device, StateBlockType.All);
+        
         try
         {
             var viewMatrix = device.GetTransform(TransformState.View);
@@ -378,8 +389,7 @@ public class OverlayManager(SelfInformation self)
 
             var playerPos = new Vector3(self.PersonInfo.X, self.PersonInfo.Y, self.PersonInfo.Z);
 
-            // NEW: Draw FPS Counter
-            DrawFpsCounter(device);
+
 
             // NEW: Draw Radar (with camera rotation)
             DrawRadar(device, playerPos, viewport, viewMatrix);
@@ -389,6 +399,7 @@ public class OverlayManager(SelfInformation self)
             int count = targets.Count;
             float closestDistance = float.MaxValue;
             
+            // PASS 1: GEOMETRY BATCH (Stateless Primitives)
             for(int i = 0; i < count; i++)
             {
                 var entity = targets[i];
@@ -400,13 +411,10 @@ public class OverlayManager(SelfInformation self)
                 entity.ScreenX = screenPos.X;
                 entity.ScreenY = screenPos.Y;
 
-                // Calculate distance for indicator and warning
                 float distance = Vector3.Distance(playerPos, entity.Position);
                 if (distance < closestDistance) closestDistance = distance;
 
                 bool isBehind;
-                // Optimized check: just check W from clip space inside WorldToScreen roughly or reuse matrix calc
-                // For now, keep existing helper or inline it if really hot.
                 GetScreenDirection(entity.Position, viewMatrix, projMatrix, viewport, out isBehind);
 
                 bool onScreen = (screenPos != Vector2.Zero) &&
@@ -428,12 +436,6 @@ public class OverlayManager(SelfInformation self)
                     Vector2 centerTop = new(viewport.Width / 2.0f, 10);
                     DrawLine(device, centerTop, screenPos, lineColor, viewport);
 
-                    // NEW: Distance Indicator
-                    DrawDistanceIndicator(screenPos, distance, viewport);
-                    
-                    // NEW: Danger Indicator (SP based)
-                    DrawDangerIndicator(screenPos, (uint)entity.Id);
-
                     if (entity.IsBest)
                     {
                         // Draw line to center (subtle cyan gradient)
@@ -444,19 +446,73 @@ public class OverlayManager(SelfInformation self)
                 }
             }
 
-            // NEW: Warning Flash if enemy close
+            // NEW: Warning Flash if enemy close (Geometry)
             DrawWarningFlash(device, closestDistance, viewport);
             
-            // NEW: Floating damage numbers
-            DrawFloatingDamage(viewport);
+            // NEW: Damage Log Panel Backgrounds (Geometry)
+            // Note: DrawDamageLog handles its own two-pass logic internally to keep code clean, 
+            // OR we can pass the sprite later. 
+            // Better: Let's do Text Batch now. DrawDamageLog is a mix.
+            // We'll update DrawDamageLog to take the Sprite and do both inside properly?
+            // Actually, DrawDamageLog does: Geometry -> Text.
+            // If we are in "Geometry Phase", we can call DrawDamageLogGeometry? No too complex.
+            // Let's just do the Text Batch for everything else first.
 
-            // NEW: Damage Log Panel
-            DrawDamageLog(device, viewport);
+            // PASS 2: TEXT BATCH (Sprite)
+            _textSprite.Begin(SpriteFlags.AlphaBlend);
+            try
+            {
+                // Draw FPS Counter
+                DrawFpsCounter(_textSprite);
+
+                for(int i = 0; i < count; i++)
+                {
+                    var entity = targets[i];
+                    if (entity.CurrentHp <= 0 || entity.MaxHp <= 0) continue;
+                    
+                    // Re-check visibility logic for text
+                    bool onScreen = (entity.ScreenX >= 0 && entity.ScreenX <= viewport.Width &&
+                                     entity.ScreenY >= 0 && entity.ScreenY <= viewport.Height);
+
+                    if (onScreen)
+                    {
+                        float distance = Vector3.Distance(playerPos, entity.Position);
+                        // Indicators using Sprite
+                        DrawDistanceIndicator(_textSprite, new Vector2(entity.ScreenX, entity.ScreenY), distance, viewport);
+                        DrawDangerIndicator(_textSprite, new Vector2(entity.ScreenX, entity.ScreenY), (uint)entity.Id);
+                    }
+                }
+                
+                // Floating Damage (Text)
+                DrawFloatingDamage(_textSprite, viewport);
+
+                // Damage Log (Geometry + Text)
+                // Since DrawDamageLog does Geometry then Text, call it *outside* of this Sprite batch 
+                // OR split it.
+                // Splitting is best practice. But for now, let's End the sprite batch, call DrawDamageLog (which does its own thing), 
+                // OR update DrawDamageLog to use the current Sprite?
+                // If DrawDamageLog draws primitives, it MUST be outside Sprite.Begin/End (or flush).
+                // So let's end this batch, then call DrawDamageLog using the Sprite for its text part.
+            }
+            finally
+            {
+                _textSprite.End();
+            }
+
+            // Damage Log Panel
+            // It handles: Geometry (Primitives) -> Text (Sprite)
+            // We update it to accept the sprite instance so it doesn't need to create one, but uses Begin/End safely.
+            DrawDamageLog(device, _textSprite, viewport);
 
 
         }
         catch (Exception ex)
         {
+            Debug.WriteLine(ex);
+        }
+        finally
+        {
+            stateBlock.Apply();
         }
     }
 
@@ -506,53 +562,54 @@ public class OverlayManager(SelfInformation self)
         int y           = 40;
         int uiWidth     = 200;
         
-        _font.DrawText(null, "== SD Hack By Michael Van ==", new Rectangle(x, y, uiWidth, LineHeight), FontDrawFlags.NoClip, new ColorBGRA(255, 255, 255, 180));
-        y += LineHeight + SectionSpacing;
-
-        foreach (var feature in self.ClientConfig.Features)
+        _textSprite.Begin(SpriteFlags.AlphaBlend);
+        try
         {
-            string status = feature.IsEnabled ? "Enabled" : "Disabled";
-            string line   = $"{feature.Name,-18} {status}";
-            var    color  = feature.IsEnabled ? new ColorBGRA(0, 255, 0, 140) : new ColorBGRA(255, 0, 0, 140);
-            _font.DrawText(null, line, new Rectangle(x, y, uiWidth, LineHeight), FontDrawFlags.NoClip, color);
-            y += LineHeight;
+            _font.DrawText(_textSprite, "== SD Hack By Michael Van ==", new Rectangle(x, y, uiWidth, LineHeight), FontDrawFlags.NoClip, new ColorBGRA(255, 255, 255, 180));
+            y += LineHeight + SectionSpacing;
+
+            foreach (var feature in self.ClientConfig.Features)
+            {
+                string status = feature.IsEnabled ? "Enabled" : "Disabled";
+                string line   = $"{feature.Name,-18} {status}";
+                var    color  = feature.IsEnabled ? new ColorBGRA(0, 255, 0, 140) : new ColorBGRA(255, 0, 0, 140);
+                _font.DrawText(_textSprite, line, new Rectangle(x, y, uiWidth, LineHeight), FontDrawFlags.NoClip, color);
+                y += LineHeight;
+            }
+
+            y += SectionSpacing * 2;
+            _font.DrawText(_textSprite, "== Player Info ==", new Rectangle(x, y, uiWidth, LineHeight), FontDrawFlags.NoClip, new ColorBGRA(255, 255, 255, 180));
+            y += LineHeight + SectionSpacing;
+
+            DrawInfoRow(_textSprite, x, ref y, "PersonId", self.PersonInfo.PersonId.ToString());
+            DrawInfoRow(_textSprite, x, ref y, "PersonName", self.PersonInfo.PlayerName);
+            DrawInfoRow(_textSprite, x, ref y, "LastSocket", self.LastSocket.ToString());
+            DrawInfoRow(_textSprite, x, ref y, "CondomId", self.PersonInfo.CondomId.ToString());
+            DrawInfoRow(_textSprite, x, ref y, "Weapons", $"{self.PersonInfo.Weapon1}, {self.PersonInfo.Weapon2}, {self.PersonInfo.Weapon3}");
+            DrawInfoRow(_textSprite, x, ref y, "Position", $"X:{self.PersonInfo.X:F1} Y:{self.PersonInfo.Y:F1} Z:{self.PersonInfo.Z:F1}");
+            DrawInfoRow(_textSprite, x, ref y, "CondomName", self.PersonInfo.CondomName);
+            DrawInfoRow(_textSprite, x, ref y, "Slot", self.PersonInfo.Slot.ToString());
+            
+            var targets = self.Targets;
+            int count = targets.Count;
+            for (int i = 0; i < count; i++)
+            {
+                var entity = targets[i];
+                if (entity.MaxHp <= 0 ) continue;
+                DrawInfoRow(_textSprite, x, ref y, $"{entity.Id}|", $"{entity.CurrentHp}/{entity.MaxHp}-{entity.Position.X}:{entity.Position.Y}:{entity.Position.Z}");
+            }
         }
-
-        y += SectionSpacing * 2;
-        _font.DrawText(null, "== Player Info ==", new Rectangle(x, y, uiWidth, LineHeight), FontDrawFlags.NoClip, new ColorBGRA(255, 255, 255, 180));
-        y += LineHeight + SectionSpacing;
-
-        DrawInfoRow(device, x, ref y, "PersonId", self.PersonInfo.PersonId.ToString());
-        DrawInfoRow(device, x, ref y, "PersonName", self.PersonInfo.PlayerName);
-        DrawInfoRow(device, x, ref y, "LastSocket", self.LastSocket.ToString());
-        DrawInfoRow(device, x, ref y, "CondomId", self.PersonInfo.CondomId.ToString());
-        DrawInfoRow(device, x, ref y, "Weapons", $"{self.PersonInfo.Weapon1}, {self.PersonInfo.Weapon2}, {self.PersonInfo.Weapon3}");
-        DrawInfoRow(device, x, ref y, "Position", $"X:{self.PersonInfo.X:F1} Y:{self.PersonInfo.Y:F1} Z:{self.PersonInfo.Z:F1}");
-        DrawInfoRow(device, x, ref y, "CondomName", self.PersonInfo.CondomName);
-        DrawInfoRow(device, x, ref y, "Slot", self.PersonInfo.Slot.ToString());
-        
-        // Loop over targets directly for UI too ?? 
-        // Original code used ToList(), which is safe for modification, but here we just read.
-        // If Targets is modified by another thread, simple iteration might throw. 
-        // SelfInformation.Targets is a List<Entity> initialized with 12 items.
-        // It seems it is a fixed size list where items are updated, not added/removed (based on EntityScannerService).
-        // So standard for loop is safe and allocation-free.
-        
-        var targets = self.Targets;
-        int count = targets.Count;
-        for (int i = 0; i < count; i++)
+        finally
         {
-            var entity = targets[i];
-            if (entity.MaxHp <= 0 ) continue;
-            DrawInfoRow(device, x, ref y, $"{entity.Id}|", $"{entity.CurrentHp}/{entity.MaxHp}-{entity.Position.X}:{entity.Position.Y}:{entity.Position.Z}");
+            _textSprite.End();
         }
     }
 
-    private void DrawInfoRow(Device device, int x, ref int y, string label, string value)
+    private void DrawInfoRow(Sprite sprite, int x, ref int y, string label, string value)
     {
         string line  = $"{label,-10}: {value}";
         var    color = new ColorBGRA(173, 216, 230, 140);
-        _font.DrawText(null, line, new Rectangle(x, y, 200, LineHeight), FontDrawFlags.NoClip, color);
+        _font.DrawText(sprite, line, new Rectangle(x, y, 200, LineHeight), FontDrawFlags.NoClip, color);
         y += LineHeight;
     }
 
@@ -561,7 +618,7 @@ public class OverlayManager(SelfInformation self)
     /// <summary>
     /// Draw distance indicator below entity screen position
     /// </summary>
-    private void DrawDistanceIndicator(Vector2 screenPos, float distance, Viewport viewport)
+    private void DrawDistanceIndicator(Sprite sprite, Vector2 screenPos, float distance, Viewport viewport)
     {
         if (_font == null || screenPos == Vector2.Zero) return;
         if (screenPos.X < 0 || screenPos.X > viewport.Width || screenPos.Y < 0 || screenPos.Y > viewport.Height) return;
@@ -569,7 +626,7 @@ public class OverlayManager(SelfInformation self)
         string distText = $"{distance:F0}m";
         int textX = (int)screenPos.X - 15;
         int textY = (int)screenPos.Y + 20;
-        _font.DrawText(null, distText, new Rectangle(textX, textY, 60, 14), FontDrawFlags.NoClip, new ColorBGRA(255, 255, 255, 180));
+        _font.DrawText(sprite, distText, new Rectangle(textX, textY, 60, 14), FontDrawFlags.NoClip, new ColorBGRA(255, 255, 255, 180));
     }
 
     /// <summary>
@@ -577,38 +634,60 @@ public class OverlayManager(SelfInformation self)
     /// </summary>
     private void DrawRadar(Device device, Vector3 playerPos, Viewport viewport, Matrix viewMatrix)
     {
-        // Radar center position (top-left corner with padding)
+        // Radar center position
         float radarX = 20 + RadarSize / 2;
         float radarY = 60 + RadarSize / 2;
 
-        // Extract camera yaw from view matrix (looking at M31, M33 for forward direction in XZ plane)
-        // The view matrix's inverse gives us camera orientation
-        // Forward direction in world space: (-M13, -M23, -M33) after considering row-major
-        // For D3D row-major: forward is (M31, M32, M33) inversed, but we can use M31/M33 for yaw
-        float camForwardX = -viewMatrix.M31;
-        float camForwardZ = -viewMatrix.M33;
-        float cameraYaw = (float)Math.Atan2(camForwardX, camForwardZ) + (float)Math.PI; // +180° to fix inversion
-
-        // Draw radar background circle
-        // Reuse DrawEllipse
+        // 1. Draw Background (Keep as LineStrip Circle - 1 Draw Call)
         DrawEllipse(device, radarX, radarY, RadarSize / 2, RadarSize / 2, ColorRadarBg);
 
-        // Draw cross lines on radar (vertical line = forward direction)
-        DrawLine(device, new Vector2(radarX - RadarSize / 2, radarY), new Vector2(radarX + RadarSize / 2, radarY), ColorRadarLines);
-        DrawLine(device, new Vector2(radarX, radarY - RadarSize / 2), new Vector2(radarX, radarY + RadarSize / 2), ColorRadarLines);
+        // 2. Prepare Batches
+        _radarLineBuffer.Clear();
+        _radarDotBuffer.Clear();
 
-        // Draw forward indicator (small triangle at top of radar)
-        DrawLine(device, new Vector2(radarX - 5, radarY - RadarSize / 2 + 5), new Vector2(radarX, radarY - RadarSize / 2 - 2), ColorRadarIndicator);
-        DrawLine(device, new Vector2(radarX + 5, radarY - RadarSize / 2 + 5), new Vector2(radarX, radarY - RadarSize / 2 - 2), ColorRadarIndicator);
+        // --- Lines (Crosshair & Indicator) ---
+        int colorLines = ((ColorRadarLines.A & 0xFF) << 24) | ((ColorRadarLines.R & 0xFF) << 16) | ((ColorRadarLines.G & 0xFF) << 8) | (ColorRadarLines.B & 0xFF);
+        int colorInd   = ((ColorRadarIndicator.A & 0xFF) << 24) | ((ColorRadarIndicator.R & 0xFF) << 16) | ((ColorRadarIndicator.G & 0xFF) << 8) | (ColorRadarIndicator.B & 0xFF);
+        float z = 0f, rhw = 1f;
 
-        // Draw player at center (white dot)
-        DrawEllipse(device, radarX, radarY, 3, 3, ColorRadarPlayer);
+        void AddLine(float x1, float y1, float x2, float y2, int c)
+        {
+            _radarLineBuffer.Add(new D3DVertex(x1, y1, z, rhw, c));
+            _radarLineBuffer.Add(new D3DVertex(x2, y2, z, rhw, c));
+        }
 
-        // Precompute rotation values
+        // Crosshairs
+        AddLine(radarX - RadarSize / 2, radarY, radarX + RadarSize / 2, radarY, colorLines);
+        AddLine(radarX, radarY - RadarSize / 2, radarX, radarY + RadarSize / 2, colorLines);
+
+        // Indicator
+        AddLine(radarX - 5, radarY - RadarSize / 2 + 5, radarX, radarY - RadarSize / 2 - 2, colorInd);
+        AddLine(radarX + 5, radarY - RadarSize / 2 + 5, radarX, radarY - RadarSize / 2 - 2, colorInd);
+
+        // --- Dots (Player & Enemies) ---
+        
+        // Helper to add circle to dot buffer (as LineList for disjoint batching)
+        // 40 segments = 40 lines = 80 vertices
+        void AddDot(float cx, float cy, float r, ColorBGRA color)
+        {
+            int c = ((color.A & 0xFF) << 24) | ((color.R & 0xFF) << 16) | ((color.G & 0xFF) << 8) | (color.B & 0xFF);
+            for (int i = 0; i < CircleSegments; i++)
+            {
+                _radarDotBuffer.Add(new D3DVertex(cx + r * _unitCircle[i].X,     cy + r * _unitCircle[i].Y,     z, rhw, c));
+                _radarDotBuffer.Add(new D3DVertex(cx + r * _unitCircle[i+1].X, cy + r * _unitCircle[i+1].Y, z, rhw, c));
+            }
+        }
+
+        // Player Dot
+        AddDot(radarX, radarY, 3, ColorRadarPlayer);
+
+        // Enemy Dots
+        float camForwardX = -viewMatrix.M31;
+        float camForwardZ = -viewMatrix.M33;
+        float cameraYaw = (float)Math.Atan2(camForwardX, camForwardZ) + (float)Math.PI;
         float cosYaw = (float)Math.Cos(-cameraYaw);
         float sinYaw = (float)Math.Sin(-cameraYaw);
 
-        // Draw entities as dots relative to player (rotated by camera yaw)
         var targets = self.Targets;
         int count = targets.Count;
         for (int i = 0; i < count; i++)
@@ -616,21 +695,15 @@ public class OverlayManager(SelfInformation self)
             var entity = targets[i];
             if (entity.CurrentHp <= 0 || entity.MaxHp <= 0) continue;
 
-            // Calculate relative position in world space
             float dx = entity.Position.X - playerPos.X;
             float dz = entity.Position.Z - playerPos.Z;
-
-            // Rotate by camera yaw so "up" on radar = camera forward
             float rotatedX = dx * cosYaw - dz * sinYaw;
             float rotatedZ = dx * sinYaw + dz * cosYaw;
-
-            // Scale to radar size
             float scale = (RadarSize / 2) / RadarRange;
             float dotX = radarX + rotatedX * scale;
-            float dotY = radarY - rotatedZ * scale; // Negative because screen Y is inverted
-
-            // Clamp to radar bounds
+            float dotY = radarY - rotatedZ * scale;
             float dist = (float)Math.Sqrt((dotX - radarX) * (dotX - radarX) + (dotY - radarY) * (dotY - radarY));
+            
             if (dist > RadarSize / 2)
             {
                 float angle = (float)Math.Atan2(dotY - radarY, dotX - radarX);
@@ -638,14 +711,29 @@ public class OverlayManager(SelfInformation self)
                 dotY = radarY + (RadarSize / 2 - 3) * (float)Math.Sin(angle);
             }
 
-            // Color based on IsBest
-            var dotColor = entity.IsBest ? ColorRadarBest : ColorRadarEnemy;
-            DrawEllipse(device, dotX, dotY, 4, 4, dotColor);
+            AddDot(dotX, dotY, 4, entity.IsBest ? ColorRadarBest : ColorRadarEnemy);
         }
+
+        // 3. Draw Batches
+        device.SetTexture(0, null);
+        device.VertexFormat = D3DVertex.Format;
+        
+        // Reset just in case
+        device.SetTextureStageState(0, TextureStage.ColorOperation, TextureOperation.SelectArg1);
+        device.SetTextureStageState(0, TextureStage.ColorArg1, TextureArgument.Diffuse);
+
+        if (_radarLineBuffer.Count > 0)
+            device.DrawUserPrimitives(PrimitiveType.LineList, _radarLineBuffer.Count / 2, _radarLineBuffer.ToArray());
+
+        if (_radarDotBuffer.Count > 0)
+            device.DrawUserPrimitives(PrimitiveType.LineList, _radarDotBuffer.Count / 2, _radarDotBuffer.ToArray());
     }
 
     /// <summary>
     /// Draw red border flash when enemy is close
+    /// </summary>
+    /// <summary>
+    /// Draw red border flash when enemy is close (Optimized 1 Draw Call)
     /// </summary>
     private void DrawWarningFlash(Device device, float closestDistance, Viewport viewport)
     {
@@ -656,23 +744,55 @@ public class OverlayManager(SelfInformation self)
         float pulse = (float)(Math.Sin(Environment.TickCount / 100.0) * 0.3 + 0.7);
         byte alpha = (byte)(intensity * pulse * 120);
 
-        var flashColor = new ColorBGRA(255, 0, 0, alpha);
-        int borderWidth = 8;
+        int intColor = (alpha << 24) | (255 << 16); // Red, variable alpha
+        
+        float w = viewport.Width;
+        float h = viewport.Height;
+        float z = 0f;
+        float rhw = 1f;
+        
+        // Use 4 Solid Rects (8 triangles = 24 vertices) for a thick border
+        // This is much better than single-pixel lines or multiple offset loops
+        
+        var vertices = new D3DVertex[24]; 
 
-        // Top border
-        DrawLine(device, new Vector2(0, borderWidth / 2), new Vector2(viewport.Width, borderWidth / 2), flashColor);
-        // Bottom border
-        DrawLine(device, new Vector2(0, viewport.Height - borderWidth / 2), new Vector2(viewport.Width, viewport.Height - borderWidth / 2), flashColor);
-        // Left border
-        DrawLine(device, new Vector2(borderWidth / 2, 0), new Vector2(borderWidth / 2, viewport.Height), flashColor);
-        // Right border
-        DrawLine(device, new Vector2(viewport.Width - borderWidth / 2, 0), new Vector2(viewport.Width - borderWidth / 2, viewport.Height), flashColor);
+        int idx = 0;
+        void AddRect(float x, float y, float bw, float bh)
+        {
+             float right = x + bw;
+             float bottom = y + bh;
+             
+             vertices[idx++] = new D3DVertex(x, y, z, rhw, intColor);
+             vertices[idx++] = new D3DVertex(right, y, z, rhw, intColor);
+             vertices[idx++] = new D3DVertex(x, bottom, z, rhw, intColor);
+             
+             vertices[idx++] = new D3DVertex(x, bottom, z, rhw, intColor);
+             vertices[idx++] = new D3DVertex(right, y, z, rhw, intColor);
+             vertices[idx++] = new D3DVertex(right, bottom, z, rhw, intColor);
+        }
+
+        // Top
+        AddRect(0, 0, w, 8);
+        // Bottom
+        AddRect(0, h - 8, w, 8);
+        // Left
+        AddRect(0, 8, 8, h - 16);
+        // Right
+        AddRect(w - 8, 8, 8, h - 16);
+
+        device.SetTexture(0, null);
+        device.VertexFormat = D3DVertex.Format;
+        // Reset states just in case
+        device.SetTextureStageState(0, TextureStage.ColorOperation, TextureOperation.SelectArg1);
+        device.SetTextureStageState(0, TextureStage.ColorArg1, TextureArgument.Diffuse);
+        
+        device.DrawUserPrimitives(PrimitiveType.TriangleList, 8, vertices);
     }
 
     /// <summary>
     /// Update and draw FPS counter
     /// </summary>
-    private void DrawFpsCounter(Device device)
+    private void DrawFpsCounter(Sprite sprite)
     {
         if (_font == null) return;
 
@@ -690,7 +810,7 @@ public class OverlayManager(SelfInformation self)
         }
 
         string fpsText = $"FPS: {_fps:F0}";
-        _font.DrawText(null, fpsText, new Rectangle(20, 20, 80, 16), FontDrawFlags.NoClip, new ColorBGRA(0, 255, 0, 180));
+        _font.DrawText(sprite, fpsText, new Rectangle(20, 20, 80, 16), FontDrawFlags.NoClip, new ColorBGRA(0, 255, 0, 180));
     }
 
     /// <summary>
@@ -702,7 +822,7 @@ public class OverlayManager(SelfInformation self)
     /// <summary>
     /// Draw damage log panel at bottom-left
     /// </summary>
-    private void DrawDamageLog(Device device, Viewport viewport)
+    private void DrawDamageLog(Device device, Sprite sprite, Viewport viewport)
     {
         if (_font == null) return;
         
@@ -726,11 +846,11 @@ public class OverlayManager(SelfInformation self)
 
         if (removeCount > 0)
             _logRenderCache.RemoveRange(0, removeCount);
-
+        int maxCount = 60;
         // Limit to 48 recent items
-        if (_logRenderCache.Count > 10)
+        if (_logRenderCache.Count > maxCount)
         {
-            int excessive = _logRenderCache.Count - 10;
+            int excessive = _logRenderCache.Count - maxCount;
             _logRenderCache.RemoveRange(0, excessive);
         }
 
@@ -744,19 +864,13 @@ public class OverlayManager(SelfInformation self)
         int totalHeight = count * 18;
         int startY      = bottomY - totalHeight;
 
-        // CRITICAL FIX: End the Line Batch BEFORE drawing User Primitives or Font
-        // 3. END GEOMETRY BATCH
-        // We removed _line so no need to End() anything here.
-        // if (_isDrawing)
-        // {
-        //     _line.End();
-        //     _isDrawing = false;
-        // }
-
         // PASS 1: Draw All Backgrounds (Geometry Batch via DrawUserPrimitives)
-        // This is much faster and safer than ID3DXLine for filled rects
+        // Reverted to DrawSolidRect loop for stability (Game Crash fix)
+        // DrawSolidRect uses DrawUserPrimitives internally, so it's still efficient
         try 
         {
+            float z = 0f, rhw = 1f; // Not used here directly but context variables
+            
             for (int i = count - 1; i >= 0; i--)
             {
                 int currentY = startY + (drawn * 20);
@@ -770,38 +884,50 @@ public class OverlayManager(SelfInformation self)
         }
         catch (Exception) { /* If Primitive drawing fails, ignore to prevent crash */ }
 
-        // PASS 2: Draw All Text (Font Batch)
-        // Font handles its own Begin/End internally
-        drawn = 0;
-        for (int i = count - 1; i >= 0; i--)
+        // PASS 2: Draw All Text (Batched via Sprite)
+        sprite.Begin(SpriteFlags.AlphaBlend);
+        try
         {
-            var log      = _logRenderCache[i];
-            int currentY = startY + (drawn * 20);
-            int textX    = startX + 10;
+            drawn = 0;
+            for (int i = count - 1; i >= 0; i--)
+            {
+                var log      = _logRenderCache[i];
+                int currentY = startY + (drawn * 20);
+                int textX    = startX + 10;
 
-            //Draw Shadow
-            Rectangle shadowRect = new Rectangle(textX + 1, currentY + 1, 400, 18);
-            _font.DrawText(null, log.Message, shadowRect,
-                           FontDrawFlags.Left | FontDrawFlags.VerticalCenter | FontDrawFlags.NoClip, ColorShadow);
+                //Draw Shadow
+                Rectangle shadowRect = new Rectangle(textX + 1, currentY + 1, 400, 18);
+                _font.DrawText(sprite, log.Message, shadowRect,
+                               FontDrawFlags.Left | FontDrawFlags.VerticalCenter | FontDrawFlags.NoClip, ColorShadow);
 
-            // Draw Main Text
-            Rectangle textRect = new Rectangle(textX, currentY, 400, 18);
-            _font.DrawText(null, log.Message, textRect,
-                           FontDrawFlags.Left | FontDrawFlags.VerticalCenter | FontDrawFlags.NoClip,
-                           ColorTextWhite);
-            
-            drawn++;
+                // Draw Main Text
+                Rectangle textRect = new Rectangle(textX, currentY, 400, 18);
+                _font.DrawText(sprite, log.Message, textRect,
+                               FontDrawFlags.Left | FontDrawFlags.VerticalCenter | FontDrawFlags.NoClip,
+                               ColorTextWhite);
+                
+                drawn++;
+            }
+        }
+        finally
+        {
+            sprite.End();
         }
     }
 
     // Vertex Structure for DrawUserPrimitives
-    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, Pack = 1)]
     private struct D3DVertex
     {
         public float X, Y, Z, RHW;
         public int Color;
 
         public static readonly VertexFormat Format = VertexFormat.PositionRhw | VertexFormat.Diffuse;
+
+        public D3DVertex(float x, float y, float z, float rhw, int color)
+        {
+            X = x; Y = y; Z = z; RHW = rhw; Color = color;
+        }
     }
 
     private void DrawSolidRect(Device device, float x, float y, float w, float h, ColorBGRA color)
@@ -844,7 +970,7 @@ public class OverlayManager(SelfInformation self)
     /// <summary>
     /// Draw floating damage numbers that animate upward and fade out
     /// </summary>
-    private void DrawFloatingDamage(Viewport viewport)
+    private void DrawFloatingDamage(Sprite sprite, Viewport viewport)
     {
         if (_damageFont == null) return;
         
@@ -918,12 +1044,12 @@ public class OverlayManager(SelfInformation self)
             //if (dmg.IsReceivedDamage) text = $"Hit {text}"; // Optional prefix for clarity
             
             // Use larger damage font
-            _damageFont.DrawText(null, text, new Rectangle((int)dmg.X - 50, (int)drawY, 200, 30), 
+            _damageFont.DrawText(sprite, text, new Rectangle((int)dmg.X - 50, (int)drawY, 200, 30), 
                 FontDrawFlags.Left | FontDrawFlags.NoClip, color);
         }
     }
 
-    private void DrawDangerIndicator(Vector2 screenPos, uint entityId)
+    private void DrawDangerIndicator(Sprite sprite, Vector2 screenPos, uint entityId)
     {
         // Lookup by EntityId (which maps to RoomSlot + 1)
         var state = self.BattleState.GetPlayerByEntityId(entityId);
@@ -934,13 +1060,13 @@ public class OverlayManager(SelfInformation self)
                 // Super Danger
                 // Draw slightly above entity
                 Rectangle rect = new Rectangle((int)screenPos.X - 60, (int)screenPos.Y - 80, 120, 20);
-                _damageFont.DrawText(null, StrSuperDanger, rect, FontDrawFlags.Center | FontDrawFlags.NoClip, ColorRed);
+                _damageFont.DrawText(sprite, StrSuperDanger, rect, FontDrawFlags.Center | FontDrawFlags.NoClip, ColorRed);
             }
             else if (state.SP > 20000)
             {
                 // Danger
                 Rectangle rect = new Rectangle((int)screenPos.X - 40, (int)screenPos.Y - 60, 80, 20);
-                _damageFont.DrawText(null, StrDanger, rect, FontDrawFlags.Center | FontDrawFlags.NoClip, ColorOrange);
+                _damageFont.DrawText(sprite, StrDanger, rect, FontDrawFlags.Center | FontDrawFlags.NoClip, ColorOrange);
             }
         }
     }
@@ -952,11 +1078,13 @@ public class OverlayManager(SelfInformation self)
 
         _font?.Dispose();
         _damageFont?.Dispose();
+        _textSprite?.Dispose();
         //_line?.Dispose();
         //_backgroundTexture?.Dispose();
 
         _font              = null;
         _damageFont        = null;
+        _textSprite        = null;
         //_line              = null;
         //_backgroundTexture = null;
         _initialized       = false;
@@ -971,12 +1099,14 @@ public class OverlayManager(SelfInformation self)
     public void OnLostDevice()
     {
             _font?.OnLostDevice();
+            _textSprite?.OnLostDevice();
             //_line?.OnLostDevice(); // Removed
     }
 
     public void OnResetDevice()
     {
             _font?.OnResetDevice();
+            _textSprite?.OnResetDevice();
             //_line?.OnResetDevice(); // Removed
     }
 }
