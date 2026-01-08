@@ -10,6 +10,7 @@ namespace NewGMHack.Stub.Hooks;
 public class OverlayManager(SelfInformation self)
 {
     private SharpDX.Direct3D9.Font _font;
+    private SharpDX.Direct3D9.Font _fontTitle; // Bigger title font
     private Sprite                 _textSprite;
     private bool                   _initialized;
 
@@ -61,9 +62,19 @@ public class OverlayManager(SelfInformation self)
     private static readonly ColorBGRA ColorOrange = new(255, 128, 0, 255);
     private static readonly ColorBGRA ColorGreen = new(0, 255, 0, 255);
     private static readonly ColorBGRA ColorBlack = new(0, 0, 0, 255);
-    private static readonly ColorBGRA ColorGlassBg = new(0, 0, 0, 100);
+    private static readonly ColorBGRA ColorGlassBg = new(0, 0, 0, 80);
     private static readonly ColorBGRA ColorAccentRed = new(255, 60, 60, 200);
     private static readonly ColorBGRA ColorTextWhite = new(230, 230, 230, 255);
+    private static readonly ColorBGRA ColorTextYellow = new(255, 215, 0, 255);
+    private static readonly ColorBGRA ColorTextGray = new(160, 160, 160, 255);
+    
+    // Cyberpunk Theme
+    private static readonly ColorBGRA ColorCyberCyan = new(0, 255, 255, 255); // Neon Cyan
+    private static readonly ColorBGRA ColorCyberPink = new(255, 0, 255, 255); // Neon Pink
+    private static readonly ColorBGRA ColorCyberDim = new(80, 80, 100, 200); // Dim Blue-Grey
+    private static readonly ColorBGRA ColorCyberBg = new(0, 0, 0, 50); // Very transparent Watermark style
+    private static readonly ColorBGRA ColorCyberYellow = new(255, 225, 0, 255); // Cyberpunk Acid Yellow
+    
     private static readonly ColorBGRA ColorShadow = new(0, 0, 0, 255);
     private static readonly ColorBGRA ColorCrosshair = new(255, 255, 255, 200);
     private static readonly ColorBGRA ColorAimCircle = new(0, 255, 255, 100);
@@ -103,6 +114,17 @@ public class OverlayManager(SelfInformation self)
         };
 
         _font = new SharpDX.Direct3D9.Font(device, fontDesc);
+        
+        // Create bigger font for Title
+        var titleFontDesc = new FontDescription
+        {
+            Height         = 15, 
+            FaceName       = "Consolas",
+            Weight         = FontWeight.Bold,
+            Quality        = FontQuality.ClearType,
+            PitchAndFamily = FontPitchAndFamily.Default | FontPitchAndFamily.Mono
+        };
+        _fontTitle = new SharpDX.Direct3D9.Font(device, titleFontDesc);
         
         // Create larger font for damage numbers
         var damageFontDesc = new FontDescription
@@ -357,6 +379,10 @@ public class OverlayManager(SelfInformation self)
         // This ensures whatever we change (Textures, RenderStates, VertexDecls) is restored exactly.
         using var stateBlock = new StateBlock(device, StateBlockType.All);
         
+        // FORCE FIXED FUNCTION PIPELINE (Fixes Blocky Text if Game uses Shaders)
+        device.PixelShader = null;
+        device.VertexShader = null;
+        
         try
         {
             var viewMatrix = device.GetTransform(TransformState.View);
@@ -546,62 +572,123 @@ public class OverlayManager(SelfInformation self)
         );
     }
 
-    public void DrawUI(Device device)
+    public void DrawMenu(Device device)
     {
+        if (!self.ClientConfig.Features.GetFeature(FeatureName.EnableOverlay).IsEnabled) return;
+        if (device == null || !_initialized) { Initialize(device); return; }
 
-        if (!self.ClientConfig.Features.GetFeature(FeatureName.EnableOverlay).IsEnabled)
-            return;
-        if (device == null || !_initialized)
-        {
-            Initialize(device);
-            return;
-        }
-
-        int screenWidth = device.Viewport.Width;
-        int x           = screenWidth - 300;
-        int y           = 40;
-        int uiWidth     = 200;
+        // CAPTURE GAME STATE
+        using var stateBlock = new StateBlock(device, StateBlockType.All);
         
-        _textSprite.Begin(SpriteFlags.AlphaBlend);
+        // FORCE FIXED FUNCTION PIPELINE
+        device.PixelShader = null;
+        device.VertexShader = null;
+
         try
         {
-            _font.DrawText(_textSprite, "== SD Hack By Michael Van ==", new Rectangle(x, y, uiWidth, LineHeight), FontDrawFlags.NoClip, new ColorBGRA(255, 255, 255, 180));
-            y += LineHeight + SectionSpacing;
-
-            foreach (var feature in self.ClientConfig.Features)
-            {
-                string status = feature.IsEnabled ? "Enabled" : "Disabled";
-                string line   = $"{feature.Name,-18} {status}";
-                var    color  = feature.IsEnabled ? new ColorBGRA(0, 255, 0, 140) : new ColorBGRA(255, 0, 0, 140);
-                _font.DrawText(_textSprite, line, new Rectangle(x, y, uiWidth, LineHeight), FontDrawFlags.NoClip, color);
-                y += LineHeight;
-            }
-
-            y += SectionSpacing * 2;
-            _font.DrawText(_textSprite, "== Player Info ==", new Rectangle(x, y, uiWidth, LineHeight), FontDrawFlags.NoClip, new ColorBGRA(255, 255, 255, 180));
-            y += LineHeight + SectionSpacing;
-
-            DrawInfoRow(_textSprite, x, ref y, "PersonId", self.PersonInfo.PersonId.ToString());
-            DrawInfoRow(_textSprite, x, ref y, "PersonName", self.PersonInfo.PlayerName);
-            DrawInfoRow(_textSprite, x, ref y, "LastSocket", self.LastSocket.ToString());
-            DrawInfoRow(_textSprite, x, ref y, "CondomId", self.PersonInfo.CondomId.ToString());
-            DrawInfoRow(_textSprite, x, ref y, "Weapons", $"{self.PersonInfo.Weapon1}, {self.PersonInfo.Weapon2}, {self.PersonInfo.Weapon3}");
-            DrawInfoRow(_textSprite, x, ref y, "Position", $"X:{self.PersonInfo.X:F1} Y:{self.PersonInfo.Y:F1} Z:{self.PersonInfo.Z:F1}");
-            DrawInfoRow(_textSprite, x, ref y, "CondomName", self.PersonInfo.CondomName);
-            DrawInfoRow(_textSprite, x, ref y, "Slot", self.PersonInfo.Slot.ToString());
+            // Layout Calculation
+            int screenWidth = device.Viewport.Width;
+            int width = 250; // Narrower (was 300)
+            int x = screenWidth - width - 20; // Right aligned with margin
+            int y = 200; // Moved down to avoid Game Radar/Time (was 40)
+            int lineHeight = 16; // Slightly more compact (was 18) 
             
+            // Calculate Content Height
+            int featureCount = self.ClientConfig.Features.Count; 
+            int infoCount = 7; 
+            int entityCount = 0;
+            
+            // Limit entity list
             var targets = self.Targets;
-            int count = targets.Count;
-            for (int i = 0; i < count; i++)
+            if (targets != null) entityCount = Math.Min(targets.Count, 5); 
+            
+            // Total Lines
+            int totalLines = 1 + featureCount + 1 + 1 + infoCount + 1 + 1 + entityCount;
+            int totalHeight = totalLines * lineHeight + 20;
+
+            // PASS 1: GEOMETRY (Cyberpunk Watermark Style)
+            
+            // ENABLE ALPHA BLENDING
+            device.SetRenderState(RenderState.AlphaBlendEnable, true);
+            device.SetRenderState(RenderState.SourceBlend, Blend.SourceAlpha);
+            device.SetRenderState(RenderState.DestinationBlend, Blend.InverseSourceAlpha);
+            
+            // Watermark Background (Very transparent)
+            DrawSolidRect(device, x, y, width, totalHeight, ColorCyberBg);
+            
+            // RESET STATES FOR TEXT
+            device.SetTextureStageState(0, TextureStage.ColorOperation, TextureOperation.Modulate);
+            device.SetTextureStageState(0, TextureStage.ColorArg1, TextureArgument.Texture);
+            device.SetTextureStageState(0, TextureStage.ColorArg2, TextureArgument.Diffuse);
+            
+            device.SetTextureStageState(0, TextureStage.AlphaOperation, TextureOperation.Modulate);
+            device.SetTextureStageState(0, TextureStage.AlphaArg1, TextureArgument.Texture);
+            device.SetTextureStageState(0, TextureStage.AlphaArg2, TextureArgument.Diffuse);
+
+            // PASS 2: TEXT (Sprite)
+            _textSprite.Begin(SpriteFlags.AlphaBlend);
+            try
             {
-                var entity = targets[i];
-                if (entity.MaxHp <= 0 ) continue;
-                DrawInfoRow(_textSprite, x, ref y, $"{entity.Id}|", $"{entity.CurrentHp}/{entity.MaxHp}-{entity.Position.X}:{entity.Position.Y}:{entity.Position.Z}");
+                int currentY = y + 10;
+                int textX = x + 10; 
+                
+                // Title (Cyberpunk Pink, Bigger Font)
+                _fontTitle.DrawText(_textSprite, StrTitle, new Rectangle(textX, currentY, width, lineHeight), FontDrawFlags.NoClip, ColorCyberPink);
+                currentY += lineHeight + 2; // Extra spacing for bigger font
+                
+                // Features
+                foreach (var feature in self.ClientConfig.Features)
+                {
+                    string status = feature.IsEnabled ? "[ON]" : "[OFF]";
+                    // Zero Allocation Colors
+                    ColorBGRA color = feature.IsEnabled ? ColorCyberCyan : ColorCyberDim;
+                    _font.DrawText(_textSprite, $"{feature.Name,-20} {status}", new Rectangle(textX, currentY, width, lineHeight), FontDrawFlags.NoClip, color);
+                    currentY += lineHeight;
+                }
+                currentY += lineHeight; // Spacer
+
+                // Player Info Header (Yellow is okay, or maybe Pink again? User said Red/Green ugly. Let's stick to CyberCyan/Pink)
+                // Let's use Cyan for headers
+                _font.DrawText(_textSprite, "PLAYER INFORMATION", new Rectangle(textX, currentY, width, lineHeight), FontDrawFlags.NoClip, ColorCyberYellow);
+                currentY += lineHeight;
+
+                DrawInfoRow(_textSprite, textX, ref currentY, "Name", $"{self.PersonInfo.PlayerName} (ID: {self.PersonInfo.PersonId})");
+                DrawInfoRow(_textSprite, textX, ref currentY, "Socket", self.LastSocket.ToString());
+                DrawInfoRow(_textSprite, textX, ref currentY, "Weapon", $"{self.PersonInfo.Weapon1}/{self.PersonInfo.Weapon2}");
+                DrawInfoRow(_textSprite, textX, ref currentY, "Position", $"{self.PersonInfo.X:F0}, {self.PersonInfo.Y:F0}, {self.PersonInfo.Z:F0}");
+                DrawInfoRow(_textSprite, textX, ref currentY, "Condom", $"{self.PersonInfo.CondomName} ({self.PersonInfo.CondomId})");
+                DrawInfoRow(_textSprite, textX, ref currentY, "Slot", self.PersonInfo.Slot.ToString());
+                currentY += lineHeight; // Spacer
+
+                // Entity List Header
+                 _font.DrawText(_textSprite, $"CHARACTERS ({targets.Count})", new Rectangle(textX, currentY, width, lineHeight), FontDrawFlags.NoClip, ColorCyberYellow);
+                currentY += lineHeight;
+
+                for (int i = 0; i < entityCount; i++)
+                {
+                    var entity = targets[i];
+                    string entInfo = $"ID:{entity.Id} HP:{entity.CurrentHp}/{entity.MaxHp} Dist:{Vector3.Distance(new Vector3(self.PersonInfo.X, self.PersonInfo.Y, self.PersonInfo.Z), entity.Position):F0}";
+                    _font.DrawText(_textSprite, entInfo, new Rectangle(textX, currentY, width, lineHeight), FontDrawFlags.NoClip, ColorTextWhite);
+                    currentY += lineHeight;
+                }
+                
+                if (targets.Count > entityCount)
+                {
+                     _font.DrawText(_textSprite, $"... and {targets.Count - entityCount} more", new Rectangle(textX, currentY, width, lineHeight), FontDrawFlags.NoClip, ColorCyberDim);
+                }
             }
+            finally
+            {
+                _textSprite.End();
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex);
         }
         finally
         {
-            _textSprite.End();
+            stateBlock.Apply();
         }
     }
 
@@ -1077,12 +1164,14 @@ public class OverlayManager(SelfInformation self)
         _isDrawing = false;
 
         _font?.Dispose();
+        _fontTitle?.Dispose();
         _damageFont?.Dispose();
         _textSprite?.Dispose();
         //_line?.Dispose();
         //_backgroundTexture?.Dispose();
 
         _font              = null;
+        _fontTitle         = null;
         _damageFont        = null;
         _textSprite        = null;
         //_line              = null;
@@ -1099,6 +1188,7 @@ public class OverlayManager(SelfInformation self)
     public void OnLostDevice()
     {
             _font?.OnLostDevice();
+            _fontTitle?.OnLostDevice();
             _textSprite?.OnLostDevice();
             //_line?.OnLostDevice(); // Removed
     }
@@ -1106,6 +1196,7 @@ public class OverlayManager(SelfInformation self)
     public void OnResetDevice()
     {
             _font?.OnResetDevice();
+            _fontTitle?.OnResetDevice();
             _textSprite?.OnResetDevice();
             //_line?.OnResetDevice(); // Removed
     }

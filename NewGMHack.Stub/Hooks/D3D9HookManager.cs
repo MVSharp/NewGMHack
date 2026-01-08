@@ -159,7 +159,7 @@ namespace NewGMHack.Stub.Hooks
                     _deviceInitialized = true;
                 }
                 overlayManager.DrawEntities(_device);
-                overlayManager.DrawUI(_device);
+                overlayManager.DrawMenu(_device);
             }
             catch (Exception ex)
             {

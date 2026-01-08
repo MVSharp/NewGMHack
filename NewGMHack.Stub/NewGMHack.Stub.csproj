@@ -67,18 +67,18 @@
 		<ProjectReference Include="..\NewGMHack.CommunicationModel\NewGMHack.CommunicationModel.csproj" />
 	</ItemGroup>
 
-	<ItemGroup>
-		<Reference Include="Memory">
-			<HintPath>..\NewGMHack.Stub\Memory.dll</HintPath>
-		</Reference>
-	</ItemGroup>
+	<!-- <ItemGroup> -->
+	<!-- 	<Reference Include="Memory"> -->
+	<!-- 		<HintPath>..\NewGMHack.Stub\Memory.dll</HintPath> -->
+	<!-- 	</Reference> -->
+	<!-- </ItemGroup> -->
 
 	<ItemGroup>
 		<None Update="d3dx9_43.dll">
 		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
-		<None Update="Memory.dll">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
-		</None>
+		<!-- <None Update="Memory.dll"> -->
+		<!-- 	<CopyToOutputDirectory>Always</CopyToOutputDirectory> -->
+		<!-- </None> -->
 	</ItemGroup>
 </Project>
