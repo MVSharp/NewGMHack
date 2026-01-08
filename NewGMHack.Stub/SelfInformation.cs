@@ -42,7 +42,7 @@ namespace NewGMHack.Stub
         public float X { get; set; }              // Screen X position
         public float Y { get; set; }              // Screen Y position
         public uint VictimId { get; set; }        // For position lookup
-        public bool IsReceivedDamage { get; set; } // Legacy flag (kept for safety, mainly unused now)
+        //public bool IsReceivedDamage { get; set; } // Legacy flag (kept for safety, mainly unused now)
         public const int DurationMs = 2500;       
     }
     
@@ -85,7 +85,7 @@ namespace NewGMHack.Stub
         /// <summary>
         /// Queue of fake recv packets to inject (e.g., damage received messages)
         /// </summary>
-        public ConcurrentQueue<byte[]> PendingRecvMessages { get; } = new();
+        //public ConcurrentQueue<byte[]> PendingRecvMessages { get; } = new();
 
         /// <summary>
         /// Log of received damage messages for bottom-left panel

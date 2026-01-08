@@ -29,7 +29,7 @@ public class Info
     public string CondomName { get; set; } = "";
 
     [Key(9)]
-    public uint Slot { get; set; } = 0;
+    public uint Slot { get; set; } = 0; // this slot is not room slot , it is condom slot
 
     [Key(10)]
     public int CurrentHp { get; set; }

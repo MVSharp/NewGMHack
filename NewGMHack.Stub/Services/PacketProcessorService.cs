@@ -487,7 +487,7 @@ public class PacketProcessorService : BackgroundService
                                 MachineId = p.MachineId,
                                 Slot      = p.RoomSlot
                             };
-                            _selfInformation.PersonInfo.Slot = p.RoomSlot;
+                            //_selfInformation.PersonInfo.Slot = p.RoomSlot;
 
                             _logger.ZLogInformation($"Set current machine from GameReady: MachineId={p.MachineId}");
 
@@ -1217,11 +1217,11 @@ public class PacketProcessorService : BackgroundService
 //ReadOnlySpan<byte>   unknownSkip  = [0x0C, 0x00, 0xF0, 0x03, 0x1E, 0x08, 0x00, 0x00, 0x00, 0x00, 0xFA, 0x52, 0x00, 0x80, 0x00, 0x02
 //];
         _winsockHookManager.SendPacket(socket, escBuffer);
-        if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
-            _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
-        {
-            DestroyAllBuildings();
-        }
+        //if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
+        //    _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+        //{
+        //    DestroyAllBuildings();
+        //}
         //_winsockHookManager.SendPacket(socket, zone1);
 
         //_winsockHookManager.SendPacket(socket, zone2);

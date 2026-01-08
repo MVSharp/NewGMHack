@@ -87,7 +87,7 @@ namespace NewGMHack.Stub
                                        //                                   });
                                        //services.AddSingleton<AsyncIPCLogProcessor>();
                                        services.AddSingleton<SelfInformation>();
-                                       services.AddTransient<Mem>();
+                                       //services.AddTransient<Mem>();
                                        
                                        // SQLite entity caches for GmMemory
                                        services.AddSingleton<IEntityCache<MachineBaseInfo>, SqliteEntityCache<MachineBaseInfo>>();

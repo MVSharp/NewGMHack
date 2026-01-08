@@ -31,30 +31,7 @@ namespace NewGMHack.Stub.MemoryScanner
         /// </summary>
         private static readonly TimeSpan CacheTTL = TimeSpan.FromMinutes(60);
 
-        [StructLayout(LayoutKind.Sequential)]
-        public struct MEMORY_BASIC_INFORMATION
-        {
-            public IntPtr BaseAddress;
-            public IntPtr AllocationBase;
-            public uint AllocationProtect;
-            public IntPtr RegionSize;
-            public uint State;
-            public uint Protect;
-            public uint Type;
-        }
 
-        [DllImport("kernel32.dll")]
-        private static extern int VirtualQuery(IntPtr lpAddress, out MEMORY_BASIC_INFORMATION lpBuffer, uint dwLength);
-
-        private const uint MEM_COMMIT = 0x1000;
-        private const uint PAGE_READONLY = 0x02;
-        private const uint PAGE_READWRITE = 0x04;
-        private const uint PAGE_WRITECOPY = 0x08;
-        private const uint PAGE_EXECUTE_READ = 0x20;
-        private const uint PAGE_EXECUTE_READWRITE = 0x40;
-        private const uint PAGE_EXECUTE_WRITECOPY = 0x80;
-        private const uint PAGE_GUARD = 0x100;
-        private const uint PAGE_NOACCESS = 0x01;
 
         public GmMemory(
             ILogger<GmMemory> logger, 
@@ -855,45 +832,7 @@ namespace NewGMHack.Stub.MemoryScanner
 
         #region Memory Safety Logic
 
-         private static bool IsMemoryRangeReadable(IntPtr address, int size)
-        {
-             // Basic pointer valid checks
-            if (address == IntPtr.Zero || size <= 0) return false;
-            long startAddr = (long)address;
-            long endAddr = startAddr + size;
 
-             // User mode range check
-             if (IntPtr.Size == 4 && (startAddr < 0x10000 || endAddr > 0x80000000)) return false;
-             if (IntPtr.Size == 8 && (startAddr < 0x10000 || endAddr > 0x7FFFFFFFFFF)) return false;
-
-            long currentAddr = startAddr;
-            while (currentAddr < endAddr)
-            {
-                MEMORY_BASIC_INFORMATION mbi;
-                if (VirtualQuery((IntPtr)currentAddr, out mbi, (uint)Marshal.SizeOf(typeof(MEMORY_BASIC_INFORMATION))) == 0)
-                    return false;
-
-                if (mbi.State != MEM_COMMIT) return false;
-                if ((mbi.Protect & PAGE_GUARD) == PAGE_GUARD) return false;
-                if ((mbi.Protect & PAGE_NOACCESS) == PAGE_NOACCESS) return false;
-                
-                // Readable checks
-                bool readable = (mbi.Protect & PAGE_READONLY) != 0 ||
-                                (mbi.Protect & PAGE_READWRITE) != 0 ||
-                                (mbi.Protect & PAGE_WRITECOPY) != 0 ||
-                                (mbi.Protect & PAGE_EXECUTE_READ) != 0 ||
-                                (mbi.Protect & PAGE_EXECUTE_READWRITE) != 0 ||
-                                (mbi.Protect & PAGE_EXECUTE_WRITECOPY) != 0;
-
-                if (!readable) return false;
-
-                // Move to next region
-                long regionEnd = (long)mbi.BaseAddress + (long)mbi.RegionSize;
-                currentAddr = regionEnd;
-            }
-
-            return true;
-        }
 
         [HandleProcessCorruptedStateExceptions]
         [SecurityCritical]
@@ -903,47 +842,30 @@ namespace NewGMHack.Stub.MemoryScanner
             if (address == IntPtr.Zero || size <= 0 || buffer == null || buffer.Length < size)
                 return false;
 
-            // Validate the whole range to prevent page boundary crossing crashes
-            if (!IsMemoryRangeReadable(address, size)) return false;
-
-            try
+            // Use ReadProcessMemory instead of direct copy.
+            // This is safer as the kernel handles page faults and access checks atomically.
+            // Even though we are in-process, this prevents crashes if the page becomes invalid
+            // between a check and a read.
+            
+            try 
             {
-                // Double-check just the start and end pages right before copy
-                // This reduces race condition window
-                MEMORY_BASIC_INFORMATION mbiStart, mbiEnd;
-                if (VirtualQuery(address, out mbiStart, (uint)Marshal.SizeOf(typeof(MEMORY_BASIC_INFORMATION))) == 0)
-                    return false;
-                if (mbiStart.State != MEM_COMMIT || (mbiStart.Protect & PAGE_NOACCESS) != 0 || (mbiStart.Protect & PAGE_GUARD) != 0)
-                    return false;
-
-                IntPtr endAddr = address + size - 1;
-                if (VirtualQuery(endAddr, out mbiEnd, (uint)Marshal.SizeOf(typeof(MEMORY_BASIC_INFORMATION))) == 0)
-                    return false;
-                if (mbiEnd.State != MEM_COMMIT || (mbiEnd.Protect & PAGE_NOACCESS) != 0 || (mbiEnd.Protect & PAGE_GUARD) != 0)
-                    return false;
-
-                unsafe
-                {
-                    fixed (byte* ptr = buffer)
-                    {
-                        // Direct memory copy since we are in same process
-                        Buffer.MemoryCopy((void*)address, ptr, buffer.Length, size);
-                    }
-                }
-                return true;
+                IntPtr hProcess = Process.GetCurrentProcess().Handle;
+                UIntPtr baseAddress = unchecked((UIntPtr)(long)address);
+                UIntPtr nSize = unchecked((UIntPtr)size);
+                
+                // We use the P/Invoke definition from GmHack.Memory.Imps
+                // public static extern bool ReadProcessMemory(IntPtr hProcess, UIntPtr lpBaseAddress, [Out] byte[] lpBuffer, UIntPtr nSize, IntPtr lpNumberOfBytesRead);
+                
+                return GmHack.Memory.Imps.ReadProcessMemory(
+                    hProcess, 
+                    baseAddress, 
+                    buffer, 
+                    nSize, 
+                    IntPtr.Zero);
             }
-            catch (AccessViolationException)
+            catch (Exception ex)
             {
-                // Memory became invalid between check and copy
-                return false;
-            }
-            catch (SEHException)
-            {
-                // Structured exception from memory access
-                return false;
-            }
-            catch
-            {
+                logger.ZLogError($"TryReadMemory Exception: {ex.Message}");
                 return false;
             }
         }

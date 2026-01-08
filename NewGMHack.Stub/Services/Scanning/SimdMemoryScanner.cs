@@ -151,83 +151,81 @@ namespace NewGMHack.Stub.Services.Scanning
         [SecurityCritical]
         private void ScanJobDirect(ScanJob job, int maxPatternLength, List<PatternInfo> patterns, ConcurrentDictionary<int, ConcurrentBag<long>> results)
         {
+            // We need to read 'size + patternLength - 1' to cover all straddling patterns
             int readSize = job.Size + maxPatternLength - 1;
+            
+            // Rent a buffer from the pool to avoid allocations
+            byte[]? buffer = null;
             
             try
             {
-                // Validate memory is still readable before creating span
-                // This prevents AV when regions change between job creation and scan
+                // Verify basic protection state first (optimization)
+                // We use our local definition or the Imps one. Imps is cleaner.
+                // But we have local DllImports here too. Let's use clean P/Invokes.
+                
+                // NOTE: We don't strictly need VirtualQueryEx here because ReadProcessMemory fails gracefully.
+                // However, checking it avoids the overhead of RPM on uncommitted pages.
                 if (!VirtualQueryEx(Process.GetCurrentProcess().Handle, job.BaseAddress, out var mbi, (uint)Marshal.SizeOf<MEMORY_BASIC_INFORMATION>()))
                     return;
-                
-                if (mbi.State != MEM_COMMIT)
+
+                if (mbi.State != MEM_COMMIT || !IsReadable(mbi.Protect))
                     return;
-                
-                if (!IsReadable(mbi.Protect))
-                    return;
-                
-                // Ensure we don't read past the region boundary
+
+                // Clamp to region end
                 long regionEnd = mbi.BaseAddress.ToInt64() + mbi.RegionSize.ToInt64();
                 long requestedEnd = job.BaseAddress.ToInt64() + readSize;
                 if (requestedEnd > regionEnd)
                 {
-                    // Clamp readSize to stay within region
                     readSize = (int)(regionEnd - job.BaseAddress.ToInt64());
-                    if (readSize <= 0) return;
+                    if (readSize < maxPatternLength) return; // Too small for largest pattern
                 }
 
-                ReadOnlySpan<byte> bufferSpan;
-                try
-                {
-                    unsafe
-                    {
-                        // Direct memory access - no syscall!
-                        byte* ptr = (byte*)job.BaseAddress;
-                        bufferSpan = new ReadOnlySpan<byte>(ptr, readSize);
-                    }
-                }
-                catch (AccessViolationException)
-                {
-                    // Memory became invalid between VirtualQuery and span creation
-                    return;
-                }
-                catch
-                {
-                    return;
-                }
+                // Prepare buffer
+                buffer = ArrayPool<byte>.Shared.Rent(readSize);
 
-                // Run ALL patterns against this buffer - with individual try-catch
+                // Read Memory SAFELY
+                IntPtr bytesRead;
+                bool success = ReadProcessMemory(
+                    Process.GetCurrentProcess().Handle,
+                    job.BaseAddress,
+                    buffer,
+                    readSize,
+                    out bytesRead
+                );
+
+                if (!success || (int)bytesRead == 0) return;
+
+                // Adjust readSize to what we actually got
+                int actualSize = (int)bytesRead;
+                ReadOnlySpan<byte> bufferSpan = new ReadOnlySpan<byte>(buffer, 0, actualSize);
+
+                // Scan locally
                 foreach (var pat in patterns)
                 {
                     try
                     {
-                        if (readSize < pat.PatternLength) continue;
+                        if (actualSize < pat.PatternLength) continue;
+                        
+                        // ScanScan searches the span. 
+                        // IMPORTANT: bufferSpan is 0-indexed. job.BaseAddress is the bias.
                         ScanSpan(bufferSpan, pat.Pattern, pat.Mask, pat.AnchorByte, pat.AnchorOffset, job.BaseAddress.ToInt64(), job.Size, results[pat.Id]);
                     }
-                    catch (AccessViolationException)
+                    catch (Exception ex)
                     {
-                        // Memory changed during pattern scan - skip this pattern
-                        continue;
-                    }
-                    catch (IndexOutOfRangeException)
-                    {
-                        // Race condition: buffer size changed
-                        continue;
-                    }
-                    catch
-                    {
-                        // Any other error - skip this pattern
-                        continue;
+                         // Individual pattern failure shouldn't kill the job
+                        _logger?.ZLogWarning($"Pattern {pat.Id} scan error: {ex.Message}");
                     }
                 }
-            }
-            catch (AccessViolationException)
-            {
-                // Protected page - skip silently
+
             }
             catch (Exception ex)
             {
-                _logger?.ZLogError($"Batch Scan Error at 0x{job.BaseAddress:X}: {ex.Message}");
+                _logger?.ZLogError($"Batch Scan Job Error at 0x{job.BaseAddress:X}: {ex.Message}");
+            }
+            finally
+            {
+                if (buffer != null)
+                    ArrayPool<byte>.Shared.Return(buffer);
             }
         }
 
