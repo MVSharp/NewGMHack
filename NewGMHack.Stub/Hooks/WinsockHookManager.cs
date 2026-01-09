@@ -323,7 +323,7 @@ public sealed class WinsockHookManager(
 
             if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.Debug))
             {
-                logger.ZLogInformation($"[RECV raw|length:{receivedLength}]");
+                logger.ZLogInformation($"[RECV raw|length:{receivedLength}]{BitConverter.ToString(data.ToArray())}");
             }
 
             // Use accumulator to handle TCP fragmentation

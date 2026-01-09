@@ -10,6 +10,7 @@ using System.Security;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using ZLogger;
 using NewGMHack.CommunicationModel.Models;
@@ -824,8 +825,8 @@ namespace NewGMHack.Stub.MemoryScanner
                 idBytes[3]   // High byte (usually 0x00 for typical IDs)
             ];
         }
-        
-        
+
+
         #endregion
 
         //#endregion
@@ -833,43 +834,35 @@ namespace NewGMHack.Stub.MemoryScanner
         #region Memory Safety Logic
 
 
-
         [HandleProcessCorruptedStateExceptions]
         [SecurityCritical]
         private bool TryReadMemory(IntPtr address, byte[] buffer, int size)
         {
-            // Quick null/size check first
-            if (address == IntPtr.Zero || size <= 0 || buffer == null || buffer.Length < size)
-                return false;
-
-            // Use ReadProcessMemory instead of direct copy.
-            // This is safer as the kernel handles page faults and access checks atomically.
-            // Even though we are in-process, this prevents crashes if the page becomes invalid
-            // between a check and a read.
-            
-            try 
+            try
             {
-                IntPtr hProcess = Process.GetCurrentProcess().Handle;
-                UIntPtr baseAddress = unchecked((UIntPtr)(long)address);
-                UIntPtr nSize = unchecked((UIntPtr)size);
+                if (address == IntPtr.Zero) return false;
                 
-                // We use the P/Invoke definition from GmHack.Memory.Imps
-                // public static extern bool ReadProcessMemory(IntPtr hProcess, UIntPtr lpBaseAddress, [Out] byte[] lpBuffer, UIntPtr nSize, IntPtr lpNumberOfBytesRead);
-                
-                return GmHack.Memory.Imps.ReadProcessMemory(
-                    hProcess, 
-                    baseAddress, 
-                    buffer, 
-                    nSize, 
-                    IntPtr.Zero);
+                // Use unsafe ReadRaw instead of ReadProcessMemory
+                ReadRaw((nuint)address, buffer.AsSpan(0, size));
+                return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                logger.ZLogError($"TryReadMemory Exception: {ex.Message}");
+                // Access Violation or other memory error
                 return false;
             }
         }
 
-        #endregion
+#endregion
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public unsafe void ReadRef<T>(nuint offset, ref T value) where T : unmanaged
+            => value = Unsafe.ReadUnaligned<T>((void*)offset);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public unsafe void ReadRaw(nuint offset, Span<byte> value)
+        {
+             fixed (byte* result = value)
+                Unsafe.CopyBlockUnaligned(result, (void*)offset, (uint)value.Length);
+        }
     }
 }

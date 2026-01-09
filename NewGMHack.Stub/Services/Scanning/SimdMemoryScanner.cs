@@ -13,6 +13,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using ZLogger;
+using System.Runtime.CompilerServices; // For Unsafe
 
 namespace NewGMHack.Stub.Services.Scanning
 {
@@ -149,7 +150,7 @@ namespace NewGMHack.Stub.Services.Scanning
         /// </summary>
         [HandleProcessCorruptedStateExceptions]
         [SecurityCritical]
-        private void ScanJobDirect(ScanJob job, int maxPatternLength, List<PatternInfo> patterns, ConcurrentDictionary<int, ConcurrentBag<long>> results)
+        private unsafe void ScanJobDirect(ScanJob job, int maxPatternLength, List<PatternInfo> patterns, ConcurrentDictionary<int, ConcurrentBag<long>> results)
         {
             // We need to read 'size + patternLength - 1' to cover all straddling patterns
             int readSize = job.Size + maxPatternLength - 1;
@@ -183,20 +184,21 @@ namespace NewGMHack.Stub.Services.Scanning
                 // Prepare buffer
                 buffer = ArrayPool<byte>.Shared.Rent(readSize);
 
-                // Read Memory SAFELY
-                IntPtr bytesRead;
-                bool success = ReadProcessMemory(
-                    Process.GetCurrentProcess().Handle,
-                    job.BaseAddress,
-                    buffer,
-                    readSize,
-                    out bytesRead
-                );
+                // Read Memory SAFELY using Unsafe (Direct Pointer Copy)
+                // Since this is [HandleProcessCorruptedStateExceptions], we can catch AccessViolation
+                
+                // Get pointer to our buffer
+                fixed (byte* pBuffer = buffer)
+                {
+                    // Directly copy from process memory to our buffer
+                    // Source: job.BaseAddress (IntPtr -> void*)
+                    // Dest: pBuffer
+                    // Size: readSize
+                    Unsafe.CopyBlockUnaligned(pBuffer, (void*)job.BaseAddress, (uint)readSize);
+                }
 
-                if (!success || (int)bytesRead == 0) return;
-
-                // Adjust readSize to what we actually got
-                int actualSize = (int)bytesRead;
+                // Adjust readSize to what we actually got (we assume we got it all if no exception)
+                int actualSize = readSize;
                 ReadOnlySpan<byte> bufferSpan = new ReadOnlySpan<byte>(buffer, 0, actualSize);
 
                 // Scan locally

@@ -13,7 +13,6 @@ namespace NewGMHack.Stub.Services;
 public sealed class PacketAccumulator : IPacketAccumulator
 {
     private const int MinPacketSize = 6;       // Minimum: length(2) + separator(2) + method(2)
-    private const int HeaderSkipBytes = 15;    // Skip first 15 bytes of recv (protocol overhead)
     private const byte SeparatorByte1 = 0xF0;
     private const byte SeparatorByte2 = 0x03;
 
@@ -37,19 +36,14 @@ public sealed class PacketAccumulator : IPacketAccumulator
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public List<byte[]> AppendAndExtract(ReadOnlySpan<byte> rawRecvData)
     {
-        // Skip the 15-byte protocol header if present
-        var data = rawRecvData.Length > HeaderSkipBytes 
-            ? rawRecvData[HeaderSkipBytes..] 
-            : rawRecvData;
-
-        if (data.IsEmpty)
+        if (rawRecvData.IsEmpty)
             return [];
 
         lock (_lock)
         {
-            EnsureCapacity(data.Length);
-            data.CopyTo(_buffer.AsSpan(_position));
-            _position += data.Length;
+            EnsureCapacity(rawRecvData.Length);
+            rawRecvData.CopyTo(_buffer.AsSpan(_position));
+            _position += rawRecvData.Length;
 
             return ExtractCompletePackets();
         }
@@ -63,6 +57,34 @@ public sealed class PacketAccumulator : IPacketAccumulator
     {
         List<byte[]>? results = null;
         var bufferSpan = _buffer.AsSpan(0, _position);
+        
+        // HEURISTIC: per user request, if we have exactly ONE separator, take the whole buffer
+        // This handles cases where Length header is unreliable (e.g. 1093 vs 1097)
+        int firstSep = FindSeparator(bufferSpan);
+        if (firstSep >= 2)
+        {
+             // Check for a second separator
+             int searchNext = firstSep + 2;
+             bool hasSecond = false;
+             if (searchNext < _position)
+             {
+                 if (FindSeparator(bufferSpan[searchNext..]) >= 0) hasSecond = true;
+             }
+             //WARNING this case happen because when header length is in fact incorrect , cuz the server maintainers suck as fuck , forgot update the packet length
+             if (!hasSecond)
+             {
+                 // Single packet case - Consume ALL
+                 int packetStart = firstSep - 2;
+                 int packetLen = _position - packetStart;
+                 
+                 byte[] packet = GC.AllocateUninitializedArray<byte>(packetLen);
+                 bufferSpan.Slice(packetStart, packetLen).CopyTo(packet);
+                 
+                 _position = 0; // Fully consumed
+                 return [packet];
+             }
+        }
+
         int consumed = 0;
 
         while (consumed < _position)
@@ -86,7 +108,7 @@ public sealed class PacketAccumulator : IPacketAccumulator
             ushort packetLength = MemoryMarshal.Read<ushort>(remaining[lengthPrefixOffset..]);
 
             // Validate length
-            if (packetLength < MinPacketSize || packetLength > 32768)
+            if (packetLength < MinPacketSize || packetLength > 65535)
             {
                 consumed += separatorOffset + 2;
                 continue;

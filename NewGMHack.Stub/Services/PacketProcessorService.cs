@@ -152,6 +152,9 @@ public class PacketProcessorService : BackgroundService
         ////_logger.ZLogInformation($"method: {method}");
         switch (method)
         {
+            case 2567: // get page
+                ReadPageCondom(methodPacket.MethodBody);
+                break;
             // case 1992 or 1338 or 2312 or 1525 or 1521 or 2103:
             //1342 player reborn in battle
             case 2245: //after F5
@@ -331,6 +334,21 @@ public class PacketProcessorService : BackgroundService
             default:
                 break;
         }
+    }
+
+    private void ReadPageCondom(ReadOnlySpan<byte> methodPacketMethodBody)
+    {
+        var header =methodPacketMethodBody.ReadStruct<PageCondomRecv>();
+        var count  = (int)header.Size;
+        if (count <= 0) return;
+        _selfInformation.PersonInfo.PersonId = header.MyPlayerId;
+        var condomSpan = methodPacketMethodBody.SliceAfter<PageCondomRecv>().CastTo<Machine>();
+        foreach (var condom in condomSpan)
+        {
+            if(condom.MachineId ==0)continue;
+            _logger.ZLogInformation($"page  count:{header.Size}:  {condom.MachineId}  exp:  {condom.CurrentExp} : battery {condom.Battery} slot:{condom.Slot}"); 
+        } 
+
     }
 
     private unsafe void ReadPlayerBasicInfo(ReadOnlySpan<byte> bytes)
