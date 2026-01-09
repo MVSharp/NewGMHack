@@ -963,7 +963,7 @@ public class OverlayManager(SelfInformation self)
                 int currentY = startY + (drawn * 20);
                 
                 // Draw Backgrounds using Primitives
-                DrawSolidRect(device, startX, currentY, 400, 18, ColorGlassBg);
+                DrawSolidRect(device, startX, currentY, 600, 18, ColorGlassBg);
                 DrawSolidRect(device, startX, currentY, 4, 18, ColorAccentRed);
                 
                 drawn++;
@@ -983,13 +983,13 @@ public class OverlayManager(SelfInformation self)
                 int textX    = startX + 10;
 
                 //Draw Shadow
-                Rectangle shadowRect = new Rectangle(textX + 1, currentY + 1, 400, 18);
-                _font.DrawText(sprite, log.Message, shadowRect,
+                Rectangle shadowRect = new Rectangle(textX + 1, currentY + 1, 600, 18);
+                _fontTitle.DrawText(sprite, log.Message, shadowRect,
                                FontDrawFlags.Left | FontDrawFlags.VerticalCenter | FontDrawFlags.NoClip, ColorShadow);
 
                 // Draw Main Text
-                Rectangle textRect = new Rectangle(textX, currentY, 400, 18);
-                _font.DrawText(sprite, log.Message, textRect,
+                Rectangle textRect = new Rectangle(textX, currentY, 600, 18);
+                _fontTitle.DrawText(sprite, log.Message, textRect,
                                FontDrawFlags.Left | FontDrawFlags.VerticalCenter | FontDrawFlags.NoClip,
                                ColorTextWhite);
                 

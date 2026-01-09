@@ -80,6 +80,7 @@ namespace NewGMHack.Stub.Services.Scanning
             public byte AnchorByte;
             public int AnchorOffset;
             public int PatternLength;
+            public SearchValues<byte> AnchorSearch; // Optimized SearchValues
         }
 
         public async Task<Dictionary<int, List<long>>> ScanBatchAsync(Process process, List<(byte[] pattern, string mask, int id)> searchPatterns, CancellationToken token = default)
@@ -109,7 +110,8 @@ namespace NewGMHack.Stub.Services.Scanning
                     Mask = boolMask,
                     AnchorByte = anchor.Byte,
                     AnchorOffset = anchor.Offset,
-                    PatternLength = p.Length
+                    PatternLength = p.Length,
+                    AnchorSearch = SearchValues.Create([anchor.Byte]) // Pre-calculate SearchValues
                 });
 
                 if (p.Length > maxPatternLength) maxPatternLength = p.Length;
@@ -152,71 +154,41 @@ namespace NewGMHack.Stub.Services.Scanning
         [SecurityCritical]
         private unsafe void ScanJobDirect(ScanJob job, int maxPatternLength, List<PatternInfo> patterns, ConcurrentDictionary<int, ConcurrentBag<long>> results)
         {
-            // We need to read 'size + patternLength - 1' to cover all straddling patterns
-            int readSize = job.Size + maxPatternLength - 1;
-            
-            // Rent a buffer from the pool to avoid allocations
-            byte[]? buffer = null;
-            
+             // DIRECT POINTER SCAN (Internal Optimization)
+             // No Buffer Renting, No CopyBlock. We read live memory.
+             // Protected by [HandleProcessCorruptedStateExceptions] against AVs.
+             
             try
             {
-                // Verify basic protection state first (optimization)
-                // We use our local definition or the Imps one. Imps is cleaner.
-                // But we have local DllImports here too. Let's use clean P/Invokes.
-                
-                // NOTE: We don't strictly need VirtualQueryEx here because ReadProcessMemory fails gracefully.
-                // However, checking it avoids the overhead of RPM on uncommitted pages.
                 if (!VirtualQueryEx(Process.GetCurrentProcess().Handle, job.BaseAddress, out var mbi, (uint)Marshal.SizeOf<MEMORY_BASIC_INFORMATION>()))
                     return;
 
                 if (mbi.State != MEM_COMMIT || !IsReadable(mbi.Protect))
                     return;
 
-                // Clamp to region end
+                // Adjust size if it exceeds region
                 long regionEnd = mbi.BaseAddress.ToInt64() + mbi.RegionSize.ToInt64();
-                long requestedEnd = job.BaseAddress.ToInt64() + readSize;
+                long requestedEnd = job.BaseAddress.ToInt64() + job.Size + maxPatternLength;
+                
+                int actualSize = job.Size + maxPatternLength; 
                 if (requestedEnd > regionEnd)
                 {
-                    readSize = (int)(regionEnd - job.BaseAddress.ToInt64());
-                    if (readSize < maxPatternLength) return; // Too small for largest pattern
+                    actualSize = (int)(regionEnd - job.BaseAddress.ToInt64());
                 }
-
-                // Prepare buffer
-                buffer = ArrayPool<byte>.Shared.Rent(readSize);
-
-                // Read Memory SAFELY using Unsafe (Direct Pointer Copy)
-                // Since this is [HandleProcessCorruptedStateExceptions], we can catch AccessViolation
                 
-                // Get pointer to our buffer
-                fixed (byte* pBuffer = buffer)
-                {
-                    // Directly copy from process memory to our buffer
-                    // Source: job.BaseAddress (IntPtr -> void*)
-                    // Dest: pBuffer
-                    // Size: readSize
-                    Unsafe.CopyBlockUnaligned(pBuffer, (void*)job.BaseAddress, (uint)readSize);
-                }
+                if (actualSize < maxPatternLength) return;
 
-                // Adjust readSize to what we actually got (we assume we got it all if no exception)
-                int actualSize = readSize;
-                ReadOnlySpan<byte> bufferSpan = new ReadOnlySpan<byte>(buffer, 0, actualSize);
+                byte* pMemory = (byte*)job.BaseAddress;
 
-                // Scan locally
                 foreach (var pat in patterns)
                 {
-                    try
-                    {
-                        if (actualSize < pat.PatternLength) continue;
-                        
-                        // ScanScan searches the span. 
-                        // IMPORTANT: bufferSpan is 0-indexed. job.BaseAddress is the bias.
-                        ScanSpan(bufferSpan, pat.Pattern, pat.Mask, pat.AnchorByte, pat.AnchorOffset, job.BaseAddress.ToInt64(), job.Size, results[pat.Id]);
-                    }
-                    catch (Exception ex)
-                    {
-                         // Individual pattern failure shouldn't kill the job
-                        _logger?.ZLogWarning($"Pattern {pat.Id} scan error: {ex.Message}");
-                    }
+                     try
+                     {
+                         if (actualSize < pat.PatternLength) continue;
+                         ScanRegionInternal(pMemory, actualSize, pat, job.BaseAddress.ToInt64(), results[pat.Id]);
+                     }
+                     catch (AccessViolationException) { /* Skip page if it unloads */ }
+                     catch (Exception ex) { _logger?.ZLogWarning($"ScanJob Pattern {pat.Id} error: {ex.Message}"); }
                 }
 
             }
@@ -224,38 +196,66 @@ namespace NewGMHack.Stub.Services.Scanning
             {
                 _logger?.ZLogError($"Batch Scan Job Error at 0x{job.BaseAddress:X}: {ex.Message}");
             }
-            finally
-            {
-                if (buffer != null)
-                    ArrayPool<byte>.Shared.Return(buffer);
-            }
         }
 
-        private void ScanSpan(ReadOnlySpan<byte> data, byte[] pattern, bool[] mask, byte anchorByte, int anchorOffset, long baseAddress, int scanLimit, ConcurrentBag<long> results)
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private unsafe void ScanRegionInternal(byte* regionStart, int regionSize, PatternInfo pat, long baseAddress, ConcurrentBag<long> results)
         {
-            try
+            // Direct Memory Access (Internal) - Zero Copy
+            // We search for the Anchor Byte using hardware acceleration
+            
+            // Limit: Ensure we don't read past the region
+            // effectiveEnd depends on where the pattern would end relative to the anchor
+            // If Anchor is at index 'A' in pattern (Len 'L'), and we find Anchor at 'P' in memory:
+            // Pattern starts at 'P - A'. Pattern ends at 'P - A + L'.
+            // We need 'P - A + L <= regionSize'.
+            // So P <= regionSize - L + A.
+            
+            int searchLimit = regionSize - pat.PatternLength + pat.AnchorOffset;
+            int offset = pat.AnchorOffset;
+            
+            // Create a span over the search area
+            // We only search for the ANCHOR byte within the valid range
+            int len = searchLimit - offset + 1;
+            if (len <= 0) return;
+            
+            ReadOnlySpan<byte> searchSpace = new ReadOnlySpan<byte>(regionStart + offset, len);
+            
+            int currentPos = 0;
+            while (true)
             {
-                var matches = FindPatternSIMD(data, pattern, mask, anchorByte, anchorOffset);
-                foreach (var offset in matches)
+                // .NET 10 / 8+ Optimization: Uses AVX-512 / AVX2 automatically
+                int idx = searchSpace.Slice(currentPos).IndexOfAny(pat.AnchorSearch);
+                
+                if (idx < 0) break;
+                
+                currentPos += idx;
+                
+                // Found Anchor at (regionStart + offset + currentPos)
+                // Pattern starts at (offset + currentPos) - pat.AnchorOffset
+                // relative to regionStart.
+                // Since start of searchSpace is 'regionStart + pat.AnchorOffset', 
+                // The actual memory address of anchor is: regionStart + pat.AnchorOffset + currentPos
+                // Pattern start address: (regionStart + pat.AnchorOffset + currentPos) - pat.AnchorOffset
+                // = regionStart + currentPos
+                
+                // Wait, let's re-verify math.
+                // SearchSpace starts at `regionStart + AnchorOffset`.
+                // Found index `idx` is relative to `currentPos` (which is relative to SearchSpace start).
+                // So Anchor is at: `regionStart + AnchorOffset + currentPos`
+                // Pattern Start is: `AnchorAddress - AnchorOffset` = `regionStart + currentPos`
+                
+                // Check the full pattern
+                // We use ReadOnlySpan to compare memory
+                ReadOnlySpan<byte> memorySpan = new ReadOnlySpan<byte>(regionStart + currentPos, pat.PatternLength);
+                
+                if (MatchPattern(memorySpan, pat.Pattern, pat.Mask))
                 {
-                    // Filter overlap
-                    if (offset < scanLimit)
-                    {
-                        results.Add(baseAddress + offset);
-                    }
+                    results.Add(baseAddress + currentPos);
                 }
-            }
-            catch (IndexOutOfRangeException)
-            {
-                // Race condition: data changed during scan
-            }
-            catch (ArgumentOutOfRangeException)
-            {
-                // Span slice went out of bounds
-            }
-            catch
-            {
-                // Silently ignore any other errors
+                
+                currentPos++; // Advance past this match
+                if (currentPos >= len) break;
             }
         }
 

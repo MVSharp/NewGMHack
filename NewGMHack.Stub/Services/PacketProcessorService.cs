@@ -457,7 +457,12 @@ public class PacketProcessorService : BackgroundService
                 if (allWeaponIds.Count > 0)
                 {
                     _logger.ZLogInformation($"Batch scanning {allWeaponIds.Count} weapons");
-                    await gm.ScanWeapons(allWeaponIds, token);
+
+                    var weapons = await gm.ScanWeapons(allWeaponIds, token);
+                    foreach (var w in weapons)
+                    {
+                        _selfInformation.WeaponNameCache.TryAdd(w.WeaponId, w.WeaponName);
+                    }
                 }
             }
             catch (Exception ex)
