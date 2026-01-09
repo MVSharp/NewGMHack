@@ -488,9 +488,10 @@ namespace NewGMHack.Stub.Services.Scanning
 
         private static bool IsReadable(uint protect)
         {
-            return protect == PAGE_READONLY ||
-                   protect == PAGE_READWRITE ||
-                   protect == PAGE_EXECUTE_READ ||
+            // Restrict to WRITABLE memory only to match Cheat Engine's default behavior.
+            // Scanning ReadOnly (0x02) or ExecuteRead (0x20) often yields static/garbage pointers
+            // that cause crashes when we try to write to them or treat them as valid objects.
+            return protect == PAGE_READWRITE ||
                    protect == PAGE_EXECUTE_READWRITE;
         }
 
