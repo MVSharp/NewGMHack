@@ -933,7 +933,7 @@ public class OverlayManager(SelfInformation self)
 
         if (removeCount > 0)
             _logRenderCache.RemoveRange(0, removeCount);
-        int maxCount = 60;
+        int maxCount = 30;
         // Limit to 48 recent items
         if (_logRenderCache.Count > maxCount)
         {

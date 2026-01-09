@@ -453,7 +453,6 @@ public class PacketProcessorService : BackgroundService
                     if (m.SpecialAttackCode != 0) allWeaponIds.Add(m.SpecialAttackCode);
                 }
 
-                // 4. Batch Scan Weapons
                 if (allWeaponIds.Count > 0)
                 {
                     _logger.ZLogInformation($"Batch scanning {allWeaponIds.Count} weapons");
