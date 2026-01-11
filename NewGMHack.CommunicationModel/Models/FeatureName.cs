@@ -74,4 +74,7 @@ public enum FeatureName
 
     [FeatureMetadata("Wide Vision", "大機視角", "大機視角", "wider vision")]
     WideVision,
+
+    [FeatureMetadata("Auto Five Hits", "自動5下", "自動5下", "自動5下")]
+    AutoFive,
 }

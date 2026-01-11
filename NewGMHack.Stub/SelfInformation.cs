@@ -96,7 +96,7 @@ namespace NewGMHack.Stub
         /// Cache of weapon names by ID (cleared on session end)
         /// </summary>
         public ConcurrentDictionary<uint, string> WeaponNameCache { get; } = new();
-        
+        public ConcurrentBag<UInt32> Enmery =new ConcurrentBag<UInt32>();
         public SelfInformation()
         {
         }

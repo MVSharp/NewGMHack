@@ -39,6 +39,8 @@ public class ClientConfig
         new HackFeatures() { Name = FeatureName.Debug, IsEnabled     = false },
         new HackFeatures() { Name = FeatureName.FreeMove, IsEnabled     = false },
         new HackFeatures() { Name = FeatureName.BackGroundMode, IsEnabled     = false },
+
+        new HackFeatures() { Name = FeatureName.AutoFive, IsEnabled     = false },
     };
     public bool IsInGame { get; set; } = false;
 }

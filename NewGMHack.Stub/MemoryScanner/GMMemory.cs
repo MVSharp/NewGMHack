@@ -26,12 +26,11 @@ namespace NewGMHack.Stub.MemoryScanner
         private readonly IEntityCache<MachineBaseInfo> _machineCache;
         private readonly IEntityCache<SkillBaseInfo> _skillCache;
         private readonly IEntityCache<WeaponBaseInfo> _weaponCache;
-        
+
         /// <summary>
         /// Cache TTL - entries older than this will trigger a rescan
         /// </summary>
-        private static readonly TimeSpan CacheTTL = TimeSpan.FromMinutes(60);
-
+        private static readonly TimeSpan CacheTTL = TimeSpan.FromDays(3);
 
 
         public GmMemory(

@@ -17,6 +17,7 @@ using SharpDX.Direct3D9;
 using ZLinq;
 using ZLogger;
 using NewGMHack.Stub.Models;
+using NewGMHack.Stub.PacketStructs.Send;
 
 namespace NewGMHack.Stub.Services;
 
@@ -152,6 +153,8 @@ public class PacketProcessorService : BackgroundService
         ////_logger.ZLogInformation($"method: {method}");
         switch (method)
         {
+            case 1473 or 1663://battle begin time start , 1443 follow to 1557
+                break;
             case 2567: // get page
                 await ReadPageCondom(methodPacket.MethodBody,token);
                 break;
@@ -178,6 +181,19 @@ public class PacketProcessorService : BackgroundService
                 }
 
                 // _logger.ZLogInformation($"found reborn  : {reborn.TargetId}");
+                break;
+            case 1557:
+                _selfInformation.ClientConfig.IsInGame = true;
+                if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.AutoFive))
+                {
+                     var born = reader.ReadReborn(false);
+                    SendFiveHits([born.TargetId]); 
+                }
+                if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
+                    _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+                {
+                    ReadReborns(reader, reborns);
+                }
                 break;
             case 2722 or 2670 or 2361:
                 ChargeCondom(socket, _selfInformation.PersonInfo.Slot);
@@ -336,6 +352,50 @@ public class PacketProcessorService : BackgroundService
         }
     }
 
+    private void SendFiveHits(List<UInt32> ids)
+    {
+        var idChunks = ids.Where(x => x != _selfInformation.PersonInfo.PersonId).Chunk(12);
+        foreach (var idChunk in idChunks)
+        {
+            var targets = ValueEnumerable.Repeat(1, 12)
+                                         .Select(_ => new TargetData() { Damage = 1 })
+                                         .ToArray(); // new TargetData1335[12>
+            // var targets = _selfInformation.Enmery.Select(c=> new TargetData
+            // {
+            //     TargetId = c,
+            //     Damage   = 1,
+            //     Unknown1 = 0,
+            //     Unknown2 = 0,
+            //     Unknown3 = 0
+            // }).ToArray();
+            var attack = new Attack1335
+            {
+                Length = 167,
+                Split  = 1008,
+                Method = 1868,
+                //     TargetCount = 12,
+                PlayerId = _selfInformation.PersonInfo.PersonId,
+                //PlayerId2 = _selfInformation.MyPlayerId,
+                WeaponId   = _selfInformation.PersonInfo.Weapon2,
+                WeaponSlot = 65281,
+            };
+            attack.TargetCount = BitConverter.GetBytes(targets.Length)[0];
+
+            var i = 0;
+            foreach (var reborn in idChunk)
+            {
+                //  targets[i]          = new TargetData1335();
+                targets[i].TargetId = reborn;
+                targets[i].Damage   = 1;
+                i++;
+            }
+
+            var attackBytes  = attack.ToByteArray().AsSpan();
+            var targetBytes  = targets.AsSpan().AsByteSpan();
+            var attackPacket = attackBytes.CombineWith(targetBytes).CombineWith((ReadOnlySpan<byte>)[0x00]).ToArray();
+            _winsockHookManager.SendPacket(_selfInformation.LastSocket, attackPacket);
+        }
+    }
     private async Task ReadPageCondom(ReadOnlyMemory<byte> methodPacketMethodBody,CancellationToken token = default)
     {
         var header =methodPacketMethodBody.Span.ReadStruct<PageCondomRecv>();
@@ -421,6 +481,7 @@ public class PacketProcessorService : BackgroundService
         }
 
         _selfInformation.WeaponNameCache.Clear();
+        _selfInformation.Enmery.Clear();
     }
 
     private async Task ReadGameReady(ReadOnlyMemory<byte> bytes, CancellationToken token)
@@ -558,6 +619,15 @@ public class PacketProcessorService : BackgroundService
                 }
             }
 
+            var myself = players.AsValueEnumerable()
+                                .FirstOrDefault(x => x.Player == _selfInformation.PersonInfo.PersonId);
+            var myTeam = myself.TeamId1;
+            _selfInformation.Enmery.Clear();
+            var en= players.Where(p => p.TeamId1 != myTeam).ToList();
+            foreach (var VARIABLE in en)
+            {
+                _selfInformation.Enmery.Add(VARIABLE.Player); 
+            }
             // Send to battle logger for persistence
             _battleLogChannel.Writer.TryWrite(new BattleLogEvent
             {
