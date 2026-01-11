@@ -140,7 +140,7 @@ namespace NewGMHack.Stub.Services.Scanning
             // This eliminates syscall overhead entirely.
             
             Parallel.ForEach(jobs, 
-                new ParallelOptions { CancellationToken = token, MaxDegreeOfParallelism = Environment.ProcessorCount },
+                new ParallelOptions { CancellationToken = token, MaxDegreeOfParallelism = Math.Max(1, 3) },
                 job => ScanJobDirect(job, maxPatternLength, patterns, results));
             
             return results.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToList());
@@ -153,11 +153,7 @@ namespace NewGMHack.Stub.Services.Scanning
         [HandleProcessCorruptedStateExceptions]
         [SecurityCritical]
         private unsafe void ScanJobDirect(ScanJob job, int maxPatternLength, List<PatternInfo> patterns, ConcurrentDictionary<int, ConcurrentBag<long>> results)
-        {
-             // DIRECT POINTER SCAN (Internal Optimization)
-             // No Buffer Renting, No CopyBlock. We read live memory.
-             // Protected by [HandleProcessCorruptedStateExceptions] against AVs.
-             
+        {             
             try
             {
                 if (!VirtualQueryEx(Process.GetCurrentProcess().Handle, job.BaseAddress, out var mbi, (uint)Marshal.SizeOf<MEMORY_BASIC_INFORMATION>()))
@@ -166,7 +162,6 @@ namespace NewGMHack.Stub.Services.Scanning
                 if (mbi.State != MEM_COMMIT || !IsReadable(mbi.Protect))
                     return;
 
-                // Adjust size if it exceeds region
                 long regionEnd = mbi.BaseAddress.ToInt64() + mbi.RegionSize.ToInt64();
                 long requestedEnd = job.BaseAddress.ToInt64() + job.Size + maxPatternLength;
                 

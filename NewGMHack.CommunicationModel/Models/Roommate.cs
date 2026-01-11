@@ -43,10 +43,10 @@ namespace NewGMHack.CommunicationModel.Models
     }
     public class Roommate
     {
-        public uint   PlayerId { get; set; }
-        public uint   ItemId   { get; set; }
-        public string ItemName => ItemId.ToDisplay();
-        public string Name     { get; set; }
+        public uint    PlayerId { get; set; }
+        public uint    ItemId   { get; set; }
+        public string  ItemName => ItemId.ToDisplay();
+        public string? Name     { get; set; }
 
         /// <inheritdoc />
         public override string ToString()

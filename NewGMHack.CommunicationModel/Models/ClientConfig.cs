@@ -7,7 +7,7 @@ public static class FeatureExtensions
 {
     public static HackFeatures? GetFeature(this IEnumerable<HackFeatures?> features,FeatureName name)
     {
-        return features.FirstOrDefault(x => x.Name == name);
+        return features.FirstOrDefault(x => x != null && x.Name == name);
     }
 
     public static bool IsFeatureEnable(this IEnumerable<HackFeatures> features, FeatureName name)

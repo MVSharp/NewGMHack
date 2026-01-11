@@ -170,6 +170,27 @@ services.AddSingleton<IReloadedHooks>(provider =>
                                   .Build();
             var t = new Thread( async void () =>
             {
+                // Global Exception Handlers to catch "Bombs"
+                AppDomain.CurrentDomain.UnhandledException += (sender, e) => 
+                {
+                    try 
+                    {
+                        var ex = e.ExceptionObject as Exception;
+                        File.AppendAllText("sdlog.txt", $"[CRITICAL] Unhandled Exception: {ex?.Message} \nStack: {ex?.StackTrace}\n");
+                    }
+                    catch {}
+                };
+
+                TaskScheduler.UnobservedTaskException += (sender, e) => 
+                {
+                    try
+                    {
+                        File.AppendAllText("sdlog.txt", $"[CRITICAL] Unobserved Task Exception: {e.Exception.Message} \nStack: {e.Exception.StackTrace}\n");
+                        e.SetObserved(); 
+                    }
+                    catch {}
+                };
+
                 try
                 {
                      await hostBuilder.RunAsync();
@@ -177,6 +198,8 @@ services.AddSingleton<IReloadedHooks>(provider =>
                 catch (Exception ex)
                 {
                     MessageBox(0, $"{ex.Message} {ex.StackTrace}", "Error", 0);
+                    // Log to file as well just in case MessageBox is suppressed or fails
+                     try { File.AppendAllText("sdlog.txt", $"[CRITICAL] Host Run Error: {ex.Message} \nStack: {ex.StackTrace}\n"); } catch {}
                     await hostBuilder.StopAsync();
                 }
             });

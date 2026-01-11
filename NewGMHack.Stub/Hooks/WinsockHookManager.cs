@@ -321,17 +321,17 @@ public sealed class WinsockHookManager(
 
             Span<byte> data = new((void*)buffer, receivedLength);
 
-            if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.Debug))
-            {
-                logger.ZLogInformation($"[RECV raw|length:{receivedLength}]{BitConverter.ToString(data.ToArray())}");
-            }
+            //if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.Debug))
+            //{
+            //    logger.ZLogInformation($"[RECV raw|length:{receivedLength}]{BitConverter.ToString(data.ToArray())}");
+            //}
 
             // Use accumulator to handle TCP fragmentation
             var completePackets = accumulator.AppendAndExtract(data);
 
             foreach (var packet in completePackets)
             {
-                if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.Debug))
+                if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.Debug) && packet[5] != 0x27)
                 {
                     logger.ZLogInformation($"[RECV complete|length:{packet.Length}]{BitConverter.ToString(packet.ToArray())}");
                 }

@@ -153,7 +153,7 @@ public class PacketProcessorService : BackgroundService
         switch (method)
         {
             case 2567: // get page
-                ReadPageCondom(methodPacket.MethodBody);
+                await ReadPageCondom(methodPacket.MethodBody,token);
                 break;
             // case 1992 or 1338 or 2312 or 1525 or 1521 or 2103:
             //1342 player reborn in battle
@@ -188,7 +188,7 @@ public class PacketProcessorService : BackgroundService
                 SendF5(socket);
                 break;
             case 2877:
-                ReadPlayerBasicInfo(methodPacket.MethodBody);
+                await ReadPlayerBasicInfo(methodPacket.MethodBody, token);
                 ChargeCondom(socket, _selfInformation.PersonInfo.Slot);
                 SendF5(socket);
                 break;
@@ -336,41 +336,70 @@ public class PacketProcessorService : BackgroundService
         }
     }
 
-    private void ReadPageCondom(ReadOnlySpan<byte> methodPacketMethodBody)
+    private async Task ReadPageCondom(ReadOnlyMemory<byte> methodPacketMethodBody,CancellationToken token = default)
     {
-        var header =methodPacketMethodBody.ReadStruct<PageCondomRecv>();
+        var header =methodPacketMethodBody.Span.ReadStruct<PageCondomRecv>();
         var count  = (int)header.Size;
         if (count <= 0) return;
         _selfInformation.PersonInfo.PersonId = header.MyPlayerId;
-        var condomSpan = methodPacketMethodBody.SliceAfter<PageCondomRecv>().CastTo<Machine>();
-        foreach (var condom in condomSpan)
+        var condomSpan = methodPacketMethodBody.Span.SliceAfter<PageCondomRecv>().CastTo<Machine>();
+        var machines   = condomSpan.AsValueEnumerable().Where(c=>c.MachineId > 0).ToList();
+        foreach (var condom in machines)
         {
-            if(condom.MachineId ==0)continue;
             _logger.ZLogInformation($"page  count:{header.Size}:  {condom.MachineId}  exp:  {condom.CurrentExp} : battery {condom.Battery} slot:{condom.Slot}"); 
-        } 
+        }
 
+        await gm.ScanMachinesWithDetails(machines.Select(c => c.MachineId),token);
     }
 
-    private unsafe void ReadPlayerBasicInfo(ReadOnlySpan<byte> bytes)
+    private async Task ReadPlayerBasicInfo(ReadOnlyMemory<byte> bytes, CancellationToken token = default)
     {
         try
         {
             _selfInformation.ClientConfig.IsInGame = false;
-            var header = bytes.ReadStruct<PlayerBasicInfoStruct>();
+            
+            var (botId, botSlot) = ParsePlayerBasicInfoUnsafe(bytes.Span);
 
-            _selfInformation.PersonInfo.PersonId = header.PlayerId;
-
-            // Get name from fixed byte array - decode as GB2312
-            int                nameLen   = Math.Min((int)header.NameLength, 30);
-            ReadOnlySpan<byte> nameBytes = new ReadOnlySpan<byte>(header.Name, nameLen);
-            _selfInformation.PersonInfo.PlayerName = chs.GetString(nameBytes).Trim('\0').Trim();
-
-            _logger.ZLogInformation($"PlayerBasicInfo: Id={header.PlayerId} Name={_selfInformation.PersonInfo.PlayerName}");
+            var machineInfo = await ScanCondom(botId, token);
+            if (machineInfo != null)
+            {
+                 // Notify Frontend via IPC -> SignalR
+                _logger.ZLogInformation($"Sending MachineInfoUpdate for machine {botId}");
+                var response = new NewGMHack.CommunicationModel.IPC.Responses.MachineInfoResponse
+                {
+                    MachineModel    = _selfInformation.CurrentMachineModel,
+                    MachineBaseInfo = machineInfo
+                };
+                await _ipcService.SendMachineInfoUpdateAsync(response);
+            }
         }
         catch (Exception ex)
         {
             _logger.ZLogError(ex, $"Error in ReadPlayerBasicInfo");
         }
+    }
+
+    private unsafe (uint MachineId, uint Slot) ParsePlayerBasicInfoUnsafe(ReadOnlySpan<byte> bytes)
+    {
+        var header = bytes.ReadStruct<PlayerBasicInfoStruct>();
+
+        _selfInformation.PersonInfo.PersonId = header.PlayerId;
+
+        // Get name from fixed byte array - decode as GB2312
+        int                nameLen   = Math.Min((int)header.NameLength, 30);
+        ReadOnlySpan<byte> nameBytes = new ReadOnlySpan<byte>(header.Name, nameLen);
+        _selfInformation.PersonInfo.PlayerName = chs.GetString(nameBytes).Trim('\0').Trim();
+        
+        var bot = bytes.SliceAfter<PlayerBasicInfoStruct>().ReadStruct<Machine>();
+        
+        //update _selfInformation current bot
+        _selfInformation.PersonInfo.Slot = bot.Slot;
+        _selfInformation.PersonInfo.CondomId = bot.MachineId;
+        _logger.ZLogInformation($"PlayerBasicInfo: Id={header.PlayerId} Name={_selfInformation.PersonInfo.PlayerName} | Bot: Id={bot.MachineId} Slot={bot.Slot} Exp={bot.CurrentExp} Bat={bot.Battery}");
+
+        _selfInformation.CurrentMachineModel = MachineModel.FromRaw(bot);
+        
+        return (bot.MachineId, bot.Slot);
     }
 
     /// <summary>
