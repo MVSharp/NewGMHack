@@ -30,7 +30,7 @@ namespace NewGMHack.Stub.MemoryScanner
         /// <summary>
         /// Cache TTL - entries older than this will trigger a rescan
         /// </summary>
-        private static readonly TimeSpan CacheTTL = TimeSpan.FromDays(3);
+        private static readonly TimeSpan CacheTTL = TimeSpan.FromDays(6);
 
 
         public GmMemory(

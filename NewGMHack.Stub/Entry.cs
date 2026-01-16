@@ -27,7 +27,6 @@ namespace NewGMHack.Stub
     {
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         public static extern int MessageBox(IntPtr hWnd, string lpText, string lpCaption, uint uType);
-
 // [DllImport("kernel32.dll", SetLastError = true)]
 // [return: MarshalAs(UnmanagedType.Bool)]
 // static extern bool AllocConsole();
