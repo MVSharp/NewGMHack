@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Windows;
 using MahApps.Metro.Controls;
@@ -40,7 +41,7 @@ namespace NewGmHack.GUI
                 // Construct URI. 
                 string url = _webStatus.BaseUrl; 
                 if (string.IsNullOrEmpty(url)) url = "http://localhost:5000";
-
+                //Process.Start(url);
                 DashboardWebView.Source = new Uri(url);
             }
             catch (Exception ex)

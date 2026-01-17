@@ -85,19 +85,19 @@ const chartExpData = computed(() => {
             </div>
             <div class="kpi-card border-t-gundam-gold">
                 <div class="kpi-label">{{ t('gb_earned') }}</div>
-                <div class="kpi-value text-gundam-gold glow-gold"><AnimatedNumber :value="totalGb" /></div>
+                <div class="kpi-value text-gundam-gold"><AnimatedNumber :value="totalGb" /></div>
             </div>
             <div class="kpi-card border-t-bonus-orange">
                 <div class="kpi-label">{{ t('total_bonus') }}</div>
-                <div class="kpi-value text-bonus-orange glow-orange"><AnimatedNumber :value="totalBonus" /></div>
+                <div class="kpi-value text-bonus-orange"><AnimatedNumber :value="totalBonus" /></div>
             </div>
             <div class="kpi-card border-t-neon-cyan">
                 <div class="kpi-label">{{ t('total_gain') }}</div>
-                <div class="kpi-value text-neon-cyan glow-cyan"><AnimatedNumber :value="totalGain" /></div>
+                <div class="kpi-value text-neon-cyan"><AnimatedNumber :value="totalGain" /></div>
             </div>
             <div class="kpi-card border-t-machine-silver">
                 <div class="kpi-label">{{ t('total_exp') }}</div>
-                <div class="kpi-value text-machine-silver glow-silver"><AnimatedNumber :value="totalExp" /></div>
+                <div class="kpi-value text-machine-silver"><AnimatedNumber :value="totalExp" /></div>
             </div>
             <div class="kpi-card border-t-beam-pink">
                 <div class="kpi-label">{{ t('total_kills') }}</div>
@@ -206,8 +206,8 @@ const chartExpData = computed(() => {
                         <tbody class="font-rajdhani">
                             <tr class="text-white font-bold border-b border-white/5 table-row-hover">
                                 <td class="p-2">{{ t('total_gain') }}</td>
-                                <td class="p-2 text-neon-cyan glow-cyan"><AnimatedNumber :value="hourTotal" /></td>
-                                <td class="p-2 text-neon-cyan glow-cyan"><AnimatedNumber :value="todayTotal" /></td>
+                                <td class="p-2 text-neon-cyan"><AnimatedNumber :value="hourTotal" /></td>
+                                <td class="p-2 text-neon-cyan"><AnimatedNumber :value="todayTotal" /></td>
                             </tr>
                             <tr class="border-b border-white/5 table-row-hover">
                                 <td class="p-2 text-gray-400">{{ t('base_gb') }}</td>
@@ -216,8 +216,8 @@ const chartExpData = computed(() => {
                             </tr>
                             <tr class="border-b border-white/5 table-row-hover">
                                 <td class="p-2 text-gray-400">{{ t('bonus') }}</td>
-                                <td class="p-2 text-bonus-orange glow-orange"><AnimatedNumber :value="hourBonus" /></td>
-                                <td class="p-2 text-bonus-orange glow-orange"><AnimatedNumber :value="todayBonus" /></td>
+                                <td class="p-2 text-bonus-orange"><AnimatedNumber :value="hourBonus" /></td>
+                                <td class="p-2 text-bonus-orange"><AnimatedNumber :value="todayBonus" /></td>
                             </tr>
                             <tr class="border-b border-white/5 table-row-hover">
                                 <td class="p-2 text-gray-400">{{ t('exp') }}</td>

@@ -94,20 +94,9 @@ onMounted(() => {
 </script>
 
 <template>
-    <span :class="{ 'animating': isAnimating }">{{ displayValue }}</span>
+    <span>{{ displayValue }}</span>
 </template>
 
 <style scoped>
-.animating {
-    animation: glowPulse 0.5s ease-in-out infinite;
-}
-
-@keyframes glowPulse {
-    0%, 100% {
-        text-shadow: 0 0 5px currentColor;
-    }
-    50% {
-        text-shadow: 0 0 20px currentColor, 0 0 30px currentColor;
-    }
-}
+/* Removed expensive glow animation */
 </style>

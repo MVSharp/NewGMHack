@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@microsoft/signalr": "^10.0.0",
+    "@tsparticles/vue3": "^3.0.1",
     "@vueuse/core": "^14.1.0",
     "axios": "^1.13.2",
     "chart.js": "^4.5.1",
@@ -18,6 +19,7 @@
     "lucide-vue-next": "^0.562.0",
     "reka-ui": "^2.7.0",
     "tailwind-merge": "^3.4.0",
+    "@tsparticles/slim": "^3.0.0",
     "vue": "^3.5.24",
     "vue-chartjs": "^5.3.3"
   },

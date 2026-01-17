@@ -146,6 +146,7 @@ services.AddSingleton<IReloadedHooks>(provider =>
     return new ReloadedHooks();
 });
                                        services.AddSingleton<IHookManager, DirectInputHookManager>();
+                                       services.AddSingleton<IHookManager, CreateMutexHookManager>();
                                        //services.AddHostedService<PacketProcessorService>();
                                        services.AddSingleton(Channel.CreateBounded<RewardEvent>(new BoundedChannelOptions(100)
                                        {
