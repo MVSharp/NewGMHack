@@ -4,9 +4,15 @@ using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using NewGMHack.Stub;
 using NewGMHack.Stub.Services;
+using NewGMHack.Stub.Logger;
 using SharpDX.DirectInput;
 using ZLogger;
-using static DIK;
+using static NewGMHack.Stub.Services.DIK;
+
+namespace NewGMHack.Stub.Services;
+
+public record InputState(bool IsLeftDown, bool IsRightDown);
+
 public static class DIK
 {
     public const int DIK_ESCAPE = 0x01;
@@ -32,7 +38,7 @@ public class ScheduledEvent
         IsMouse = isMouse;
     }
 }
-public class DirectInputLogicProcessor
+public partial class DirectInputLogicProcessor
 {
     private readonly SelfInformation _self;
     private readonly ILogger<DirectInputLogicProcessor> _logger;
@@ -195,13 +201,13 @@ public class DirectInputLogicProcessor
         if (dataPtr == IntPtr.Zero)
         {
 
-            _logger.ZLogInformation($"null pointer on data");
+            _logger.LogNullDataPointer();
             return;
         }
         if (!IsAutoReadyEnabled)
         {
             _scheduledEvents.Clear();
-            _logger.ZLogInformation($"our things: All features disabled, cleared scheduled events");
+            _logger.LogAllFeaturesDisabled();
             return;
         }
         if (deviceType == DeviceType.Keyboard && size == 256)
@@ -209,7 +215,7 @@ public class DirectInputLogicProcessor
         else if (deviceType == DeviceType.Mouse && size == Marshal.SizeOf<DIMOUSESTATE>())
             ProcessMouse(dataPtr);
         else
-            _logger.ZLogInformation($"Unknown :{deviceType} | {size}");
+            _logger.LogUnknownDevice(deviceType, size);
     }
 
     private void ProcessKeyboard(IntPtr dataPtr)
@@ -257,7 +263,7 @@ for (int i = DIK_1; i <= DIK_3; i++)
 
     private void HandleAutoReady()
     {
-        _logger.ZLogInformation($"handle auto ready");
+        _logger.LogHandleAutoReady();
         ScheduleKey(DIK_F5, 0, 50);
         ScheduleKey(DIK_ESCAPE, 100, 50);
         ScheduleMouse(1, true, 200);
@@ -269,7 +275,7 @@ private const int RightSpamIntervalMs = 80;
 private void HandleAimSupport(ref DIMOUSESTATE state)
 {
 
-        _logger.ZLogInformation($"handle auto aim");
+        _logger.LogHandleAimSupport();
     bool leftDown = InputTracker.IsLeftDown;
     bool rightDown = InputTracker.IsRightDown;
 
@@ -384,3 +390,4 @@ private void SwitchWeapon()
         }
     }
 }
+

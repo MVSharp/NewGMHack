@@ -18,12 +18,13 @@ using ZLinq;
 using ZLogger;
 using NewGMHack.Stub.Models;
 using NewGMHack.Stub.PacketStructs.Send;
+using NewGMHack.Stub.Logger;
 
 namespace NewGMHack.Stub.Services;
 
 public record PacketContext(nint Socket, byte[] Data);
 
-public class PacketProcessorService : BackgroundService
+public partial class PacketProcessorService : BackgroundService
 {
     private readonly Channel<PacketContext> _packetChannel;
 
@@ -66,7 +67,7 @@ public class PacketProcessorService : BackgroundService
     {
         try
         {
-            _logger.ZLogInformation($"Starting Parse for packet");
+            _logger.LogStartingParse();
             await foreach (var packet in _packetChannel.Reader.ReadAllAsync(stoppingToken))
             {
                 if (packet.Data.Length > 0)
@@ -75,7 +76,7 @@ public class PacketProcessorService : BackgroundService
                 }
             }
 
-            _logger.ZLogInformation($"Finished Parse");
+            _logger.LogFinishedParse();
             //await foreach (var packet in _packetChannel.Reader.ReadAllAsync(stoppingToken))
             //{
             //    try
@@ -91,7 +92,7 @@ public class PacketProcessorService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.ZLogCritical(ex, $"the packet processor stopped");
+            _logger.LogPacketProcessorStopped(ex);
         }
     }
 
@@ -133,7 +134,7 @@ public class PacketProcessorService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.ZLogError(ex, $"Error occur in packet processor");
+            _logger.LogPacketProcessorError(ex);
         }
     }
 
@@ -221,7 +222,7 @@ public class PacketProcessorService : BackgroundService
             case 1246 or 2535:
                 _selfInformation.ClientConfig.IsInGame = false;
                 var changed = ReadChangedMachine(methodPacket.MethodBody);
-                _logger.ZLogInformation($"change condom detected:{changed.MachineId}");
+                _logger.LogCondomChangeDetected(changed.MachineId);
 
                 // Store both raw and processed machine data
                 //_selfInformation.CurrentMachine = changed;
@@ -237,7 +238,7 @@ public class PacketProcessorService : BackgroundService
                     if (machineInfo != null)
                     {
                         // Notify Frontend via IPC -> SignalR
-                        _logger.ZLogInformation($"Sending MachineInfoUpdate for machine {changed.MachineId}");
+                        _logger.LogSendingMachineInfoUpdate(changed.MachineId);
                         var response = new NewGMHack.CommunicationModel.IPC.Responses.MachineInfoResponse
                         {
                             MachineModel    = _selfInformation.CurrentMachineModel,
@@ -248,7 +249,7 @@ public class PacketProcessorService : BackgroundService
                 }
                 catch (Exception ex)
                 {
-                    _logger.ZLogError($"ScanCondom/IPC Error: {ex} {ex.Message}");
+                    _logger.LogScanCondomIPCError(ex);
                 }
 
                 ChargeCondom(socket, slot);
@@ -413,7 +414,7 @@ public class PacketProcessorService : BackgroundService
         var machines   = condomSpan.AsValueEnumerable().Where(c=>c.MachineId > 0).ToList();
         foreach (var condom in machines)
         {
-            _logger.ZLogInformation($"page  count:{header.Size}:  {condom.MachineId}  exp:  {condom.CurrentExp} : battery {condom.Battery} slot:{condom.Slot}"); 
+            _logger.LogPageCount(header.Size, condom.MachineId, condom.CurrentExp, condom.Battery, condom.Slot); 
         }
 
         await gm.ScanMachinesWithDetails(machines.Select(c => c.MachineId),token);
@@ -431,7 +432,7 @@ public class PacketProcessorService : BackgroundService
             if (machineInfo != null)
             {
                  // Notify Frontend via IPC -> SignalR
-                _logger.ZLogInformation($"Sending MachineInfoUpdate for machine {botId}");
+                _logger.LogSendingMachineInfoUpdate(botId);
                 var response = new NewGMHack.CommunicationModel.IPC.Responses.MachineInfoResponse
                 {
                     MachineModel    = _selfInformation.CurrentMachineModel,
@@ -442,7 +443,7 @@ public class PacketProcessorService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.ZLogError(ex, $"Error in ReadPlayerBasicInfo");
+            _logger.LogReadPlayerBasicInfoError(ex);
         }
     }
 
@@ -462,7 +463,7 @@ public class PacketProcessorService : BackgroundService
         //update _selfInformation current bot
         _selfInformation.PersonInfo.Slot = bot.Slot;
         _selfInformation.PersonInfo.CondomId = bot.MachineId;
-        _logger.ZLogInformation($"PlayerBasicInfo: Id={header.PlayerId} Name={_selfInformation.PersonInfo.PlayerName} | Bot: Id={bot.MachineId} Slot={bot.Slot} Exp={bot.CurrentExp} Bat={bot.Battery}");
+        _logger.LogPlayerBasicInfo(header.PlayerId, _selfInformation.PersonInfo.PlayerName, bot.MachineId, bot.Slot, bot.CurrentExp, bot.Battery);
 
         _selfInformation.CurrentMachineModel = MachineModel.FromRaw(bot);
         
@@ -484,7 +485,7 @@ public class PacketProcessorService : BackgroundService
                 Timestamp = DateTime.UtcNow
             });
             _selfInformation.BattleState.EndSession();
-            _logger.ZLogInformation($"Battle session ended: {sessionId}");
+            _logger.LogBattleSessionEnded(sessionId);
         }
 
         _selfInformation.WeaponNameCache.Clear();
@@ -501,7 +502,7 @@ public class PacketProcessorService : BackgroundService
             int count       = Math.Min(header.PlayerCount, playersSpan.Length);
             var players     = playersSpan.Slice(0, count).ToArray();
 
-            _logger.ZLogInformation($"GameReady: MyPlayerId={header.PlayerId} Map={header.MapId} GameType={header.GameType} IsTeam={header.IsTeam} PlayerCount={header.PlayerCount}");
+            _logger.LogGameReady(header.PlayerId, header.MapId, header.GameType, header.IsTeam, header.PlayerCount);
 
             // Store self info
             _selfInformation.PersonInfo.PersonId   = header.PlayerId;
@@ -521,7 +522,7 @@ public class PacketProcessorService : BackgroundService
             {
                 // 1. Batch Scan Machines
                 var distinctMachineIds = players.Select(p => p.MachineId).Where(id => id > 0).Distinct().ToList();
-                _logger.ZLogInformation($"Batch scanning {distinctMachineIds.Count} machines");
+                _logger.LogBatchScanningMachines(distinctMachineIds.Count);
                 var loadedMachines = await gm.ScanMachines(distinctMachineIds, token);
 
                 // 2. Batch Scan Transforms
@@ -536,7 +537,7 @@ public class PacketProcessorService : BackgroundService
                 var loadedTrans = new List<MachineBaseInfo>();
                 if (transIds.Count > 0)
                 {
-                    _logger.ZLogInformation($"Batch scanning {transIds.Count} transformed machines");
+                    _logger.LogBatchScanningTransformed(transIds.Count);
                     loadedTrans = await gm.ScanMachines(transIds, token);
                 }
 
@@ -552,7 +553,7 @@ public class PacketProcessorService : BackgroundService
 
                 if (allWeaponIds.Count > 0)
                 {
-                    _logger.ZLogInformation($"Batch scanning {allWeaponIds.Count} weapons");
+                    _logger.LogBatchScanningWeapons(allWeaponIds.Count);
 
                     var weapons = await gm.ScanWeapons(allWeaponIds, token);
                     foreach (var w in weapons)
@@ -563,7 +564,7 @@ public class PacketProcessorService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.ZLogError(ex, $"Error during batch scanning phase in ReadGameReady");
+                _logger.LogBatchScanningError(ex);
             }
             // ---------------------------------------------------------
             // OPTIMIZED BATCH SCANNING END
@@ -573,7 +574,7 @@ public class PacketProcessorService : BackgroundService
             {
                 var p = players[i];
                 if (p.RoomSlot != i) continue;
-                _logger.ZLogInformation($"Player[{p.RoomSlot}]: Id={p.Player} Team={p.TeamId1},{p.TeamId2} Machine={p.MachineId} HP={p.MaxHP} Atk={p.Attack} Def={p.Defense} Shield={p.Shield}");
+                _logger.LogPlayerStats(p.RoomSlot, p.Player, p.TeamId1, p.TeamId2, p.MachineId, p.MaxHP, p.Attack, p.Defense, p.Shield);
                 // Update in-memory state for HP tracking
                 _selfInformation.BattleState.SetPlayer(p.Player, p.TeamId1, p.MachineId, p.MaxHP, p.Attack, p.Defense,
                                                        p.Shield, p.RoomSlot);
@@ -608,7 +609,7 @@ public class PacketProcessorService : BackgroundService
                             };
                             //_selfInformation.PersonInfo.Slot = p.RoomSlot;
 
-                            _logger.ZLogInformation($"Set current machine from GameReady: MachineId={p.MachineId}");
+                            _logger.LogSetCurrentMachine(p.MachineId);
 
                             // Notify Frontend via IPC
                             var response = new NewGMHack.CommunicationModel.IPC.Responses.MachineInfoResponse
@@ -621,7 +622,7 @@ public class PacketProcessorService : BackgroundService
                     }
                     catch (Exception ex)
                     {
-                        _logger.ZLogError($"ScanCondom error for self: {ex.Message}");
+                        _logger.LogScanCondomError(ex);
                     }
                 }
             }
@@ -656,7 +657,7 @@ public class PacketProcessorService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.ZLogError(ex, $"Error in ReadGameReady");
+            _logger.LogReadGameReadyError(ex);
         }
     }
 
@@ -688,13 +689,13 @@ public class PacketProcessorService : BackgroundService
             // If MyPlayerId != SpawnId, add to reborn queue
             if (playerState.MyPlayerId != playerState.SpawnId)
             {
-                _logger.ZLogInformation($"battle reborn packet: MyPlayerId={playerState.MyPlayerId} SpawnId={playerState.SpawnId}");
+                _logger.LogBattleReborn(playerState.MyPlayerId, playerState.SpawnId);
                 reborns.Enqueue(new Reborn(playerState.MyPlayerId, playerState.SpawnId, 0));
             }
         }
         catch (Exception ex)
         {
-            _logger.ZLogError(ex, $"Error in ReadPlayerStats");
+            _logger.LogReadPlayerStatsError(ex);
         }
     }
 
@@ -713,17 +714,17 @@ public class PacketProcessorService : BackgroundService
             bool isRemoved = _selfInformation.BombHistory.TryRemove(dead.DeadId, out _);
             if (!isRemoved)
             {
-                _logger.ZLogInformation($"error in bomb history remove : readdead 1506");
+                _logger.LogBombHistoryRemoveError();
             }
             else
             {
-                _logger.ZLogInformation($"removed :{dead.DeadId} since it is dead from 1506");
+                _logger.LogBombHistoryRemoved(dead.DeadId);
             }
 
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"error occur in readdeads 1506");
+            _logger.LogReadDeads1506Error(ex);
         }
 
     }
@@ -762,14 +763,14 @@ public class PacketProcessorService : BackgroundService
 
     public void ReadGifts(IntPtr socket, ReadOnlyMemory<byte> buffer)
     {
-        _logger.ZLogInformation($"gift buffer: {string.Join(" ", buffer.ToArray().Select(b => b.ToString("X2")))}");
+        _logger.LogGiftBuffer(string.Join(" ", buffer.ToArray().Select(b => b.ToString("X2"))));
         if (!_selfInformation.ClientConfig.Features.GetFeature(FeatureName.CollectGift).IsEnabled) return;
         var personId = BitConverter.ToUInt32(buffer.Span.Slice(0, 4)); // EB 02 00 00 → 0x000002EB
         _selfInformation.PersonInfo.PersonId = personId;
 
         var giftStructs = buffer.Slice(4).Span.CastTo<GiftStruct>().ToArray();
 
-        _logger.ZLogInformation($"gifts count : {giftStructs.Length}");
+        _logger.LogGiftsCount(giftStructs.Length);
         foreach (var gift in giftStructs.Where(x => x.ItemType != 301))
         {
 
@@ -804,7 +805,7 @@ public class PacketProcessorService : BackgroundService
             // _logger.ZLogInformation($"sstruct : {deadStruct.PersonId}|{deadStruct.KillerId}|{deadStruct.Count}");
 
             // Enhanced logging: show header info
-            _logger.ZLogInformation($"[ReadDeads] PersonId={deadStruct.PersonId} KillerId={deadStruct.KillerId} Count={deadStruct.Count} BufferLen={buffer.Length}");
+            _logger.LogReadDeads(deadStruct.PersonId, deadStruct.KillerId, deadStruct.Count, buffer.Length);
 
             if (deadStruct.Count > 0)
             {
@@ -854,7 +855,7 @@ public class PacketProcessorService : BackgroundService
                         }
                         else
                         {
-                            _logger.ZLogInformation($"[ReadDeads] cannot remove:{dead.Id}");
+                            _logger.LogReadDeadsCannotRemove(dead.Id);
                         }
                     }
                 }
@@ -862,7 +863,7 @@ public class PacketProcessorService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"[ReadDeads] error in readdead");
+            _logger.LogReadDeadsErrorFromEx(ex);
         }
     }
 
@@ -960,7 +961,7 @@ public class PacketProcessorService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.ZLogError(ex, $"Error in hit response 2472");
+            _logger.LogHitResponse2472Error(ex);
         }
     }
 
@@ -1062,7 +1063,7 @@ public class PacketProcessorService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.ZLogError(ex, $"Error in hit response 1616");
+            _logger.LogHitResponse1616Error(ex);
         }
     }
 
@@ -1071,7 +1072,7 @@ public class PacketProcessorService : BackgroundService
         var gradeReport = bytes.ReadStruct<RewardGrade>();
 
         var transformedGrade = RewardTransformations.ToGradeRank(gradeReport.Grade);
-        _logger.ZLogInformation($"Grade Player:{gradeReport.PlayerId} Grade:{RewardTransformations.GradeRankToString(transformedGrade)} Damage:{gradeReport.DamageScore} Team:{gradeReport.TeamExpectationScore} Skill:{gradeReport.SkillFulScore}");
+        _logger.LogRewardGrade(gradeReport.PlayerId, RewardTransformations.GradeRankToString(transformedGrade), gradeReport.DamageScore, gradeReport.TeamExpectationScore, gradeReport.SkillFulScore);
 
         var safeGrade = new SafeRewardGrade
         {
@@ -1093,7 +1094,7 @@ public class PacketProcessorService : BackgroundService
     {
         var report     = bytes.ReadStruct<RewardReport>();
         var gameStatus = RewardTransformations.ToGameStatus(report.WinOrLostOrDraw);
-        _logger.ZLogInformation($"Report Player[{RewardTransformations.GameStatusToString(gameStatus)}]:{report.PlayerId} K:{report.Kills} D:{report.Deaths} S:{report.Supports} Point:{report.Points} Exp:{report.ExpGain} GB:{report.GBGain} MachineAddedExp:{report.MachineAddedExp} MachineExp:{report.MachineExp} Practice:{report.PracticeExpAdded}");
+        _logger.LogRewardReport(RewardTransformations.GameStatusToString(gameStatus), report.PlayerId, report.Kills, report.Deaths, report.Supports, report.Points, report.ExpGain, report.GBGain, report.MachineAddedExp, report.MachineExp, report.PracticeExpAdded);
 
         _rewardChannel.Writer.TryWrite(new RewardEvent
         {
@@ -1106,7 +1107,7 @@ public class PacketProcessorService : BackgroundService
     {
         var rewardsBonus = bytes.ReadStruct<RewardBonus>();
         //LLM,create log
-        _logger.ZLogInformation($"Bonus Player:{rewardsBonus.PlayerId} Values: {rewardsBonus.Bonuses[0]}|{rewardsBonus.Bonuses[1]}|{rewardsBonus.Bonuses[2]}|{rewardsBonus.Bonuses[3]}|{rewardsBonus.Bonuses[4]}|{rewardsBonus.Bonuses[5]}|{rewardsBonus.Bonuses[6]}|{rewardsBonus.Bonuses[7]}");
+        _logger.LogRewardBonus(rewardsBonus.PlayerId, rewardsBonus.Bonuses[0], rewardsBonus.Bonuses[1], rewardsBonus.Bonuses[2], rewardsBonus.Bonuses[3], rewardsBonus.Bonuses[4], rewardsBonus.Bonuses[5], rewardsBonus.Bonuses[6], rewardsBonus.Bonuses[7]);
 
         var safeBonus = new SafeRewardBonus
         {
@@ -1190,7 +1191,7 @@ public class PacketProcessorService : BackgroundService
         var                roommateBytes = data.Span.SliceBetweenMarkers(start, end);
         if (data.Span.IndexOf(start) >= 0)
         {
-            _logger.ZLogInformation($"room start index found");
+            _logger.LogRoomStartIndexFound();
         }
         else
         {
@@ -1199,7 +1200,7 @@ public class PacketProcessorService : BackgroundService
 
         if (data.Span.IndexOf(end) >= 0)
         {
-            _logger.ZLogInformation($"room end index found");
+            _logger.LogRoomEndIndexFound();
         }
         else
         {
@@ -1232,7 +1233,7 @@ public class PacketProcessorService : BackgroundService
                                           //.Distinct()
                                          .ToList();
             int targetCount = distinctTargets.Count;
-            _logger.ZLogInformation($"target counts : {targetCount} -- {string.Join(",", distinctTargets.Select(c => c.TargetId))}");
+            _logger.LogTargetCounts(targetCount, string.Join(",", distinctTargets.Select(c => c.TargetId)));
             if (targetCount > 0)
             {
                 await _bombChannel.Writer.WriteAsync((packet.Socket, distinctTargets), token);
@@ -1240,7 +1241,7 @@ public class PacketProcessorService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.ZLogError($"{ex.Message} {ex.StackTrace ?? ""}");
+            _logger.LogSendToBombServicesError(ex);
         }
     }
 
@@ -1267,7 +1268,7 @@ public class PacketProcessorService : BackgroundService
     {
         //return;//TODO fix
         if (slot == 0) return;
-        _logger.ZLogInformation($"charging condom: {slot} ");
+        _logger.LogChargingCondom(slot);
         if (!_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoCharge)) return;
         ChargeRequest r = new();
         r.Version = 14;
@@ -1279,11 +1280,11 @@ public class PacketProcessorService : BackgroundService
 
     private async Task<MachineBaseInfo?> ScanCondom(UInt32 machineId, CancellationToken token)
     {
-        _logger.ZLogInformation($"Machine id begin scan: {machineId}");
+        _logger.LogMachineScanBegin(machineId);
 
         var machineInfo = await gm.ScanMachineWithDetails(machineId, token);
 
-        _logger.ZLogInformation($"Machine id scan completed: {machineId}");
+        _logger.LogMachineScanCompleted(machineId);
 
         if (machineInfo == null) return null;
 
@@ -1306,7 +1307,7 @@ public class PacketProcessorService : BackgroundService
             _selfInformation.CurrentMachineBaseInfo = machineInfo;
         }
 
-        _logger.ZLogInformation($"Machine: {machineInfo.ChineseName} | W1:{machineInfo.Weapon1Code} | W2:{machineInfo.Weapon2Code} | W3:{machineInfo.Weapon3Code}");
+        _logger.LogMachineInfo(machineInfo.ChineseName, machineInfo.Weapon1Code, machineInfo.Weapon2Code, machineInfo.Weapon3Code);
         return machineInfo;
     }
 
@@ -1418,7 +1419,7 @@ public class PacketProcessorService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.ZLogError($"Failed to send received message: {ex.Message}");
+            _logger.LogSendReceivedMessageError(ex);
         }
     }
 
@@ -1430,11 +1431,11 @@ public class PacketProcessorService : BackgroundService
         var socket = _selfInformation.LastSocket;
         if (socket == IntPtr.Zero)
         {
-            _logger.ZLogError($"Cannot destroy buildings: No active socket.");
+            _logger.LogDestroyBuildingsNoSocket();
             return;
         }
 
-        _logger.ZLogInformation($"Starting DestroyAllBuildings (7000-8000)...");
+        _logger.LogStartingDestroyBuildings();
         
         // Generate range 7000-8000 (inclusive)
         var buildingIds = Enumerable.Range(7000, 1001).Select(i => (uint)i).ToList();
@@ -1445,7 +1446,7 @@ public class PacketProcessorService : BackgroundService
             SendBuildingDamage(socket, batch);
         }
         
-        _logger.ZLogInformation($"Finished DestroyAllBuildings.");
+        _logger.LogFinishedDestroyBuildings();
     }
 
   
@@ -1487,7 +1488,7 @@ public class PacketProcessorService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.ZLogError(ex, $"Error sending building damage packet");
+            _logger.LogSendBuildingDamageError(ex);
         }
     }
     

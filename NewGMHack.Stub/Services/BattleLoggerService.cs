@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NewGMHack.Stub.Models;
 using ZLogger;
+using NewGMHack.Stub.Logger;
 
 namespace NewGMHack.Stub.Services;
 
@@ -12,7 +13,7 @@ namespace NewGMHack.Stub.Services;
 /// Background service that persists battle events to SQLite.
 /// Receives events via Channel for async processing.
 /// </summary>
-public class BattleLoggerService : BackgroundService
+public partial class BattleLoggerService : BackgroundService
 {
     private readonly Channel<BattleLogEvent> _channel;
     private readonly ILogger<BattleLoggerService> _logger;
@@ -38,11 +39,11 @@ public class BattleLoggerService : BackgroundService
         try
         {
             await InitializeDb();
-            _logger.ZLogInformation($"BattleLoggerService started. DB: {_connectionString}");
+            _logger.LogServiceStarted(_connectionString);
         }
         catch (Exception ex)
         {
-            _logger.ZLogError($"Failed to init BattleLogger DB: {ex.Message}. Service disabled.");
+            _logger.LogInitFailed(ex.Message);
             return;
         }
 
@@ -147,7 +148,7 @@ public class BattleLoggerService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.ZLogError(ex, $"Error in BattleLoggerService loop");
+            _logger.LogLoopError(ex);
         }
         finally
         {
@@ -165,11 +166,11 @@ public class BattleLoggerService : BackgroundService
         try
         {
             await BulkInsertDamage(buffer);
-            _logger.ZLogInformation($"Flushed {buffer.Count} damage events");
+            _logger.LogFlushedDamageEvents(buffer.Count);
         }
         catch (Exception ex)
         {
-            _logger.ZLogError(ex, $"Error flushing damage buffer");
+            _logger.LogFlushError(ex);
         }
     }
 
@@ -211,7 +212,7 @@ public class BattleLoggerService : BackgroundService
             INSERT INTO BattleSessions (SessionId, PlayerId, MapId, GameType, IsTeam, PlayerCount, StartedAt)
             VALUES (@SessionId, @PlayerId, @MapId, @GameType, @IsTeam, @PlayerCount, @StartedAt)",
             session);
-        _logger.ZLogInformation($"Battle session started: {session.SessionId} Map={session.MapId} Players={session.PlayerCount}");
+        _logger.LogSessionStarted(session.SessionId, session.MapId, session.PlayerCount);
     }
 
     private async Task BulkInsertPlayers(IEnumerable<BattlePlayerRecord> players)
@@ -270,7 +271,7 @@ public class BattleLoggerService : BackgroundService
             INSERT INTO DeathEvents (SessionId, Timestamp, VictimId, KillerId)
             VALUES (@SessionId, @Timestamp, @VictimId, @KillerId)",
             death);
-        _logger.ZLogInformation($"Death recorded: Victim={death.VictimId} Killer={death.KillerId}");
+        _logger.LogDeathRecorded(death.VictimId, death.KillerId);
     }
 
     private async Task InsertReborn(string sessionId, uint playerId, DateTime timestamp)
@@ -280,7 +281,7 @@ public class BattleLoggerService : BackgroundService
             INSERT INTO RebornEvents (SessionId, Timestamp, PlayerId)
             VALUES (@SessionId, @Timestamp, @PlayerId)",
             new { SessionId = sessionId, Timestamp = timestamp.ToString("O"), PlayerId = playerId });
-        _logger.ZLogInformation($"Reborn recorded: Player={playerId}");
+        _logger.LogRebornRecorded(playerId);
     }
 
     private async Task UpdateSessionEnd(string sessionId, DateTime endedAt)
@@ -289,7 +290,7 @@ public class BattleLoggerService : BackgroundService
         await conn.ExecuteAsync(@"
             UPDATE BattleSessions SET EndedAt = @EndedAt WHERE SessionId = @SessionId",
             new { SessionId = sessionId, EndedAt = endedAt.ToString("O") });
-        _logger.ZLogInformation($"Battle session ended: {sessionId}");
+        _logger.LogSessionEnded(sessionId);
     }
 
     private async Task InitializeDb()
@@ -367,7 +368,7 @@ public class BattleLoggerService : BackgroundService
         if (!existingColumns.Contains("SessionId"))
         {
             await conn.ExecuteAsync("ALTER TABLE MatchRewards ADD COLUMN SessionId TEXT");
-            _logger.ZLogInformation($"Added SessionId column to MatchRewards");
+            _logger.LogAddedSessionIdColumn();
         }
 
         // Create indexes
@@ -377,6 +378,7 @@ public class BattleLoggerService : BackgroundService
         await conn.ExecuteAsync("CREATE INDEX IF NOT EXISTS IDX_MatchRewards_Session ON MatchRewards(SessionId)");
 
         _initialized = true;
-        _logger.ZLogInformation($"Battle logging tables initialized");
+        _logger.LogTablesInitialized();
     }
 }
+

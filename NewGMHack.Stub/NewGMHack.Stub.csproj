@@ -81,4 +81,8 @@
 		<!-- 	<CopyToOutputDirectory>Always</CopyToOutputDirectory> -->
 		<!-- </None> -->
 	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="Services\Loggers\" />
+	</ItemGroup>
 </Project>

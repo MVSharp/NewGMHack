@@ -15,9 +15,11 @@ using Microsoft.Extensions.Logging;
 using ZLogger;
 using System.Runtime.CompilerServices; // For Unsafe
 
+using NewGMHack.Stub.Logger;
+
 namespace NewGMHack.Stub.Services.Scanning
 {
-     public class SimdMemoryScanner : IMemoryScanner
+     public partial class SimdMemoryScanner : IMemoryScanner
     {
         private readonly ILogger<SimdMemoryScanner> _logger;
 
@@ -183,13 +185,13 @@ namespace NewGMHack.Stub.Services.Scanning
                          ScanRegionInternal(pMemory, actualSize, pat, job.BaseAddress.ToInt64(), results[pat.Id]);
                      }
                      catch (AccessViolationException) { /* Skip page if it unloads */ }
-                     catch (Exception ex) { _logger?.ZLogWarning($"ScanJob Pattern {pat.Id} error: {ex.Message}"); }
+                     catch (Exception ex) { _logger?.LogScanJobPatternError(pat.Id, ex.Message); }
                 }
 
             }
             catch (Exception ex)
             {
-                _logger?.ZLogError($"Batch Scan Job Error at 0x{job.BaseAddress:X}: {ex.Message}");
+                _logger?.LogBatchScanJobError(job.BaseAddress.ToInt64(), ex.Message);
             }
         }
 
@@ -514,4 +516,5 @@ namespace NewGMHack.Stub.Services.Scanning
             return (bytes, new string(maskChars));
         }
     }
-}
+
+    }
