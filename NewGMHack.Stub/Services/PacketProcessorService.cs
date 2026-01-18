@@ -154,6 +154,9 @@ public partial class PacketProcessorService : BackgroundService
         ////_logger.ZLogInformation($"method: {method}");
         switch (method)
         {
+            case 2201:
+                await ReadCacheMachineGrids(methodPacket.MethodBody,token);
+                break;
             case 2240:
                 SendSkipScreen(socket);
                 SendZoneActiviate(socket);
@@ -358,6 +361,22 @@ public partial class PacketProcessorService : BackgroundService
             default:
                 break;
         }
+    }
+
+    private async Task ReadCacheMachineGrids(ReadOnlyMemory<byte> methodPacketMethodBody,CancellationToken token)
+    {
+        var header = methodPacketMethodBody.Span.ReadStruct<MachineGridHeader>();
+        if (header.TotalCount <= 0) return;
+        _selfInformation.PersonInfo.PersonId = header.PlayerId;
+        _logger.ZLogInformation($"Machine Count : {header.TotalCount} ");
+        var machines  = methodPacketMethodBody.Span.SliceAfter<MachineGridHeader>().CastTo<MachineGrid>().ToArray();
+        //if (machines.Length != header.TotalCount)
+        //{
+        //    _logger.ZLogError($"mis match count in grid {header.TotalCount} != {machines.Length} : {string.Join("," ,machines.Select(c=>c.MachineId))}");
+        //    return;
+        //}
+        if (machines.Length == 0) return;
+        await gm.ScanMachinesWithDetails(machines.Select(c=>c.MachineId),token);
     }
 
     private void SendFiveHits(List<UInt32> ids)
