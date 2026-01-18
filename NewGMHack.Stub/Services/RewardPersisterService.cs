@@ -8,6 +8,7 @@ using NewGMHack.CommunicationModel.PacketStructs.Recv;
 using NewGMHack.CommunicationModel.IPC.Responses;
 using NewGMHack.Stub.Models;
 using ZLogger;
+using NewGMHack.Stub.Services.Loggers;
 
 namespace NewGMHack.Stub.Services;
 
@@ -45,11 +46,11 @@ public class RewardPersisterService : BackgroundService
         try
         {
             await InitializeDb();
-            _logger.ZLogInformation($"RewardPersisterService started. DB: {_connectionString}");
+            _logger.LogServiceStarted(_connectionString);
         }
         catch (Exception ex)
         {
-            _logger.ZLogError($"Failed to init DB: {ex.Message}. Service disabled.");
+            _logger.LogInitFailed(ex.Message);
             return;
         }
 
@@ -90,7 +91,7 @@ public class RewardPersisterService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in RewardPersisterService loop");
+                _logger.LogLoopError(ex);
             }
         }
         
@@ -234,7 +235,7 @@ public class RewardPersisterService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to flush reward record");
+            _logger.LogFlushError(ex);
         }
         finally
         {
@@ -278,7 +279,7 @@ public class RewardPersisterService : BackgroundService
             var existingColumns = (await conn.QueryAsync<string>(
                 "SELECT name FROM pragma_table_info('MatchRewards')")).ToHashSet();
             
-            _logger.ZLogInformation($"Existing columns: {string.Join(", ", existingColumns)}");
+            _logger.LogExistingColumns(string.Join(", ", existingColumns));
             
             var newColumns = new Dictionary<string, string>
             {
@@ -294,9 +295,9 @@ public class RewardPersisterService : BackgroundService
             {
                 if (!existingColumns.Contains(columnName))
                 {
-                    _logger.ZLogInformation($"Adding missing column: {columnName}");
+                    _logger.LogAddingColumn(columnName);
                     await conn.ExecuteAsync($"ALTER TABLE MatchRewards ADD COLUMN {columnName} {columnType}");
-                    _logger.ZLogInformation($"Successfully added column {columnName}");
+                    _logger.LogColumnAdded(columnName);
                 }
             }
             
@@ -305,11 +306,11 @@ public class RewardPersisterService : BackgroundService
             await conn.ExecuteAsync("CREATE INDEX IF NOT EXISTS IDX_CreatedAt ON MatchRewards(CreatedAtUtc)");
             await conn.ExecuteAsync("CREATE INDEX IF NOT EXISTS IDX_GameStatus ON MatchRewards(GameStatus)");
             
-            _logger.ZLogInformation($"Database initialized successfully");
+            _logger.LogDbInitialized();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to init DB");
+            _logger.LogDbInitError(ex);
             throw;
         }
     }

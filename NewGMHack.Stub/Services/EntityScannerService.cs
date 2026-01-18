@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using NewGMHack.Stub;
 using SharpDX;
 using ZLogger;
+using NewGMHack.Stub.Services.Loggers;
 using Squalr.Engine.OS;
 using System.Text;
 using Squalr.Engine.Memory;
@@ -69,7 +70,7 @@ public class EntityScannerService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("EntityScannerService started.");
+        _logger.LogServiceStarted();
 
         var process = Processes.Default.GetProcesses()
                                .FirstOrDefault(p => p.ProcessName.Equals(ProcessName.Replace(".exe", ""),
@@ -85,12 +86,12 @@ public class EntityScannerService : BackgroundService
 
         if (process == null)
         {
-            _logger.LogWarning("Target process not found. Service stopping.");
+            _logger.LogProcessNotFound();
             return;
         }
 
         Processes.Default.OpenedProcess = process;
-        _logger.LogInformation($"Attached to process: {process.ProcessName} (PID: {process.Id})");
+        _logger.LogAttached(process.ProcessName, process.Id);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -101,7 +102,7 @@ public class EntityScannerService : BackgroundService
                 bool autoAimEnabled = _selfInfo.ClientConfig.Features.GetFeature(FeatureName.EnableAutoAim).IsEnabled;
                 if (!overlayEnabled && !autoAimEnabled)
                 {
-                    await Task.Delay(500);
+                    await Task.Delay(500, stoppingToken);
                     continue;
                 }
 
@@ -125,13 +126,13 @@ public class EntityScannerService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unexpected error in scan loop.");
+                _logger.LogScanLoopError(ex);
             }
 
             await Task.Delay(1, stoppingToken);
         }
 
-        _logger.LogInformation("EntityScannerService stopped.");
+        _logger.LogServiceStopped();
     }
 
     [DllImport("user32.dll")]
@@ -311,7 +312,7 @@ public class EntityScannerService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.ZLogError(ex, $"ScanEntities failed.|{ex.StackTrace}");
+            _logger.LogScanEntitiesFailed(ex);
             return false;
         }
     }

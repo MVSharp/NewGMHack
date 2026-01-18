@@ -368,7 +368,7 @@ public partial class PacketProcessorService : BackgroundService
         var header = methodPacketMethodBody.Span.ReadStruct<MachineGridHeader>();
         if (header.TotalCount <= 0) return;
         _selfInformation.PersonInfo.PersonId = header.PlayerId;
-        _logger.ZLogInformation($"Machine Count : {header.TotalCount} ");
+        _logger.LogMachineGridCount(header.TotalCount);
         var machines  = methodPacketMethodBody.Span.SliceAfter<MachineGridHeader>().CastTo<MachineGrid>().ToArray();
         //if (machines.Length != header.TotalCount)
         //{

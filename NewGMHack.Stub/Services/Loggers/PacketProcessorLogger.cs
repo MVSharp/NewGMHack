@@ -149,4 +149,7 @@ public static partial class PacketProcessorLogger
 
     [ZLoggerMessage(LogLevel.Error, "Error sending building damage packet")]
     public static partial void LogSendBuildingDamageError(this ILogger logger, Exception ex);
+
+    [ZLoggerMessage(LogLevel.Information, "Machine Count : {count}")]
+    public static partial void LogMachineGridCount(this ILogger logger, int count);
 }

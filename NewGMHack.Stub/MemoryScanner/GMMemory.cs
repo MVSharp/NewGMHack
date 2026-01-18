@@ -16,12 +16,13 @@ using ZLogger;
 using NewGMHack.CommunicationModel.Models;
 using NewGMHack.Stub.Services.Scanning;
 using NewGMHack.Stub.Services.Caching;
+using NewGMHack.Stub.Services.Loggers;
 
 namespace NewGMHack.Stub.MemoryScanner
 {
     public class GmMemory
     {
-        private readonly ILogger<GmMemory> logger;
+        private readonly ILogger<GmMemory> _logger;
         private readonly IMemoryScanner _scanner;
         private readonly IEntityCache<MachineBaseInfo> _machineCache;
         private readonly IEntityCache<SkillBaseInfo> _skillCache;
@@ -40,7 +41,7 @@ namespace NewGMHack.Stub.MemoryScanner
             IEntityCache<SkillBaseInfo>? skillCache = null,
             IEntityCache<WeaponBaseInfo>? weaponCache = null)
         {
-            this.logger = logger;
+            _logger = logger;
             _scanner = scanner;
             // Use injected caches or fallback to in-memory
             _machineCache = machineCache ?? new InMemoryEntityCache<MachineBaseInfo>();
@@ -87,7 +88,7 @@ namespace NewGMHack.Stub.MemoryScanner
                 var cached = await _machineCache.GetAsync(id);
                 if (cached != null)
                 {
-                    //logger.ZLogInformation($"ScanMachine cache hit: {id}");
+                    //logger.LogScanMachineCacheHit(id);
                     return cached;
                 }
             }
@@ -98,7 +99,7 @@ namespace NewGMHack.Stub.MemoryScanner
                                            pattern,
                                            mask,
                                            MACHINE_BUFFER_SIZE,
-                                           ValidateMachineData,
+                                           (s,t)=>true,
                                            ParseMachineData,
                                            "Machine",
                                            token);
@@ -111,9 +112,9 @@ namespace NewGMHack.Stub.MemoryScanner
                 } 
                 catch (Exception ex) 
                 { 
-                    logger.ZLogError(ex, $"Failed to cache Machine {id}"); 
+                    _logger.LogCacheMachineError(ex, id); 
                 }
-                LogMachineResult(result);
+                _logger.LogMachineDebugInfo(result.MachineId, result.MdrsFilePath, result.ChineseName, result.EnglishName, result.Rank, result.HP, result.CombatType, result.SkillID1, result.SkillID2);
             }
 
             return result;
@@ -129,7 +130,7 @@ namespace NewGMHack.Stub.MemoryScanner
                 var cached = await _skillCache.GetAsync(skillId);
                 if (cached != null)
                 {
-                    logger.ZLogInformation($"ScanSkill cache hit: {skillId}");
+                    _logger.LogScanSkillCacheHit(skillId);
                     return cached;
                 }
             }
@@ -139,7 +140,7 @@ namespace NewGMHack.Stub.MemoryScanner
                                            BuildSkillPattern(skillId),
                                            null, // Exact match
                                            SKILL_BUFFER_SIZE,
-                                           ValidateSkillData,
+                                           (s,t)=>true,
                                            ParseSkillData,
                                            "Skill",
                                            token);
@@ -152,9 +153,9 @@ namespace NewGMHack.Stub.MemoryScanner
                 } 
                 catch (Exception ex) 
                 { 
-                    logger.ZLogError(ex, $"Failed to cache Skill {skillId}"); 
+                    _logger.LogCacheSkillError(ex, skillId); 
                 }
-                LogSkillResult(result);
+                _logger.LogSkillDebugInfo(result.SkillId, result.SkillName, result.Movement, result.AttackIncrease, result.DefenseIncrease);
             }
 
             return result;
@@ -170,7 +171,7 @@ namespace NewGMHack.Stub.MemoryScanner
                 var cached = await _weaponCache.GetAsync(weaponId);
                 if (cached != null)
                 {
-                    logger.ZLogInformation($"ScanWeapon cache hit: {weaponId}");
+                    _logger.LogScanWeaponCacheHit(weaponId);
                     return cached;
                 }
             }
@@ -180,7 +181,7 @@ namespace NewGMHack.Stub.MemoryScanner
                                            BuildWeaponPattern(weaponId),
                                            null, // Exact match
                                            WEAPON_BUFFER_SIZE,
-                                           ValidateWeaponData,
+                                           (s,t)=>true,
                                            ParseWeaponData,
                                            "Weapon",
                                            token);
@@ -193,9 +194,9 @@ namespace NewGMHack.Stub.MemoryScanner
                 } 
                 catch (Exception ex) 
                 { 
-                    logger.ZLogError(ex, $"Failed to cache Weapon {weaponId}"); 
+                    _logger.LogCacheWeaponError(ex, weaponId); 
                 }
-                LogWeaponResult(result);
+                _logger.LogWeaponDebugInfo(result.WeaponId, result.WeaponName, result.WeaponType, result.WeaponDamage, result.WeaponRange, result.AmmoCount);
             }
 
             return result;
@@ -296,7 +297,7 @@ namespace NewGMHack.Stub.MemoryScanner
                         batchInput.Add((BuildSkillPattern(sid), null, (int)sid + SKILL_OFFSET));
                     }
 
-                    logger.ZLogInformation($"ScanMachineWithDetails Batch: {missingWeaponIds.Count} Weapons, {missingSkillIds.Count} Skills");
+                    _logger.LogScanMachineWithDetailsBatch(missingWeaponIds.Count, missingSkillIds.Count);
                     var scanResults = await _scanner.ScanBatchAsync(process, batchInput, token);
 
                     // Process Results
@@ -316,18 +317,18 @@ namespace NewGMHack.Stub.MemoryScanner
                                     if (TryReadMemory((IntPtr)addr, buffer, WEAPON_BUFFER_SIZE))
                                     {
                                         var span = buffer.AsSpan(0, WEAPON_BUFFER_SIZE);
-                                        if (ValidateWeaponData(span, wid))
-                                        {
+                                        //if (ValidateWeaponData(span, wid))
+                                        //{
                                             var info = ParseWeaponData(span);
                                             if (info != null)
                                             {
-                                                logger.ZLogInformation($"Found weapon {wid} at 0x{addr:X}");
-                                                LogWeaponResult(info);
-                                                await SetCacheSafe(_weaponCache, wid, info, logger);
+                                                _logger.LogFoundWeapon(wid, addr);
+                                                _logger.LogWeaponDebugInfo(info.WeaponId, info.WeaponName, info.WeaponType, info.WeaponDamage, info.WeaponRange, info.AmmoCount);
+                                                try { await _weaponCache.SetAsync(wid, info); } catch (Exception ex) { _logger.LogCacheWeaponError(ex, wid); }
                                                 foundWeapons[wid] = info;
                                                 break; 
                                             }
-                                        }
+                                        //}
                                     }
                                 }
                             }
@@ -343,18 +344,17 @@ namespace NewGMHack.Stub.MemoryScanner
                                     if (TryReadMemory((IntPtr)addr, buffer, SKILL_BUFFER_SIZE))
                                     {
                                         var span = buffer.AsSpan(0, SKILL_BUFFER_SIZE);
-                                        if (ValidateSkillData(span, sid))
-                                        {
+                                        //if (ValidateSkillData(span, sid))
+                                        //{
                                             var info = ParseSkillData(span);
                                             if (info != null)
                                             {
-                                                logger.ZLogInformation($"Found skill {sid} at 0x{addr:X}");
-                                                LogSkillResult(info);
-                                                await SetCacheSafe(_skillCache, sid, info, logger);
+                                                _logger.LogFoundSkill(sid, addr);
+                                                await SetCacheSafe(_skillCache, sid, info);
                                                 foundSkills[sid] = info;
                                                 break;
                                             }
-                                        }
+                                        //}
                                     }
                                 }
                             }
@@ -498,7 +498,7 @@ namespace NewGMHack.Stub.MemoryScanner
                         batchInput.Add((BuildSkillPattern(sid), null, (int)sid + SKILL_OFFSET));
                     }
 
-                    logger.ZLogInformation($"ScanMachinesWithDetails Batch: {missingWeaponIds.Count} Weapons, {missingSkillIds.Count} Skills");
+                    _logger.LogScanMachineWithDetailsBatch(missingWeaponIds.Count, missingSkillIds.Count);
                     var scanResults = await _scanner.ScanBatchAsync(process, batchInput, token);
 
                     // Process Results
@@ -518,18 +518,16 @@ namespace NewGMHack.Stub.MemoryScanner
                                     if (TryReadMemory((IntPtr)addr, buffer, WEAPON_BUFFER_SIZE))
                                     {
                                         var span = buffer.AsSpan(0, WEAPON_BUFFER_SIZE);
-                                        if (ValidateWeaponData(span, wid))
-                                        {
+                                        //if (ValidateWeaponData(span, wid))
+                                        //{
                                             var info = ParseWeaponData(span);
                                             if (info != null)
                                             {
-                                                logger.ZLogInformation($"Found weapon {wid} at 0x{addr:X}");
-                                                LogWeaponResult(info);
-                                                await SetCacheSafe(_weaponCache, wid, info, logger);
+                                                await SetCacheSafe(_weaponCache, wid, info);
                                                 foundWeapons[wid] = info;
                                                 break;
                                             }
-                                        }
+                                        //}
                                     }
                                 }
                             }
@@ -545,18 +543,18 @@ namespace NewGMHack.Stub.MemoryScanner
                                     if (TryReadMemory((IntPtr)addr, buffer, SKILL_BUFFER_SIZE))
                                     {
                                         var span = buffer.AsSpan(0, SKILL_BUFFER_SIZE);
-                                        if (ValidateSkillData(span, sid))
-                                        {
+                                        //if (ValidateSkillData(span, sid))
+                                        //{
                                             var info = ParseSkillData(span);
                                             if (info != null)
                                             {
-                                                logger.ZLogInformation($"Found skill {sid} at 0x{addr:X}");
-                                                LogSkillResult(info);
-                                                await SetCacheSafe(_skillCache, sid, info, logger);
+                                                _logger.LogFoundSkill(sid, addr);
+                                                _logger.LogSkillDebugInfo(info.SkillId, info.SkillName, info.Movement, info.AttackIncrease, info.DefenseIncrease);
+                                                try { await _skillCache.SetAsync(sid, info); } catch (Exception ex) { _logger.LogCacheSkillError(ex, sid); }
                                                 foundSkills[sid] = info;
                                                 break;
                                             }
-                                        }
+                                        //}
                                     }
                                 }
                             }
@@ -619,7 +617,7 @@ namespace NewGMHack.Stub.MemoryScanner
 
             var batchInput = missingIds.Select(id => (BuildSkillPattern(id), (string?)null, (int)id)).ToList();
             
-            logger.ZLogInformation($"ScanSkills Batch: {missingIds.Count} items");
+            _logger.LogScanSkillsBatch(missingIds.Count);
             var scanResults = await _scanner.ScanBatchAsync(process, batchInput, token);
 
             // 3. Process & Cache
@@ -637,17 +635,17 @@ namespace NewGMHack.Stub.MemoryScanner
                             if (TryReadMemory((IntPtr)addr, buffer, SKILL_BUFFER_SIZE))
                             {
                                 var span = buffer.AsSpan(0, SKILL_BUFFER_SIZE);
-                                if (ValidateSkillData(span, id))
-                                {
+                                //if (ValidateSkillData(span, id))
+                                //{
                                     var info = ParseSkillData(span);
                                     if (info != null)
                                     {
-                                        logger.ZLogInformation($"Found skill {id} at 0x{addr:X}");
-                                        await SetCacheSafe(_skillCache, id, info, logger);
+                                        _logger.LogFoundSkill(id, addr);
+                                        await SetCacheSafe(_skillCache, id, info);
                                         results.Add(info);
                                         break; 
                                     }
-                                }
+                                //}
                             }
                         }
                     }
@@ -693,7 +691,7 @@ namespace NewGMHack.Stub.MemoryScanner
 
             var batchInput = missingIds.Select(id => (BuildWeaponPattern(id), (string?)null, (int)id)).ToList();
             
-            logger.ZLogInformation($"ScanWeapons Batch: {missingIds.Count} items");
+            _logger.LogScanWeaponsBatch(missingIds.Count);
             var scanResults = await _scanner.ScanBatchAsync(process, batchInput, token);
 
             // 3. Process & Cache
@@ -711,17 +709,17 @@ namespace NewGMHack.Stub.MemoryScanner
                             if (TryReadMemory((IntPtr)addr, buffer, WEAPON_BUFFER_SIZE))
                             {
                                 var span = buffer.AsSpan(0, WEAPON_BUFFER_SIZE);
-                                if (ValidateWeaponData(span, id))
-                                {
+                                //if (ValidateWeaponData(span, id))
+                                //{
                                     var info = ParseWeaponData(span);
                                     if (info != null)
                                     {
-                                        logger.ZLogInformation($"Found weapon {id} at 0x{addr:X}");
-                                        await SetCacheSafe(_weaponCache, id, info, logger);
+                                        _logger.LogFoundWeapon(id, addr);
+                                        await SetCacheSafe(_weaponCache, id, info);
                                         results.Add(info);
                                         break; 
                                     }
-                                }
+                                //}
                             }
                         }
                     }
@@ -771,7 +769,7 @@ namespace NewGMHack.Stub.MemoryScanner
                 return (pattern, mask, (int)id);
             }).ToList();
             
-            logger.ZLogInformation($"ScanMachines Batch: {missingIds.Count} items");
+            _logger.LogScanMachinesBatch(missingIds.Count);
             var scanResults = await _scanner.ScanBatchAsync(process, batchInput, token);
 
             // 3. Process & Cache
@@ -789,18 +787,18 @@ namespace NewGMHack.Stub.MemoryScanner
                             if (TryReadMemory((IntPtr)addr, buffer, MACHINE_BUFFER_SIZE))
                             {
                                 var span = buffer.AsSpan(0, MACHINE_BUFFER_SIZE);
-                                if (ValidateMachineData(span, id))
-                                {
+                                //if (ValidateMachineData(span, id))
+                                //{
                                     var info = ParseMachineData(span);
                                     if (info != null)
                                     {
-                                        logger.ZLogInformation($"Found machine {id} at 0x{addr:X}");
-                                        LogMachineResult(info);
-                                        await SetCacheSafe(_machineCache, id, info, logger);
+                                        _logger.LogFoundMachine(id, addr);
+                                        _logger.LogMachineDebugInfo(info.MachineId, info.MdrsFilePath, info.ChineseName, info.EnglishName, info.Rank, info.HP, info.CombatType, info.SkillID1, info.SkillID2);
+                                        try { await _machineCache.SetAsync(id, info); } catch (Exception ex) { _logger.LogCacheMachineError(ex, id); }
                                         results.Add(info);
                                         break; 
                                     }
-                                }
+                                //}
                             }
                         }
                     }
@@ -813,20 +811,6 @@ namespace NewGMHack.Stub.MemoryScanner
 
             return results;
         }
-
-        private static async Task SetCacheSafe<T>(IEntityCache<T> cache, uint id, T info, ILogger logger) where T : class
-        {
-            try
-            {
-                await cache.SetAsync(id, info);
-            }
-            catch (Exception ex)
-            {
-                logger.ZLogError(ex, $"Failed to cache {typeof(T).Name} {id}");
-            }
-        }
-
-
 
         #endregion
 
@@ -842,14 +826,14 @@ namespace NewGMHack.Stub.MemoryScanner
             string                               typeName,
             CancellationToken                    token) where T : class
         {
-            logger.ZLogInformation($"Scan{typeName} Input: {id}");
+            _logger.LogScanGenericInput(typeName, id);
             try
             {
                 string processName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ=="));
                 var    process     = Process.GetProcessesByName(processName).FirstOrDefault();
                 if (process == null)
                 {
-                    logger.ZLogInformation($"Process not found");
+                    _logger.LogScanGenericProcessNotFound();
                     return null;
                 }
 
@@ -859,11 +843,11 @@ namespace NewGMHack.Stub.MemoryScanner
                 var addresses = await _scanner.ScanAsync(process, pattern, mask, token);
                 
                 sw.Stop();
-                logger.ZLogInformation($"Scan{typeName} found {addresses.Count} addresses in {sw.ElapsedMilliseconds}ms");
+                _logger.LogScanGenericFoundAddresses(typeName, addresses.Count, sw.ElapsedMilliseconds);
 
                 if (addresses.Count == 0)
                 {
-                    logger.ZLogInformation($"Not found {typeName.ToLower()}:{id}");
+                    _logger.LogScanGenericNotFound(typeName.ToLower(), id);
                     return null;
                 }
 
@@ -884,7 +868,7 @@ namespace NewGMHack.Stub.MemoryScanner
                         var result = parseData(span);
                         if (result == null) continue;
 
-                        logger.ZLogInformation($"Found {typeName.ToLower()} at addr:0x{address:X}");
+                        _logger.LogScanGenericFoundAtAddress(typeName.ToLower(), address);
                         return result;
                     }
                 }
@@ -897,7 +881,7 @@ namespace NewGMHack.Stub.MemoryScanner
             }
             catch (Exception ex)
             {
-                logger.ZLogInformation($"Scan{typeName} Error: {ex.Message}");
+                _logger.LogScanGenericError(typeName, ex.Message);
                 return null;
             }
         }
@@ -906,26 +890,26 @@ namespace NewGMHack.Stub.MemoryScanner
 
         #region Validation Functions
 
-        private static bool ValidateMachineData(ReadOnlySpan<byte> data, uint expectedId)
-        {
-            var raw = MemoryMarshal.Read<MachineBaseInfoStruct>(data);
-            if (raw.MachineId != expectedId) return false;
-            return true;
-        }
+        //private static bool ValidateMachineData(ReadOnlySpan<byte> data, uint expectedId)
+        //{
+        //    var raw = MemoryMarshal.Read<MachineBaseInfoStruct>(data);
+        //    if (raw.MachineId != expectedId) return false;
+        //    return true;
+        //}
 
-        private static bool ValidateSkillData(ReadOnlySpan<byte> data, uint expectedId)
-        {
-            var raw = MemoryMarshal.Read<SkillBaseInfoStruct>(data);
-            if ((raw.SkillId & 0x00FFFFFF) != (expectedId & 0x00FFFFFF)) return false;
-            return true;
-        }
+        //private static bool ValidateSkillData(ReadOnlySpan<byte> data, uint expectedId)
+        //{
+        //    var raw = MemoryMarshal.Read<SkillBaseInfoStruct>(data);
+        //    if ((raw.SkillId & 0x00FFFFFF) != (expectedId & 0x00FFFFFF)) return false;
+        //    return true;
+        //}
 
-        private static bool ValidateWeaponData(ReadOnlySpan<byte> data, uint expectedId)
-        {
-            var raw = MemoryMarshal.Read<WeaponBaseInfoStruct>(data);
-            if ((raw.WeaponId & 0x0000FFFF) != (expectedId & 0x0000FFFF)) return false;
-            return true;
-        }
+        //private static bool ValidateWeaponData(ReadOnlySpan<byte> data, uint expectedId)
+        //{
+        //    var raw = MemoryMarshal.Read<WeaponBaseInfoStruct>(data);
+        //    if ((raw.WeaponId & 0x0000FFFF) != (expectedId & 0x0000FFFF)) return false;
+        //    return true;
+        //}
 
         #endregion
 
@@ -986,24 +970,18 @@ namespace NewGMHack.Stub.MemoryScanner
 
         #region Logging Functions
         
-        private void LogMachineResult(MachineBaseInfo info)
-        {
-            logger.ZLogInformation($"[Machine] ID:{info.MachineId} {info.MdrsFilePath}  Name:{info.ChineseName}/{info.EnglishName} " +
-                $"Rank:{info.Rank} HP:{info.HP} Combat:{info.CombatType} Skills:{info.SkillID1},{info.SkillID2}");
-        }
-
-        private void LogSkillResult(SkillBaseInfo info)
-        {
-            logger.ZLogInformation($"[Skill] ID:{info.SkillId} Name:{info.SkillName} " +
-                $"Movement:{info.Movement} Atk:{info.AttackIncrease} Def:{info.DefenseIncrease}");
-        }
-
-        private void LogWeaponResult(WeaponBaseInfo info)
-        {
-            logger.ZLogInformation($"[Weapon] ID:{info.WeaponId} Name:{info.WeaponName} " +
-                $"Type:{info.WeaponType} Dmg:{info.WeaponDamage} Range:{info.WeaponRange} Ammo:{info.AmmoCount}");
-        }
         
+   private static async Task SetCacheSafe<T>(IEntityCache<T> cache, uint id, T info) where T : class
+   {
+       try
+       {
+           await cache.SetAsync(id, info);
+       }
+       catch (Exception ex)
+       {
+       }
+   }
+
         #endregion
 
         #region Pattern Builders
