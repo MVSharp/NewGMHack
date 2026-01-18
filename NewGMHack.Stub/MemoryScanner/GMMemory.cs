@@ -83,14 +83,11 @@ namespace NewGMHack.Stub.MemoryScanner
             if (id == 0) return null;
             
             // Check cache with TTL
-            if (await _machineCache.IsValidAsync(id, CacheTTL))
+            var cached = await _machineCache.GetIfValidAsync(id, CacheTTL);
+            if (cached != null)
             {
-                var cached = await _machineCache.GetAsync(id);
-                if (cached != null)
-                {
-                    //logger.LogScanMachineCacheHit(id);
-                    return cached;
-                }
+                //logger.LogScanMachineCacheHit(id);
+                return cached;
             }
 
             var (pattern, mask) = BuildMachinePattern(id);
@@ -125,14 +122,11 @@ namespace NewGMHack.Stub.MemoryScanner
             if (skillId == 0) return null;
             
             // Check cache with TTL
-            if (await _skillCache.IsValidAsync(skillId, CacheTTL))
+            var cached = await _skillCache.GetIfValidAsync(skillId, CacheTTL);
+            if (cached != null)
             {
-                var cached = await _skillCache.GetAsync(skillId);
-                if (cached != null)
-                {
-                    _logger.LogScanSkillCacheHit(skillId);
-                    return cached;
-                }
+                _logger.LogScanSkillCacheHit(skillId);
+                return cached;
             }
 
             var result = await ScanGeneric(
@@ -166,14 +160,11 @@ namespace NewGMHack.Stub.MemoryScanner
             if (weaponId == 0) return null;
             
             // Check cache with TTL
-            if (await _weaponCache.IsValidAsync(weaponId, CacheTTL))
+            var cached = await _weaponCache.GetIfValidAsync(weaponId, CacheTTL);
+            if (cached != null)
             {
-                var cached = await _weaponCache.GetAsync(weaponId);
-                if (cached != null)
-                {
-                    _logger.LogScanWeaponCacheHit(weaponId);
-                    return cached;
-                }
+                _logger.LogScanWeaponCacheHit(weaponId);
+                return cached;
             }
 
             var result = await ScanGeneric(
@@ -241,39 +232,17 @@ namespace NewGMHack.Stub.MemoryScanner
             if (allSkillIds.Count == 0 && allWeaponIds.Count == 0) return machineInfo;
 
             // 4. Check Caches & Identify Missing
-            var missingSkillIds = new List<uint>();
             var foundSkills = new Dictionary<uint, SkillBaseInfo>();
 
-            foreach (var sid in allSkillIds)
-            {
-                if (await _skillCache.IsValidAsync(sid, CacheTTL))
-                {
-                    var cached = await _skillCache.GetAsync(sid);
-                    if (cached != null)
-                    {
-                        foundSkills[sid] = cached;
-                        continue;
-                    }
-                }
-                missingSkillIds.Add(sid);
-            }
+            var validSkills = await _skillCache.GetManyIfValidAsync(allSkillIds, CacheTTL);
+            foreach (var kvp in validSkills) foundSkills[kvp.Key] = kvp.Value;
+            var missingSkillIds = allSkillIds.Where(id => !validSkills.ContainsKey(id)).ToList();
 
-            var missingWeaponIds = new List<uint>();
             var foundWeapons = new Dictionary<uint, WeaponBaseInfo>();
 
-            foreach (var wid in allWeaponIds)
-            {
-                if (await _weaponCache.IsValidAsync(wid, CacheTTL))
-                {
-                    var cached = await _weaponCache.GetAsync(wid);
-                    if (cached != null)
-                    {
-                        foundWeapons[wid] = cached;
-                        continue;
-                    }
-                }
-                missingWeaponIds.Add(wid);
-            }
+            var validWeapons = await _weaponCache.GetManyIfValidAsync(allWeaponIds, CacheTTL);
+            foreach (var kvp in validWeapons) foundWeapons[kvp.Key] = kvp.Value;
+            var missingWeaponIds = allWeaponIds.Where(id => !validWeapons.ContainsKey(id)).ToList();
 
             // 5. Single Batch Scan for Missing Items
             if (missingSkillIds.Count > 0 || missingWeaponIds.Count > 0)
@@ -308,6 +277,7 @@ namespace NewGMHack.Stub.MemoryScanner
                     try
                     {
                         // Process Found Weapons
+                        var newWeapons = new Dictionary<uint, WeaponBaseInfo>();
                         foreach (var wid in missingWeaponIds)
                         {
                             if (scanResults.TryGetValue((int)wid, out var addresses))
@@ -324,7 +294,7 @@ namespace NewGMHack.Stub.MemoryScanner
                                             {
                                                 _logger.LogFoundWeapon(wid, addr);
                                                 _logger.LogWeaponDebugInfo(info.WeaponId, info.WeaponName, info.WeaponType, info.WeaponDamage, info.WeaponRange, info.AmmoCount);
-                                                try { await _weaponCache.SetAsync(wid, info); } catch (Exception ex) { _logger.LogCacheWeaponError(ex, wid); }
+                                                newWeapons[wid] = info;
                                                 foundWeapons[wid] = info;
                                                 break; 
                                             }
@@ -333,8 +303,13 @@ namespace NewGMHack.Stub.MemoryScanner
                                 }
                             }
                         }
+                        if (newWeapons.Count > 0)
+                        {
+                            await _weaponCache.SetManyAsync(newWeapons);
+                        }
 
                         // Process Found Skills
+                        var newSkills = new Dictionary<uint, SkillBaseInfo>();
                         foreach (var sid in missingSkillIds)
                         {
                             if (scanResults.TryGetValue((int)sid + SKILL_OFFSET, out var addresses))
@@ -350,7 +325,7 @@ namespace NewGMHack.Stub.MemoryScanner
                                             if (info != null)
                                             {
                                                 _logger.LogFoundSkill(sid, addr);
-                                                await SetCacheSafe(_skillCache, sid, info);
+                                                newSkills[sid] = info;
                                                 foundSkills[sid] = info;
                                                 break;
                                             }
@@ -358,6 +333,10 @@ namespace NewGMHack.Stub.MemoryScanner
                                     }
                                 }
                             }
+                        }
+                        if (newSkills.Count > 0)
+                        {
+                            await _skillCache.SetManyAsync(newSkills);
                         }
                     }
                     finally
@@ -442,39 +421,17 @@ namespace NewGMHack.Stub.MemoryScanner
             if (allSkillIds.Count == 0 && allWeaponIds.Count == 0) return machines;
 
             // 4. Check Caches & Identify Missing
-            var missingSkillIds = new List<uint>();
             var foundSkills = new Dictionary<uint, SkillBaseInfo>();
 
-            foreach (var sid in allSkillIds)
-            {
-                if (await _skillCache.IsValidAsync(sid, CacheTTL))
-                {
-                    var cached = await _skillCache.GetAsync(sid);
-                    if (cached != null)
-                    {
-                        foundSkills[sid] = cached;
-                        continue;
-                    }
-                }
-                missingSkillIds.Add(sid);
-            }
+            var validSkills = await _skillCache.GetManyIfValidAsync(allSkillIds, CacheTTL);
+            foreach (var kvp in validSkills) foundSkills[kvp.Key] = kvp.Value;
+            var missingSkillIds = allSkillIds.Where(id => !validSkills.ContainsKey(id)).ToList();
 
-            var missingWeaponIds = new List<uint>();
             var foundWeapons = new Dictionary<uint, WeaponBaseInfo>();
 
-            foreach (var wid in allWeaponIds)
-            {
-                if (await _weaponCache.IsValidAsync(wid, CacheTTL))
-                {
-                    var cached = await _weaponCache.GetAsync(wid);
-                    if (cached != null)
-                    {
-                        foundWeapons[wid] = cached;
-                        continue;
-                    }
-                }
-                missingWeaponIds.Add(wid);
-            }
+            var validWeapons = await _weaponCache.GetManyIfValidAsync(allWeaponIds, CacheTTL);
+            foreach (var kvp in validWeapons) foundWeapons[kvp.Key] = kvp.Value;
+            var missingWeaponIds = allWeaponIds.Where(id => !validWeapons.ContainsKey(id)).ToList();
 
             // 5. Single Batch Scan for Missing Items
             if (missingSkillIds.Count > 0 || missingWeaponIds.Count > 0)
@@ -509,6 +466,7 @@ namespace NewGMHack.Stub.MemoryScanner
                     try
                     {
                         // Process Found Weapons
+                        var newWeapons = new Dictionary<uint, WeaponBaseInfo>();
                         foreach (var wid in missingWeaponIds)
                         {
                             if (scanResults.TryGetValue((int)wid, out var addresses))
@@ -523,17 +481,23 @@ namespace NewGMHack.Stub.MemoryScanner
                                             var info = ParseWeaponData(span);
                                             if (info != null)
                                             {
-                                                await SetCacheSafe(_weaponCache, wid, info);
+
+                                                newWeapons[wid] = info;
                                                 foundWeapons[wid] = info;
-                                                break;
+                                                break; 
                                             }
                                         //}
                                     }
                                 }
                             }
                         }
-
+                        if (newWeapons.Count > 0)
+                        {
+                            await _weaponCache.SetManyAsync(newWeapons);
+                        }
+ 
                         // Process Found Skills
+                        var newSkills = new Dictionary<uint, SkillBaseInfo>();
                         foreach (var sid in missingSkillIds)
                         {
                             if (scanResults.TryGetValue((int)sid + SKILL_OFFSET, out var addresses))
@@ -550,7 +514,8 @@ namespace NewGMHack.Stub.MemoryScanner
                                             {
                                                 _logger.LogFoundSkill(sid, addr);
                                                 _logger.LogSkillDebugInfo(info.SkillId, info.SkillName, info.Movement, info.AttackIncrease, info.DefenseIncrease);
-                                                try { await _skillCache.SetAsync(sid, info); } catch (Exception ex) { _logger.LogCacheSkillError(ex, sid); }
+
+                                                newSkills[sid] = info;
                                                 foundSkills[sid] = info;
                                                 break;
                                             }
@@ -558,6 +523,10 @@ namespace NewGMHack.Stub.MemoryScanner
                                     }
                                 }
                             }
+                        }
+                        if (newSkills.Count > 0)
+                        {
+                            await _skillCache.SetManyAsync(newSkills);
                         }
                     }
                     finally
@@ -594,19 +563,10 @@ namespace NewGMHack.Stub.MemoryScanner
             if (distinctIds.Count == 0) return results;
 
             // 1. Check Cache
-            foreach (var id in distinctIds)
-            {
-                if (await _skillCache.IsValidAsync(id, CacheTTL))
-                {
-                    var cached = await _skillCache.GetAsync(id);
-                    if (cached != null)
-                    {
-                        results.Add(cached);
-                        continue;
-                    }
-                }
-                missingIds.Add(id);
-            }
+            var cachedSkills = await _skillCache.GetManyIfValidAsync(distinctIds, CacheTTL);
+            results.AddRange(cachedSkills.Values);
+            
+            missingIds.AddRange(distinctIds.Where(id => !cachedSkills.ContainsKey(id)));
 
             if (missingIds.Count == 0) return results;
 
@@ -623,6 +583,7 @@ namespace NewGMHack.Stub.MemoryScanner
             // 3. Process & Cache
             var bufferPool = ArrayPool<byte>.Shared;
             byte[] buffer = bufferPool.Rent(SKILL_BUFFER_SIZE);
+            var newItems = new Dictionary<uint, SkillBaseInfo>();
 
             try
             {
@@ -641,7 +602,7 @@ namespace NewGMHack.Stub.MemoryScanner
                                     if (info != null)
                                     {
                                         _logger.LogFoundSkill(id, addr);
-                                        await SetCacheSafe(_skillCache, id, info);
+                                        newItems[id] = info;
                                         results.Add(info);
                                         break; 
                                     }
@@ -649,6 +610,11 @@ namespace NewGMHack.Stub.MemoryScanner
                             }
                         }
                     }
+                }
+
+                if (newItems.Count > 0)
+                {
+                    await _skillCache.SetManyAsync(newItems);
                 }
             }
             finally
@@ -668,19 +634,10 @@ namespace NewGMHack.Stub.MemoryScanner
             if (distinctIds.Count == 0) return results;
 
             // 1. Check Cache
-            foreach (var id in distinctIds)
-            {
-                if (await _weaponCache.IsValidAsync(id, CacheTTL))
-                {
-                    var cached = await _weaponCache.GetAsync(id);
-                    if (cached != null)
-                    {
-                        results.Add(cached);
-                        continue;
-                    }
-                }
-                missingIds.Add(id);
-            }
+            var cachedWeapons = await _weaponCache.GetManyIfValidAsync(distinctIds, CacheTTL);
+            results.AddRange(cachedWeapons.Values);
+            
+            missingIds.AddRange(distinctIds.Where(id => !cachedWeapons.ContainsKey(id)));
 
             if (missingIds.Count == 0) return results;
 
@@ -697,6 +654,7 @@ namespace NewGMHack.Stub.MemoryScanner
             // 3. Process & Cache
             var bufferPool = ArrayPool<byte>.Shared;
             byte[] buffer = bufferPool.Rent(WEAPON_BUFFER_SIZE);
+            var newItems = new Dictionary<uint, WeaponBaseInfo>();
 
             try
             {
@@ -715,7 +673,7 @@ namespace NewGMHack.Stub.MemoryScanner
                                     if (info != null)
                                     {
                                         _logger.LogFoundWeapon(id, addr);
-                                        await SetCacheSafe(_weaponCache, id, info);
+                                        newItems[id] = info;
                                         results.Add(info);
                                         break; 
                                     }
@@ -723,6 +681,11 @@ namespace NewGMHack.Stub.MemoryScanner
                             }
                         }
                     }
+                }
+
+                if (newItems.Count > 0)
+                {
+                    await _weaponCache.SetManyAsync(newItems);
                 }
             }
             finally

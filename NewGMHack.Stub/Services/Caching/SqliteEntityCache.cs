@@ -142,6 +142,95 @@ public class SqliteEntityCache<T> : IEntityCache<T> where T : class
         }
     }
 
+    public async Task<T?> GetIfValidAsync(uint id, TimeSpan maxAge)
+    {
+        try
+        {
+            await EnsureInitializedAsync();
+            var minDate = DateTime.UtcNow.Subtract(maxAge).ToString("O");
+
+            await using var conn = new SqliteConnection(_connectionString);
+            var data = await conn.QueryFirstOrDefaultAsync<byte[]>(
+                $"SELECT Data FROM {_tableName} WHERE Id = @Id AND LastUpdatedAt > @MinDate",
+                new { Id = (long)id, MinDate = minDate });
+
+            if (data == null) return null;
+            return MessagePackSerializer.Deserialize<T>(data);
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, $"Error reading valid entity from cache table '{_tableName}' for Id={id}");
+            return null;
+        }
+    }
+
+    public async Task<IDictionary<uint, T>> GetManyIfValidAsync(IEnumerable<uint> ids, TimeSpan maxAge)
+    {
+        var result = new Dictionary<uint, T>();
+        try
+        {
+            await EnsureInitializedAsync();
+            var idList = ids.Select(id => (long)id).ToList();
+            if (idList.Count == 0) return result;
+
+            var minDate = DateTime.UtcNow.Subtract(maxAge).ToString("O");
+
+            await using var conn = new SqliteConnection(_connectionString);
+            
+            // Dapper handles "WHERE IN" automatically with list parameters
+            var rows = await conn.QueryAsync<CacheRow>(
+                $"SELECT Id, Data FROM {_tableName} WHERE Id IN @Ids AND LastUpdatedAt > @MinDate",
+                new { Ids = idList, MinDate = minDate });
+
+            foreach (var row in rows)
+            {
+                try
+                {
+                    result[(uint)row.Id] = MessagePackSerializer.Deserialize<T>(row.Data);
+                }
+                catch { /* Ignore deserialization errors for individual items */ }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, $"Error batch reading from cache table '{_tableName}'");
+        }
+        return result;
+    }
+
+    public async Task SetManyAsync(IDictionary<uint, T> entities)
+    {
+        if (entities.Count == 0) return;
+        
+        try
+        {
+            await EnsureInitializedAsync();
+            var now = DateTime.UtcNow.ToString("O");
+
+            await using var conn = new SqliteConnection(_connectionString);
+            await conn.OpenAsync();
+            using var transaction = conn.BeginTransaction();
+
+            var insertSql = $@"INSERT OR REPLACE INTO {_tableName} (Id, Data, LastUpdatedAt) 
+                               VALUES (@Id, @Data, @LastUpdatedAt)";
+
+            foreach (var kvp in entities)
+            {
+                var data = MessagePackSerializer.Serialize(kvp.Value);
+                await conn.ExecuteAsync(insertSql, 
+                    new { Id = (long)kvp.Key, Data = data, LastUpdatedAt = now }, 
+                    transaction);
+            }
+
+            transaction.Commit();
+            _logger.ZLogInformation($"Batch cached {entities.Count} {typeof(T).Name} items to SQLite");
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, $"Error batch writing to cache table '{_tableName}'");
+        }
+    }
+
     private class CacheRow
     {
         public long Id { get; set; }

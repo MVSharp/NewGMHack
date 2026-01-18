@@ -28,4 +28,19 @@ public interface IEntityCache<T> where T : class
     /// Clear all cached entries.
     /// </summary>
     void Clear();
+
+    /// <summary>
+    /// Get entity if it exists and is valid in a single operation.
+    /// </summary>
+    Task<T?> GetIfValidAsync(uint id, TimeSpan maxAge);
+
+    /// <summary>
+    /// Batch retrieve valid entities.
+    /// </summary>
+    Task<IDictionary<uint, T>> GetManyIfValidAsync(IEnumerable<uint> ids, TimeSpan maxAge);
+
+    /// <summary>
+    /// Batch store entities.
+    /// </summary>
+    Task SetManyAsync(IDictionary<uint, T> entities);
 }
