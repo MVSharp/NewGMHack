@@ -15,7 +15,7 @@
 -- ============================================================================
 local CONFIG = {
     -- Base offset from module base
-    BaseOffset = 0x012DF06C,
+    BaseOffset = 0x012E606C,
 
     -- Pointer chain offsets to reach entity list
     PointerChainOffsets = {0x40, 0x0, 0x8},
