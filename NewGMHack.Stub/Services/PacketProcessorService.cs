@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Channels;
 using ByteStream.Mananged;
@@ -154,6 +155,9 @@ public partial class PacketProcessorService : BackgroundService
         ////_logger.ZLogInformation($"method: {method}");
         switch (method)
         {
+            case 2604:
+                await ReadSlotInfo(methodPacket.MethodBody);
+                break;
             case 2201:
                 await ReadCacheMachineGrids(methodPacket.MethodBody,token);
                 break;
@@ -363,6 +367,13 @@ public partial class PacketProcessorService : BackgroundService
         }
     }
 
+    private async Task ReadSlotInfo(ReadOnlyMemory<byte> byes)
+    {
+        var slotInfo = MemoryMarshal.Read<SlotInfoRev>(byes.Span);
+        var machine  = slotInfo.Machine;
+        _logger.ZLogInformation($"machine:{machine.MachineId} slot:{machine.Slot} exp:{machine.CurrentExp} battery: {machine.Battery}");
+    }
+
     private async Task ReadCacheMachineGrids(ReadOnlyMemory<byte> methodPacketMethodBody,CancellationToken token)
     {
         var header = methodPacketMethodBody.Span.ReadStruct<MachineGridHeader>();
@@ -546,7 +557,7 @@ public partial class PacketProcessorService : BackgroundService
 
                 // 2. Batch Scan Transforms
                 // Filter out IDs we just scanned to avoid duplicates (though cache handles it, this saves logic in ScanMachines)
-                var transIds = loadedMachines
+                var transIds = loadedMachines.AsValueEnumerable()
                               .Where(m => m.HasTransform && m.TransformId != 0 &&
                                           !distinctMachineIds.Contains(m.TransformId))
                               .Select(m => m.TransformId)

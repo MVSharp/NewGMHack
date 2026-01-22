@@ -17,6 +17,7 @@ using NewGMHack.CommunicationModel.Models;
 using NewGMHack.Stub.Services.Scanning;
 using NewGMHack.Stub.Services.Caching;
 using NewGMHack.Stub.Services.Loggers;
+using ZLinq;
 
 namespace NewGMHack.Stub.MemoryScanner
 {
@@ -231,120 +232,8 @@ namespace NewGMHack.Stub.MemoryScanner
 
             if (allSkillIds.Count == 0 && allWeaponIds.Count == 0) return machineInfo;
 
-            // 4. Check Caches & Identify Missing
-            var foundSkills = new Dictionary<uint, SkillBaseInfo>();
-
-            var validSkills = await _skillCache.GetManyIfValidAsync(allSkillIds, CacheTTL);
-            foreach (var kvp in validSkills) foundSkills[kvp.Key] = kvp.Value;
-            var missingSkillIds = allSkillIds.Where(id => !validSkills.ContainsKey(id)).ToList();
-
-            var foundWeapons = new Dictionary<uint, WeaponBaseInfo>();
-
-            var validWeapons = await _weaponCache.GetManyIfValidAsync(allWeaponIds, CacheTTL);
-            foreach (var kvp in validWeapons) foundWeapons[kvp.Key] = kvp.Value;
-            var missingWeaponIds = allWeaponIds.Where(id => !validWeapons.ContainsKey(id)).ToList();
-
-            // 5. Single Batch Scan for Missing Items
-            if (missingSkillIds.Count > 0 || missingWeaponIds.Count > 0)
-            {
-                string processName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ=="));
-                var process = Process.GetProcessesByName(processName).FirstOrDefault();
-
-                if (process != null)
-                {
-                    var batchInput = new List<(byte[], string, int)>();
-
-                    // Add Weapons
-                    foreach (var wid in missingWeaponIds)
-                    {
-                        batchInput.Add((BuildWeaponPattern(wid), null, (int)wid));
-                    }
-                    // Add Skills (Offset IDs by 1,000,000 to avoid collision)
-                    const int SKILL_OFFSET = 1000000;
-                    foreach (var sid in missingSkillIds)
-                    {
-                        batchInput.Add((BuildSkillPattern(sid), null, (int)sid + SKILL_OFFSET));
-                    }
-
-                    _logger.LogScanMachineWithDetailsBatch(missingWeaponIds.Count, missingSkillIds.Count);
-                    var scanResults = await _scanner.ScanBatchAsync(process, batchInput, token);
-
-                    // Process Results
-                    var bufferPool = ArrayPool<byte>.Shared;
-                    int maxStructSize = Math.Max(WEAPON_BUFFER_SIZE, SKILL_BUFFER_SIZE);
-                    byte[] buffer = bufferPool.Rent(maxStructSize);
-
-                    try
-                    {
-                        // Process Found Weapons
-                        var newWeapons = new Dictionary<uint, WeaponBaseInfo>();
-                        foreach (var wid in missingWeaponIds)
-                        {
-                            if (scanResults.TryGetValue((int)wid, out var addresses))
-                            {
-                                foreach (var addr in addresses)
-                                {
-                                    if (TryReadMemory((IntPtr)addr, buffer, WEAPON_BUFFER_SIZE))
-                                    {
-                                        var span = buffer.AsSpan(0, WEAPON_BUFFER_SIZE);
-                                        //if (ValidateWeaponData(span, wid))
-                                        //{
-                                            var info = ParseWeaponData(span);
-                                            if (info != null)
-                                            {
-                                                _logger.LogFoundWeapon(wid, addr);
-                                                _logger.LogWeaponDebugInfo(info.WeaponId, info.WeaponName, info.WeaponType, info.WeaponDamage, info.WeaponRange, info.AmmoCount);
-                                                newWeapons[wid] = info;
-                                                foundWeapons[wid] = info;
-                                                break; 
-                                            }
-                                        //}
-                                    }
-                                }
-                            }
-                        }
-                        if (newWeapons.Count > 0)
-                        {
-                            await _weaponCache.SetManyAsync(newWeapons);
-                        }
-
-                        // Process Found Skills
-                        var newSkills = new Dictionary<uint, SkillBaseInfo>();
-                        foreach (var sid in missingSkillIds)
-                        {
-                            if (scanResults.TryGetValue((int)sid + SKILL_OFFSET, out var addresses))
-                            {
-                                foreach (var addr in addresses)
-                                {
-                                    if (TryReadMemory((IntPtr)addr, buffer, SKILL_BUFFER_SIZE))
-                                    {
-                                        var span = buffer.AsSpan(0, SKILL_BUFFER_SIZE);
-                                        //if (ValidateSkillData(span, sid))
-                                        //{
-                                            var info = ParseSkillData(span);
-                                            if (info != null)
-                                            {
-                                                _logger.LogFoundSkill(sid, addr);
-                                                newSkills[sid] = info;
-                                                foundSkills[sid] = info;
-                                                break;
-                                            }
-                                        //}
-                                    }
-                                }
-                            }
-                        }
-                        if (newSkills.Count > 0)
-                        {
-                            await _skillCache.SetManyAsync(newSkills);
-                        }
-                    }
-                    finally
-                    {
-                        bufferPool.Return(buffer);
-                    }
-                }
-            }
+            // 4. Scan Details
+            var (foundSkills, foundWeapons) = await ScanDetails(allSkillIds, allWeaponIds, token);
 
             // 6. Assign All Details to Objects
             void AssignDetails(MachineBaseInfo info)
@@ -370,7 +259,7 @@ namespace NewGMHack.Stub.MemoryScanner
         public async Task<List<MachineBaseInfo>> ScanMachinesWithDetails(IEnumerable<uint> ids, CancellationToken token)
         {
             // 1. Batch Scan Base Machines
-            var distinctIds = ids.Where(id => id > 0).Distinct().ToList();
+            var distinctIds = ids.AsValueEnumerable().Where(id => id > 0).Distinct().ToList();
             if (distinctIds.Count == 0) return new List<MachineBaseInfo>();
 
             var machines = await ScanMachines(distinctIds, token);
@@ -378,6 +267,7 @@ namespace NewGMHack.Stub.MemoryScanner
 
             // 2. Scan Transforms
             var transformIds = machines
+                .AsValueEnumerable()
                 .Where(m => m.HasTransform && m.TransformId != 0 && m.TransformId != m.MachineId)
                 .Select(m => m.TransformId)
                 .Distinct()
@@ -420,121 +310,8 @@ namespace NewGMHack.Stub.MemoryScanner
 
             if (allSkillIds.Count == 0 && allWeaponIds.Count == 0) return machines;
 
-            // 4. Check Caches & Identify Missing
-            var foundSkills = new Dictionary<uint, SkillBaseInfo>();
-
-            var validSkills = await _skillCache.GetManyIfValidAsync(allSkillIds, CacheTTL);
-            foreach (var kvp in validSkills) foundSkills[kvp.Key] = kvp.Value;
-            var missingSkillIds = allSkillIds.Where(id => !validSkills.ContainsKey(id)).ToList();
-
-            var foundWeapons = new Dictionary<uint, WeaponBaseInfo>();
-
-            var validWeapons = await _weaponCache.GetManyIfValidAsync(allWeaponIds, CacheTTL);
-            foreach (var kvp in validWeapons) foundWeapons[kvp.Key] = kvp.Value;
-            var missingWeaponIds = allWeaponIds.Where(id => !validWeapons.ContainsKey(id)).ToList();
-
-            // 5. Single Batch Scan for Missing Items
-            if (missingSkillIds.Count > 0 || missingWeaponIds.Count > 0)
-            {
-                string processName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ=="));
-                var process = Process.GetProcessesByName(processName).FirstOrDefault();
-
-                if (process != null)
-                {
-                    var batchInput = new List<(byte[], string, int)>();
-
-                    // Add Weapons
-                    foreach (var wid in missingWeaponIds)
-                    {
-                        batchInput.Add((BuildWeaponPattern(wid), null, (int)wid));
-                    }
-                    // Add Skills (Offset IDs by 1,000,000 to avoid collision)
-                    const int SKILL_OFFSET = 1000000;
-                    foreach (var sid in missingSkillIds)
-                    {
-                        batchInput.Add((BuildSkillPattern(sid), null, (int)sid + SKILL_OFFSET));
-                    }
-
-                    _logger.LogScanMachineWithDetailsBatch(missingWeaponIds.Count, missingSkillIds.Count);
-                    var scanResults = await _scanner.ScanBatchAsync(process, batchInput, token);
-
-                    // Process Results
-                    var bufferPool = ArrayPool<byte>.Shared;
-                    int maxStructSize = Math.Max(WEAPON_BUFFER_SIZE, SKILL_BUFFER_SIZE);
-                    byte[] buffer = bufferPool.Rent(maxStructSize);
-
-                    try
-                    {
-                        // Process Found Weapons
-                        var newWeapons = new Dictionary<uint, WeaponBaseInfo>();
-                        foreach (var wid in missingWeaponIds)
-                        {
-                            if (scanResults.TryGetValue((int)wid, out var addresses))
-                            {
-                                foreach (var addr in addresses)
-                                {
-                                    if (TryReadMemory((IntPtr)addr, buffer, WEAPON_BUFFER_SIZE))
-                                    {
-                                        var span = buffer.AsSpan(0, WEAPON_BUFFER_SIZE);
-                                        //if (ValidateWeaponData(span, wid))
-                                        //{
-                                            var info = ParseWeaponData(span);
-                                            if (info != null)
-                                            {
-
-                                                newWeapons[wid] = info;
-                                                foundWeapons[wid] = info;
-                                                break; 
-                                            }
-                                        //}
-                                    }
-                                }
-                            }
-                        }
-                        if (newWeapons.Count > 0)
-                        {
-                            await _weaponCache.SetManyAsync(newWeapons);
-                        }
- 
-                        // Process Found Skills
-                        var newSkills = new Dictionary<uint, SkillBaseInfo>();
-                        foreach (var sid in missingSkillIds)
-                        {
-                            if (scanResults.TryGetValue((int)sid + SKILL_OFFSET, out var addresses))
-                            {
-                                foreach (var addr in addresses)
-                                {
-                                    if (TryReadMemory((IntPtr)addr, buffer, SKILL_BUFFER_SIZE))
-                                    {
-                                        var span = buffer.AsSpan(0, SKILL_BUFFER_SIZE);
-                                        //if (ValidateSkillData(span, sid))
-                                        //{
-                                            var info = ParseSkillData(span);
-                                            if (info != null)
-                                            {
-                                                _logger.LogFoundSkill(sid, addr);
-                                                _logger.LogSkillDebugInfo(info.SkillId, info.SkillName, info.Movement, info.AttackIncrease, info.DefenseIncrease);
-
-                                                newSkills[sid] = info;
-                                                foundSkills[sid] = info;
-                                                break;
-                                            }
-                                        //}
-                                    }
-                                }
-                            }
-                        }
-                        if (newSkills.Count > 0)
-                        {
-                            await _skillCache.SetManyAsync(newSkills);
-                        }
-                    }
-                    finally
-                    {
-                        bufferPool.Return(buffer);
-                    }
-                }
-            }
+            // 4. Scan Details
+            var (foundSkills, foundWeapons) = await ScanDetails(allSkillIds, allWeaponIds, token);
 
             // 6. Assign All Details to Objects
             void AssignDetails(MachineBaseInfo info)
@@ -556,151 +333,21 @@ namespace NewGMHack.Stub.MemoryScanner
 
         public async Task<List<SkillBaseInfo>> ScanSkills(IEnumerable<uint> skillIds, CancellationToken token)
         {
-            var results = new List<SkillBaseInfo>();
-            var missingIds = new List<uint>();
-            var distinctIds = skillIds.Where(id => id > 0).Distinct().ToList();
-
-            if (distinctIds.Count == 0) return results;
-
-            // 1. Check Cache
-            var cachedSkills = await _skillCache.GetManyIfValidAsync(distinctIds, CacheTTL);
-            results.AddRange(cachedSkills.Values);
-            
-            missingIds.AddRange(distinctIds.Where(id => !cachedSkills.ContainsKey(id)));
-
-            if (missingIds.Count == 0) return results;
-
-            // 2. Scan Missing
-            string processName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ=="));
-            var process = Process.GetProcessesByName(processName).FirstOrDefault();
-            if (process == null) return results;
-
-            var batchInput = missingIds.Select(id => (BuildSkillPattern(id), (string?)null, (int)id)).ToList();
-            
-            _logger.LogScanSkillsBatch(missingIds.Count);
-            var scanResults = await _scanner.ScanBatchAsync(process, batchInput, token);
-
-            // 3. Process & Cache
-            var bufferPool = ArrayPool<byte>.Shared;
-            byte[] buffer = bufferPool.Rent(SKILL_BUFFER_SIZE);
-            var newItems = new Dictionary<uint, SkillBaseInfo>();
-
-            try
-            {
-                foreach (var id in missingIds)
-                {
-                    if (scanResults.TryGetValue((int)id, out var addresses))
-                    {
-                        foreach (var addr in addresses)
-                        {
-                            if (TryReadMemory((IntPtr)addr, buffer, SKILL_BUFFER_SIZE))
-                            {
-                                var span = buffer.AsSpan(0, SKILL_BUFFER_SIZE);
-                                //if (ValidateSkillData(span, id))
-                                //{
-                                    var info = ParseSkillData(span);
-                                    if (info != null)
-                                    {
-                                        _logger.LogFoundSkill(id, addr);
-                                        newItems[id] = info;
-                                        results.Add(info);
-                                        break; 
-                                    }
-                                //}
-                            }
-                        }
-                    }
-                }
-
-                if (newItems.Count > 0)
-                {
-                    await _skillCache.SetManyAsync(newItems);
-                }
-            }
-            finally
-            {
-                bufferPool.Return(buffer);
-            }
-
-            return results;
+            var (foundSkills, _) = await ScanDetails(skillIds, Enumerable.Empty<uint>(), token);
+            return foundSkills.Values.ToList();
         }
 
         public async Task<List<WeaponBaseInfo>> ScanWeapons(IEnumerable<uint> weaponIds, CancellationToken token)
         {
-            var results = new List<WeaponBaseInfo>();
-            var missingIds = new List<uint>();
-            var distinctIds = weaponIds.Where(id => id > 0).Distinct().ToList();
-
-            if (distinctIds.Count == 0) return results;
-
-            // 1. Check Cache
-            var cachedWeapons = await _weaponCache.GetManyIfValidAsync(distinctIds, CacheTTL);
-            results.AddRange(cachedWeapons.Values);
-            
-            missingIds.AddRange(distinctIds.Where(id => !cachedWeapons.ContainsKey(id)));
-
-            if (missingIds.Count == 0) return results;
-
-            // 2. Scan Missing
-            string processName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ=="));
-            var process = Process.GetProcessesByName(processName).FirstOrDefault();
-            if (process == null) return results;
-
-            var batchInput = missingIds.Select(id => (BuildWeaponPattern(id), (string?)null, (int)id)).ToList();
-            
-            _logger.LogScanWeaponsBatch(missingIds.Count);
-            var scanResults = await _scanner.ScanBatchAsync(process, batchInput, token);
-
-            // 3. Process & Cache
-            var bufferPool = ArrayPool<byte>.Shared;
-            byte[] buffer = bufferPool.Rent(WEAPON_BUFFER_SIZE);
-            var newItems = new Dictionary<uint, WeaponBaseInfo>();
-
-            try
-            {
-                foreach (var id in missingIds)
-                {
-                    if (scanResults.TryGetValue((int)id, out var addresses))
-                    {
-                        foreach (var addr in addresses)
-                        {
-                            if (TryReadMemory((IntPtr)addr, buffer, WEAPON_BUFFER_SIZE))
-                            {
-                                var span = buffer.AsSpan(0, WEAPON_BUFFER_SIZE);
-                                //if (ValidateWeaponData(span, id))
-                                //{
-                                    var info = ParseWeaponData(span);
-                                    if (info != null)
-                                    {
-                                        _logger.LogFoundWeapon(id, addr);
-                                        newItems[id] = info;
-                                        results.Add(info);
-                                        break; 
-                                    }
-                                //}
-                            }
-                        }
-                    }
-                }
-
-                if (newItems.Count > 0)
-                {
-                    await _weaponCache.SetManyAsync(newItems);
-                }
-            }
-            finally
-            {
-                bufferPool.Return(buffer);
-            }
-
-            return results;
+            var (_, foundWeapons) = await ScanDetails(Enumerable.Empty<uint>(), weaponIds, token);
+            return foundWeapons.Values.ToList();
         }
 
         public async Task<List<MachineBaseInfo>> ScanMachines(IEnumerable<uint> machineIds, CancellationToken token)
         {
             var results = new List<MachineBaseInfo>();
             var missingIds = new List<uint>();
-            var distinctIds = machineIds.Where(id => id > 0).Distinct().ToList();
+            var distinctIds = machineIds.AsValueEnumerable().Where(id => id > 0).Distinct().ToList();
 
             if (distinctIds.Count == 0) return results;
 
@@ -726,7 +373,7 @@ namespace NewGMHack.Stub.MemoryScanner
             var process = Process.GetProcessesByName(processName).FirstOrDefault();
             if (process == null) return results;
 
-            var batchInput = missingIds.Select(id => 
+            var batchInput = missingIds.AsValueEnumerable().Select(id => 
             {
                 var (pattern, mask) = BuildMachinePattern(id);
                 return (pattern, mask, (int)id);
@@ -773,6 +420,125 @@ namespace NewGMHack.Stub.MemoryScanner
             }
 
             return results;
+        }
+
+        private async Task<(Dictionary<uint, SkillBaseInfo> Skills, Dictionary<uint, WeaponBaseInfo> Weapons)> ScanDetails(
+            IEnumerable<uint> skillIds, 
+            IEnumerable<uint> weaponIds, 
+            CancellationToken token)
+        {
+            var resultSkills = new Dictionary<uint, SkillBaseInfo>();
+            var resultWeapons = new Dictionary<uint, WeaponBaseInfo>();
+
+            // Distinct IDs
+            var distinctSkillIds = skillIds.AsValueEnumerable().Where(id => id > 0).Distinct().ToList();
+            var distinctWeaponIds = weaponIds.AsValueEnumerable().Where(id => id > 0).Distinct().ToList();
+
+            if (distinctSkillIds.Count == 0 && distinctWeaponIds.Count == 0) 
+                return (resultSkills, resultWeapons);
+
+            // 1. Check Caches
+            var validSkills = await _skillCache.GetManyIfValidAsync(distinctSkillIds, CacheTTL);
+            foreach (var kvp in validSkills) resultSkills[kvp.Key] = kvp.Value;
+            var missingSkillIds = distinctSkillIds.AsValueEnumerable().Where(id => !validSkills.ContainsKey(id)).ToList();
+
+            var validWeapons = await _weaponCache.GetManyIfValidAsync(distinctWeaponIds, CacheTTL);
+            foreach (var kvp in validWeapons) resultWeapons[kvp.Key] = kvp.Value;
+            var missingWeaponIds = distinctWeaponIds.AsValueEnumerable().Where(id => !validWeapons.ContainsKey(id)).ToList();
+
+            // 2. Batch Scan Missing
+            if (missingSkillIds.Count > 0 || missingWeaponIds.Count > 0)
+            {
+                string processName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ=="));
+                var process = Process.GetProcessesByName(processName).FirstOrDefault();
+
+                if (process != null)
+                {
+                    var batchInput = missingWeaponIds.AsValueEnumerable().Select(wid => ((byte[], string, int))(BuildWeaponPattern(wid), null, (int)wid)).ToList();
+
+                    // Add Weapons
+
+                    // Add Skills (Offset IDs by 1,000,000 to avoid collision)
+                    const int SKILL_OFFSET = 1000000;
+                    batchInput.AddRange(missingSkillIds.AsValueEnumerable().Select(sid => ((byte[], string, int))(BuildSkillPattern(sid), null, (int)sid + SKILL_OFFSET)).ToList());
+
+                    // Log combined batch
+                    if (missingSkillIds.Count > 0 && missingWeaponIds.Count > 0)
+                        _logger.LogScanMachineWithDetailsBatch(missingWeaponIds.Count, missingSkillIds.Count);
+                    else if (missingSkillIds.Count > 0)
+                         _logger.LogScanSkillsBatch(missingSkillIds.Count);
+                    else
+                         _logger.LogScanWeaponsBatch(missingWeaponIds.Count);
+
+                    var scanResults = await _scanner.ScanBatchAsync(process, batchInput, token);
+
+                    // 3. Process Results
+                    var bufferPool = ArrayPool<byte>.Shared;
+                    int maxStructSize = Math.Max(WEAPON_BUFFER_SIZE, SKILL_BUFFER_SIZE);
+                    byte[] buffer = bufferPool.Rent(maxStructSize);
+
+                    try
+                    {
+                        // Process Missing Weapons
+                        var newWeapons = new Dictionary<uint, WeaponBaseInfo>();
+                        if (missingWeaponIds.Count > 0)
+                        {
+                            foreach (var wid in missingWeaponIds)
+                            {
+                                if (!scanResults.TryGetValue((int)wid, out var addresses)) continue;
+                                foreach (var addr in addresses)
+                                {
+                                    if (!TryReadMemory((IntPtr)addr, buffer, WEAPON_BUFFER_SIZE)) continue;
+                                    var span = buffer.AsSpan(0, WEAPON_BUFFER_SIZE);
+                                    //if (ValidateWeaponData(span, wid))
+                                    //{
+                                    var info = ParseWeaponData(span);
+                                    if (info == null) continue;
+                                    _logger.LogFoundWeapon(wid, addr);
+                                    _logger.LogWeaponDebugInfo(info.WeaponId, info.WeaponName, info.WeaponType, info.WeaponDamage, info.WeaponRange, info.AmmoCount);
+                                    newWeapons[wid]    = info;
+                                    resultWeapons[wid] = info;
+                                    break;
+                                    //}
+                                }
+                            }
+                            if (newWeapons.Count > 0) await _weaponCache.SetManyAsync(newWeapons);
+                        }
+
+                        // Process Missing Skills
+                        var newSkills = new Dictionary<uint, SkillBaseInfo>();
+                        if (missingSkillIds.Count > 0)
+                        {
+                            foreach (var sid in missingSkillIds)
+                            {
+                                if (!scanResults.TryGetValue((int)sid + SKILL_OFFSET, out var addresses)) continue;
+                                foreach (var addr in addresses)
+                                {
+                                    if (!TryReadMemory((IntPtr)addr, buffer, SKILL_BUFFER_SIZE)) continue;
+                                    var span = buffer.AsSpan(0, SKILL_BUFFER_SIZE);
+                                    //if (ValidateSkillData(span, sid))
+                                    //{
+                                    var info = ParseSkillData(span);
+                                    if (info == null) continue;
+                                    _logger.LogFoundSkill(sid, addr);
+                                    _logger.LogSkillDebugInfo(info.SkillId, info.SkillName, info.Movement, info.AttackIncrease, info.DefenseIncrease);
+                                    newSkills[sid]    = info;
+                                    resultSkills[sid] = info;
+                                    break;
+                                    //}
+                                }
+                            }
+                            if (newSkills.Count > 0) await _skillCache.SetManyAsync(newSkills);
+                        }
+                    }
+                    finally
+                    {
+                        bufferPool.Return(buffer);
+                    }
+                }
+            }
+            
+            return (resultSkills, resultWeapons);
         }
 
         #endregion
