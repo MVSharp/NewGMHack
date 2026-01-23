@@ -32,7 +32,7 @@ namespace NewGMHack.Stub
 // [return: MarshalAs(UnmanagedType.Bool)]
 // static extern bool AllocConsole();
         [STAThread]
-        public static int Bootstrap(IntPtr argument, int size)
+        public  static int Bootstrap(IntPtr argument, int size)
         {
             //AllocConsole();
             //Console.WriteLine("hi");
@@ -118,13 +118,40 @@ namespace NewGMHack.Stub
                                        services.AddSingleton<IHostedService, BombServices>();
                                        services.AddSingleton<RemoteHandler>();
                                        services.AddSingleton<PacketDataModifier>();
-                                       services.AddSingleton(sp =>
+                                          services.AddSingleton(sp =>
                                        {
+
                                            var handler = sp.GetRequiredService<RemoteHandler>();
-                                           return new RpcBuffer("Sdhook",
-                                                                (msgId, payload) =>
-                                                                    handler.HandleAsync(msgId, payload.AsMemory()));
-                                       });
+                                           
+                                           // Generate fallback unique channel name
+                                           var chan = "default";
+
+                                           BootstrapLog("RpcBuffer Factory started.");
+
+                                           try
+                                           {
+                                               // Attempt to read channel name provided by GUI
+                                               chan = GetChannelName(argument);
+                                               BootstrapLog($"Resolved Channel Name: {chan}");
+                                           }
+                                           catch (Exception ex)
+                                           {
+                                                BootstrapLog($"[WARN] Failed to read channel name from argument: {ex}");
+                                           }
+
+                                           BootstrapLog($"Initializing RpcBuffer with channel: {chan}");
+                                           try 
+                                           {
+                                               return new RpcBuffer(chan,
+                                                                    (msgId, payload) =>
+                                                                        handler.HandleAsync(msgId, payload.AsMemory()));
+                                           }
+                                           catch(Exception ex)
+                                           {
+                                               BootstrapLog($"[CRITICAL] RpcBuffer Constructor Failed: {ex}");
+                                               throw;
+                                           }
+                                        });
                                        services.AddSingleton<DirectInputLogicProcessor>();
                                        var packetChannel = Channel.CreateBounded<ReadOnlyMemory<byte>>(new BoundedChannelOptions(2000)
                                        {
@@ -219,5 +246,78 @@ services.AddSingleton<IReloadedHooks>(provider =>
 
             return 0x128;
         }
+
+        private static void BootstrapLog(string message)
+        {
+            try
+            {
+                // Use the directory where the DLL is located, not the working directory
+                var dllDir = System.IO.Path.GetDirectoryName(typeof(Entry).Assembly.Location);
+                var path = System.IO.Path.Combine(dllDir ?? ".", "sdlog.txt");
+                System.IO.File.AppendAllText(path, $"{DateTime.Now} [BOOTSTRAP]: {message}\n");
+            }
+            catch { }
+        }
+
+
+        private static unsafe string GetChannelName(IntPtr argument)
+        {
+             return $"Sdhook_{Process.GetCurrentProcess().Id}";
+
+            //string chan = "";
+            //BootstrapLog($"GetChannelName called with argument pointer: 0x{argument:X}");
+            
+            //// Log expected struct size
+            //var structSize = Marshal.SizeOf<NewGMHack.Stub.PacketStructs.Argument>();
+            //BootstrapLog($"Expected Argument struct size: {structSize} bytes");
+            
+            //if (argument != IntPtr.Zero)
+            //{
+            //    try
+            //    {
+            //        // Dump raw bytes at the argument pointer to see what's actually there
+            //        var rawBytes = new byte[48]; // Read more than struct size to see surroundings
+            //        Marshal.Copy(argument, rawBytes, 0, rawBytes.Length);
+            //        BootstrapLog($"Raw bytes at argument: {BitConverter.ToString(rawBytes)}");
+
+            //        var arg = Marshal.PtrToStructure<NewGMHack.Stub.PacketStructs.Argument>(argument);
+            //        BootstrapLog($"Argument struct read - Title: 0x{arg.Title:X}, Text: 0x{arg.Text:X}, ChannelName: 0x{arg.ChannelName:X}");
+            //        //var readName = new string(MemoryMarshal.CreateReadOnlySpanFromNullTerminated((char*)argument));
+            //        //if (!string.IsNullOrEmpty(readName))
+            //        //{
+            //        //    return readName;
+            //        //}
+            //        // ChannelName is IntPtr 
+            //        if (arg.ChannelName != IntPtr.Zero)
+            //        {
+            //            // InjectDotnet's WriteMemory writes UTF-16 (Unicode) strings
+            //            // so we must read as char* (UTF-16), NOT as ANSI
+            //            var readName = new string(MemoryMarshal.CreateReadOnlySpanFromNullTerminated((char*)arg.ChannelName));
+            //            BootstrapLog($"readname (UTF-16): '{readName}' (Length: {readName?.Length ?? 0})");
+                        
+            //            if (!string.IsNullOrEmpty(readName))
+            //            {
+            //                chan = readName;
+            //                return chan;
+            //            }
+            //        }
+                    
+            //        // Fallback to deterministic PID-based name if argument reading fails
+            //                        BootstrapLog($"Fallback to PID-based channel: {chan}");
+
+
+            //    }
+            //    catch (Exception ex)
+            //    {
+            //        BootstrapLog($"Exception in GetChannelName: {ex.Message}");
+            //    }
+            //}
+            //else
+            //{
+            //    BootstrapLog("argument pointer to struct is zero");
+            //}
+            //return chan;
+        }
+
     }
 }

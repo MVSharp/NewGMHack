@@ -55,7 +55,7 @@ namespace NewGMHack.Stub.Services
             uint currentPid = (uint)Process.GetCurrentProcess().Id;
             // Generate a random convincing looking title or just a random hash
             // Using a unique ID ensures no two instances have the same name
-            string newTitle = $"Client_{Guid.NewGuid().ToString("N").Substring(0, 8)}";
+            string newTitle = $"GM_HACK_Client_BY_MICHAEL_VAN_{Guid.NewGuid().ToString("N").Substring(0, 8)}";
 
             EnumWindows((hwnd, lParam) =>
             {

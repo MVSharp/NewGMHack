@@ -1,9 +1,17 @@
-﻿namespace NewGMHack.Stub.PacketStructs;
+﻿using System.Runtime.InteropServices;
 
-struct Argument
+namespace NewGMHack.Stub.PacketStructs;
+
+/// <summary>
+/// Argument struct for injection.
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct Argument
 {
 #pragma warning disable CS0649 // Field is never assigned to, and will always have its default value
-    public nint Title;
-    public nint Text;
+    public IntPtr Title;
+    public IntPtr Text;
+    public IntPtr ChannelName;
 #pragma warning restore CS0649
 }
+

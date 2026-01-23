@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -138,17 +139,34 @@ namespace NewGmHack.GUI.ViewModels
 
                 _logger.ZLogInformation($"Target process found: PID={target.Id}, Name={target.ProcessName}");
 
+                // Allocate buffer for channel name (Stub will write to this)
+                // We use WriteMemory to allocate and initialize with zeros
+                var chan     = $"Sdhook_{target.Id}";
+                _logger.ZLogInformation($"channel key : {chan}");
+                _handler.Connect(chan);
                 var t = await Task.Run(() =>
                 {
-                    var arg = new Argument
+                    // Log WriteMemory returns for debugging
+                    var titlePtr = target.WriteMemory("Injected Form");
+                    var textPtr = target.WriteMemory($"This form has been injected into {target.MainModule?.FileName} and is running in its memory space");
+                    var channelPtr = target.WriteMemory(chan);
+
+                    _logger.ZLogInformation($"[INJECTION DEBUG] WriteMemory returns - Title: 0x{titlePtr:X}, Text: 0x{textPtr:X}, Channel: 0x{channelPtr:X}");
+
+                    var arg = new NewGMHack.Stub.PacketStructs.Argument
                     {
-                        Title = target.WriteMemory("Injected Form"),
-                        Text =
-                            target.WriteMemory($"This form has been injected into {target.MainModule?.FileName} and is running in its memory space"),
+                        Title = titlePtr,
+                        Text = textPtr,
+                        ChannelName = channelPtr
                     };
-                    
+
+                    _logger.ZLogInformation($"[INJECTION DEBUG] Argument struct - Title: 0x{arg.Title:X}, Text: 0x{arg.Text:X}, ChannelName: 0x{arg.ChannelName:X}");
+                    _logger.ZLogInformation($"[INJECTION DEBUG] Argument struct size: {System.Runtime.InteropServices.Marshal.SizeOf(arg)} bytes");
+
+
                     // Read Stub DLL version dynamically
                     var stubDllPath = "NewGMHack.Stub.dll";
+
                     var stubVersion = GetAssemblyVersion(stubDllPath);
                     var assemblyQualifiedName = $"NewGMHack.Stub.Entry, NewGMHack.Stub, Version={stubVersion}, Culture=neutral, PublicKeyToken=null";
                     
@@ -167,16 +185,21 @@ namespace NewGmHack.GUI.ViewModels
 
                 if (t == 0x128)
                 {
-                    _logger.ZLogInformation($"Injection successful, waiting for connection...");
-                    while (!IsConnected)
-                    {
-                        await Task.Delay(1000);
-                    }
-                    _logger.ZLogInformation($"Connection established");
-                    await _featureHandler.Refresh();
+                    // Read back the channel name from the buffer
                     
-                    if(showDialogs)
-                        await _dialogCoordinator.ShowMessageAsync(this, "Injected", "Injected");
+                    // Helper to clean string
+
+                        
+                        _logger.ZLogInformation($"Waiting for connection...");
+                        while (!IsConnected)
+                        {
+                            await Task.Delay(1000);
+                        }
+                        _logger.ZLogInformation($"Connection established");
+                        await _featureHandler.Refresh();
+                        
+                        if(showDialogs)
+                            await _dialogCoordinator.ShowMessageAsync(this, "Injected", "Injected");
                 }
                 else
                 {

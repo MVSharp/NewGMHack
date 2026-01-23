@@ -10,8 +10,27 @@ using SharedMemory;
 
 namespace NewGmHack.GUI
 {
-    public class RemoteHandler(RpcBuffer master) : RemoteHandlerBase(master)
+    using NewGmHack.GUI.Services;
+
+    public class RemoteHandler : RemoteHandlerBase
     {
+        private readonly NotificationHandler _notificationHandler;
+
+        // We initialize with a dummy buffer or null if base allows, but base needs one.
+        // So we pass a temporary/default one.
+        public RemoteHandler(NotificationHandler notificationHandler , RpcBuffer initialBuffer) : base(initialBuffer)
+        {
+            _notificationHandler = notificationHandler;
+        }
+
+        public void Connect(string channelName)
+        {
+            // Create new buffer with specific name
+            var newBuffer = new RpcBuffer(channelName, (msgId, payload) => _notificationHandler.HandleAsync(msgId, payload.AsMemory()));
+            
+            this._master = newBuffer;
+        }
+
         public async Task<bool> AskForHealth()
         {
             var r = await this.SendRequestAsync<HealthIPCResponse>(Operation.Health);
@@ -68,14 +87,21 @@ namespace NewGmHack.GUI
         }
     }
 
-    public class RemoteHandlerBase(RpcBuffer master)
+    public class RemoteHandlerBase
     {
+        protected RpcBuffer _master;
         private readonly MessagePackSerializerOptions _options =
             MessagePackSerializerOptions.Standard.WithResolver(new TypelessContractlessStandardResolver());
 
         private static readonly RecyclableMemoryStreamManager recyclableMemoryStreamManager = new();
+
+        public RemoteHandlerBase(RpcBuffer master)
+        {
+            _master = master;
+        }
+
         //TODO add paramters based 
-        public async Task<T?> SendRequestAsync<T>(Operation operation ,List<object>? parameters = null, int timeout = 10) where T : class, new()
+        public async Task<T?> SendRequestAsync<T>(Operation operation ,List<object>? parameters = null, int timeout = 2000) where T : class, new()
         {
             await using var stream  = recyclableMemoryStreamManager.GetStream("sdhook");
             var             request = new DynamicOperationRequest
@@ -85,7 +111,7 @@ namespace NewGmHack.GUI
             };
             await MessagePackSerializer.SerializeAsync(stream, request, _options);
 
-            var response = await master.RemoteRequestAsync(stream.ToArray(), timeout);
+            var response = await _master.RemoteRequestAsync(stream.ToArray(), timeout);
             if (response.Success)
             {
                 if (response.Data.Length > 0)
