@@ -56,10 +56,6 @@
 		<PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.1" />
 		<PackageReference Include="Dapper" Version="2.1.66" />
 
-	  <PackageReference Include="Squalr.Engine" Version="2.3.0.1" />
-	  <PackageReference Include="Squalr.Engine.Architecture" Version="2.3.0.1" />
-	  <PackageReference Include="Squalr.Engine.Memory" Version="2.3.0.1" />
-	  <PackageReference Include="Squalr.Engine.Scanning" Version="2.3.0.1" />
 	</ItemGroup>
 
 	<ItemGroup>

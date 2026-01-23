@@ -6,7 +6,6 @@ using NewGMHack.Stub.Hooks;
 using NewGMHack.Stub.Services;
 using Reloaded.Hooks.Definitions;
 using Reloaded.Hooks.Definitions.X86;
-using Squalr.Engine.Utils.Extensions;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
@@ -74,7 +73,6 @@ public sealed class WinsockHookManager(
             hook.Activate();
             hook.Enable();
 
-            logger.LogInformation($"Trampoline: {hook.PrintDebugTag()}");
             original = hook.OriginalFunction;
             logger.LogInformation($"Activated: {hook.IsHookActivated}| Enabled:{hook.IsHookEnabled} |Hooked {functionName} from {dllName} at 0x{functionPtr:X}");
         }

@@ -7,9 +7,9 @@ using NewGMHack.Stub;
 using SharpDX;
 using ZLogger;
 using NewGMHack.Stub.Services.Loggers;
-using Squalr.Engine.OS;
 using System.Text;
-using Squalr.Engine.Memory;
+using System.Diagnostics;
+using System.Linq;
 
 public class EntityScannerService : BackgroundService
 {
@@ -61,6 +61,7 @@ public class EntityScannerService : BackgroundService
 
     // Cached module base address
     private uint _cachedModuleBase = 0;
+    private Process _gameProcess;
 
     public EntityScannerService(SelfInformation selfInfo, ILogger<EntityScannerService> logger)
     {
@@ -72,16 +73,12 @@ public class EntityScannerService : BackgroundService
     {
         _logger.LogServiceStarted();
 
-        var process = Processes.Default.GetProcesses()
-                               .FirstOrDefault(p => p.ProcessName.Equals(ProcessName.Replace(".exe", ""),
-                                                                         StringComparison.OrdinalIgnoreCase));
+        var process = Process.GetProcessesByName(ProcessName.Replace(".exe", "")).FirstOrDefault();
 
         while (process == null && !stoppingToken.IsCancellationRequested)
         {
             await Task.Delay(100, stoppingToken);
-            process = Processes.Default.GetProcesses()
-                               .FirstOrDefault(p => p.ProcessName.Equals(ProcessName.Replace(".exe", ""),
-                                                                         StringComparison.OrdinalIgnoreCase));
+            process = Process.GetProcessesByName(ProcessName.Replace(".exe", "")).FirstOrDefault();
         }
 
         if (process == null)
@@ -90,7 +87,7 @@ public class EntityScannerService : BackgroundService
             return;
         }
 
-        Processes.Default.OpenedProcess = process;
+        _gameProcess = process;
         _logger.LogAttached(process.ProcessName, process.Id);
 
         while (!stoppingToken.IsCancellationRequested)
@@ -352,17 +349,20 @@ public class EntityScannerService : BackgroundService
                pos.Z > -8192 && pos.Z < 8192;
     }
 
-    private static uint GetModuleBaseAddress(string moduleName)
+    private uint GetModuleBaseAddress(string moduleName)
     {
         try
         {
-            var module = Query.Default.GetModules()
-                              .FirstOrDefault(m => m.Name.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
+            if (_gameProcess == null || _gameProcess.HasExited) return 0;
 
-            if (module == null) return 0;
-
-            // Safely cast to uint (x86 process: address < 4GB)
-            return module.BaseAddress <= uint.MaxValue ? (uint)module.BaseAddress : 0;
+            foreach (ProcessModule module in _gameProcess.Modules)
+            {
+                if (module.ModuleName.Equals(moduleName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return (uint)module.BaseAddress;
+                }
+            }
+            return 0;
         }
         catch
         {

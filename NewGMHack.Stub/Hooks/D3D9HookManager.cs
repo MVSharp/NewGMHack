@@ -14,7 +14,6 @@ using ZLogger;
 using SharpDX.Direct3D9;
 using Reloaded.Hooks.Definitions;
 using Reloaded.Hooks.Definitions.X86;
-using Squalr.Engine.Utils.Extensions;
 namespace NewGMHack.Stub.Hooks
 {
 
@@ -121,7 +120,7 @@ namespace NewGMHack.Stub.Hooks
                 hook = reloadedHooks.CreateHook(hookDelegate, target);
                 hook.Activate();
                 hook.Enable();
-                logger.LogInformation($"Trampoline: {hook.PrintDebugTag()}");
+                //logger.LogInformation($"Trampoline: {hook.PrintDebugTag()}");
                 original = hook.OriginalFunction;
                 logger.LogInformation($"Activated:{hook.IsHookActivated}|Enabled:{hook.IsHookEnabled}|{name} hook installed at 0x{target:X}");
             }
