@@ -1,4 +1,5 @@
 ﻿using System.Runtime.InteropServices;
+using System.Diagnostics;
 using System.Text;
 using System.Threading.Channels;
 using System.Xml;
@@ -168,6 +169,10 @@ services.AddSingleton<IReloadedHooks>(provider =>
                                        services.AddHostedService<RewardPersisterService>();
                                    })
                                   .Build();
+
+            var selfInfo = hostBuilder.Services.GetRequiredService<SelfInformation>();
+            selfInfo.ProcessId = Process.GetCurrentProcess().Id;
+
             var t = new Thread( async void () =>
             {
                 // Global Exception Handlers to catch "Bombs"

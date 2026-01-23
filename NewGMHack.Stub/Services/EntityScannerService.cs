@@ -41,8 +41,7 @@ public class EntityScannerService : BackgroundService
     private const uint PAGE_GUARD = 0x100;
     private const uint PAGE_NOACCESS = 0x01;
 
-    private static readonly string ProcessName =
-        Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ==")) + ".exe";
+
 
     private const int MaxEntities = 12;
 
@@ -73,22 +72,8 @@ public class EntityScannerService : BackgroundService
     {
         _logger.LogServiceStarted();
 
-        var process = Process.GetProcessesByName(ProcessName.Replace(".exe", "")).FirstOrDefault();
-
-        while (process == null && !stoppingToken.IsCancellationRequested)
-        {
-            await Task.Delay(100, stoppingToken);
-            process = Process.GetProcessesByName(ProcessName.Replace(".exe", "")).FirstOrDefault();
-        }
-
-        if (process == null)
-        {
-            _logger.LogProcessNotFound();
-            return;
-        }
-
-        _gameProcess = process;
-        _logger.LogAttached(process.ProcessName, process.Id);
+        _gameProcess = Process.GetCurrentProcess();
+        _logger.LogAttached(_gameProcess.ProcessName, _gameProcess.Id);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -149,7 +134,7 @@ public class EntityScannerService : BackgroundService
     {
         try
         {
-            var moduleBase = GetModuleBaseAddress(ProcessName);
+            var moduleBase = GetModuleBaseAddress();
             if (moduleBase == 0) return false;
 
             var pointerBase = moduleBase + BaseOffset;
@@ -253,7 +238,7 @@ public class EntityScannerService : BackgroundService
     {
         try
         {
-            var moduleBase = GetModuleBaseAddress(ProcessName);
+            var moduleBase = GetModuleBaseAddress();
             if (moduleBase == 0) return false;
 
             var baseAddr = moduleBase + BaseOffset;
@@ -349,20 +334,12 @@ public class EntityScannerService : BackgroundService
                pos.Z > -8192 && pos.Z < 8192;
     }
 
-    private uint GetModuleBaseAddress(string moduleName)
+    private uint GetModuleBaseAddress()
     {
         try
         {
             if (_gameProcess == null || _gameProcess.HasExited) return 0;
-
-            foreach (ProcessModule module in _gameProcess.Modules)
-            {
-                if (module.ModuleName.Equals(moduleName, StringComparison.OrdinalIgnoreCase))
-                {
-                    return (uint)module.BaseAddress;
-                }
-            }
-            return 0;
+            return (uint)_gameProcess.MainModule.BaseAddress;
         }
         catch
         {
