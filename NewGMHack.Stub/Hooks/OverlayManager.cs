@@ -50,7 +50,7 @@ public class OverlayManager(SelfInformation self)
     private readonly List<D3DVertex> _logBackgroundBuffer = new();
 
     // Warning flash
-    private const float WarningDistance = 150f;
+    private const float WarningDistance = 500f;
     
     // Larger font for damage numbers
     private SharpDX.Direct3D9.Font _damageFont;
@@ -667,7 +667,7 @@ public class OverlayManager(SelfInformation self)
                 for (int i = 0; i < entityCount; i++)
                 {
                     var entity = targets[i];
-                    string entInfo = $"ID:{entity.Id} HP:{entity.CurrentHp}/{entity.MaxHp} Dist:{Vector3.Distance(new Vector3(self.PersonInfo.X, self.PersonInfo.Y, self.PersonInfo.Z), entity.Position):F0}";
+                    string entInfo = $"ID:{entity.Id} HP:{entity.CurrentHp}/{entity.MaxHp} Dist:{Vector3.Distance(new Vector3(self.PersonInfo.X, self.PersonInfo.Y, self.PersonInfo.Z), entity.Position):F0}| {entity.ScreenX} - {entity.ScreenY}";
                     _font.DrawText(_textSprite, entInfo, new Rectangle(textX, currentY, width, lineHeight), FontDrawFlags.NoClip, ColorTextWhite);
                     currentY += lineHeight;
                 }

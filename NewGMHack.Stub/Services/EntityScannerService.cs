@@ -41,8 +41,8 @@ public class EntityScannerService : BackgroundService
     private const uint PAGE_GUARD = 0x100;
     private const uint PAGE_NOACCESS = 0x01;
 
-    private static readonly string ProcessName =
-        Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ==")) + ".exe";
+    //private static readonly string ProcessName =
+    //    Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ==")) + ".exe";
 
     private const int MaxEntities = 12;
 
@@ -134,7 +134,7 @@ public class EntityScannerService : BackgroundService
     {
         try
         {
-            var moduleBase = GetModuleBaseAddress(ProcessName);
+            var moduleBase = GetModuleBaseAddress();
             if (moduleBase == 0) return false;
 
             var pointerBase = moduleBase + BaseOffset;
@@ -238,7 +238,7 @@ public class EntityScannerService : BackgroundService
     {
         try
         {
-            var moduleBase = GetModuleBaseAddress(ProcessName);
+            var moduleBase = GetModuleBaseAddress();
             if (moduleBase == 0) return false;
 
             var baseAddr = moduleBase + BaseOffset;
@@ -334,20 +334,20 @@ public class EntityScannerService : BackgroundService
                pos.Z > -8192 && pos.Z < 8192;
     }
 
-    private uint GetModuleBaseAddress(string moduleName)
+    private uint GetModuleBaseAddress()
     {
         try
         {
             if (_gameProcess == null || _gameProcess.HasExited) return 0;
-
-            foreach (ProcessModule module in _gameProcess.Modules)
-            {
-                if (module.ModuleName.Equals(moduleName, StringComparison.OrdinalIgnoreCase))
-                {
-                    return (uint)module.BaseAddress;
-                }
-            }
-            return 0;
+            return (uint)_gameProcess.MainModule.BaseAddress;
+            // foreach (ProcessModule module in _gameProcess.Modules)
+            // {
+            //     if (module.ModuleName.Equals(moduleName, StringComparison.OrdinalIgnoreCase))
+            //     {
+            //         return (uint)module.BaseAddress;
+            //     }
+            // }
+            // return 0;
         }
         catch
         {
