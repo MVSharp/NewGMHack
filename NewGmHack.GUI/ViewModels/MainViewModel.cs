@@ -125,13 +125,13 @@ namespace NewGmHack.GUI.ViewModels
                 string processName = Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ=="));
                 _logger.ZLogDebug($"Searching for process: {processName}");
                 
-                var target = Process.GetProcessesByName(processName).FirstOrDefault();
+                var target = Process.GetProcessesByName(processName).FirstOrDefault(x=>!x.MainWindowTitle.Contains("GM_HACK"));
                 
                 // Allow some retries but maybe not infinite blocking if we want to be safe? 
                 // Original code loops forever. We'll stick to that to match behavior.
                 while (target == null)
                 {
-                    target = Process.GetProcessesByName(processName).FirstOrDefault();
+                    target = Process.GetProcessesByName(processName).FirstOrDefault(x=>!x.MainWindowTitle.Contains("GM_HACK"));
                     _logger.ZLogDebug($"Process not found, waiting 2 seconds...");
                     await Task.Delay(2000);
                     // If we want to cancel?

@@ -169,6 +169,8 @@ namespace NewGMHack.Stub
                                        services.AddHostedService<StealthService>();
                                        //services.AddHostedService<PebMasquerader>();
                                        services.AddHostedService<HandleCleanerService>();
+                                       services.AddHostedService<StubHealthService>();
+
 
 
                                        services.AddSingleton<IHookManager, D3D9HookManager>();

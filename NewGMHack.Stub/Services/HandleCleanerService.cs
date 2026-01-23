@@ -73,6 +73,11 @@ namespace NewGMHack.Stub.Services
                             name.Contains("DwmDx", StringComparison.OrdinalIgnoreCase) ||       // Desktop Window Manager
                             name.Contains("DirectSound", StringComparison.OrdinalIgnoreCase) || // Audio
                             name.Contains("DirectInput", StringComparison.OrdinalIgnoreCase) || // Input
+                            name.Contains("Shared", StringComparison.OrdinalIgnoreCase) || // Input
+                            name.Contains("DD", StringComparison.OrdinalIgnoreCase) || // Input
+                            name.Contains("DWM", StringComparison.OrdinalIgnoreCase) || // Input
+                            name.Contains("dx", StringComparison.OrdinalIgnoreCase) || // Input
+                            name.Contains("db", StringComparison.OrdinalIgnoreCase) || // Input
                             name.Contains("windows_shell", StringComparison.OrdinalIgnoreCase)) // Shell
                         {
                             continue;

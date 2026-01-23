@@ -25,6 +25,10 @@ namespace NewGmHack.GUI
 
         public void Connect(string channelName)
         {
+            if (this._master != null)
+            {
+                this._master.Dispose();
+            }
             // Create new buffer with specific name
             var newBuffer = new RpcBuffer(channelName, (msgId, payload) => _notificationHandler.HandleAsync(msgId, payload.AsMemory()));
             
@@ -101,7 +105,7 @@ namespace NewGmHack.GUI
         }
 
         //TODO add paramters based 
-        public async Task<T?> SendRequestAsync<T>(Operation operation ,List<object>? parameters = null, int timeout = 2000) where T : class, new()
+        public async Task<T?> SendRequestAsync<T>(Operation operation ,List<object>? parameters = null, int timeout = 3) where T : class, new()
         {
             await using var stream  = recyclableMemoryStreamManager.GetStream("sdhook");
             var             request = new DynamicOperationRequest
