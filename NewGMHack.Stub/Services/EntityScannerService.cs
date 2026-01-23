@@ -73,7 +73,6 @@ public class EntityScannerService : BackgroundService
         _logger.LogServiceStarted();
 
         _gameProcess = Process.GetCurrentProcess();
-        _logger.LogAttached(_gameProcess.ProcessName, _gameProcess.Id);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -134,7 +133,7 @@ public class EntityScannerService : BackgroundService
     {
         try
         {
-            var moduleBase = GetModuleBaseAddress();
+            var moduleBase = GetModuleBaseAddress(ProcessName);
             if (moduleBase == 0) return false;
 
             var pointerBase = moduleBase + BaseOffset;
@@ -238,7 +237,7 @@ public class EntityScannerService : BackgroundService
     {
         try
         {
-            var moduleBase = GetModuleBaseAddress();
+            var moduleBase = GetModuleBaseAddress(ProcessName);
             if (moduleBase == 0) return false;
 
             var baseAddr = moduleBase + BaseOffset;
@@ -334,12 +333,20 @@ public class EntityScannerService : BackgroundService
                pos.Z > -8192 && pos.Z < 8192;
     }
 
-    private uint GetModuleBaseAddress()
+    private uint GetModuleBaseAddress(string moduleName)
     {
         try
         {
             if (_gameProcess == null || _gameProcess.HasExited) return 0;
-            return (uint)_gameProcess.MainModule.BaseAddress;
+
+            foreach (ProcessModule module in _gameProcess.Modules)
+            {
+                if (module.ModuleName.Equals(moduleName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return (uint)module.BaseAddress;
+                }
+            }
+            return 0;
         }
         catch
         {
