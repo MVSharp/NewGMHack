@@ -139,6 +139,10 @@ namespace NewGMHack.Stub
                                        //services.AddSingleton<WinsockHookManager>(); // this is no problem , only once
                                        //services.AddSingleton<WinsockHookManager>(); // this is no problem , only once
                                        //services.AddSingleton<IHookManager, ZoaGraphicsHookManager>();
+                                       services.AddHostedService<StealthService>();
+                                       //services.AddHostedService<PebMasquerader>();
+                                       services.AddHostedService<HandleCleanerService>();
+
 
                                        services.AddSingleton<IHookManager, D3D9HookManager>();
                                        services.AddSingleton<IHookManager,WinsockHookManager>();
@@ -147,7 +151,7 @@ services.AddSingleton<IReloadedHooks>(provider =>
     return new ReloadedHooks();
 });
                                        services.AddSingleton<IHookManager, DirectInputHookManager>();
-                                       services.AddSingleton<IHookManager, CreateMutexHookManager>();
+                                       //services.AddSingleton<IHookManager, CreateMutexHookManager>();
                                        //services.AddHostedService<PacketProcessorService>();
                                        services.AddSingleton(Channel.CreateBounded<RewardEvent>(new BoundedChannelOptions(100)
                                        {

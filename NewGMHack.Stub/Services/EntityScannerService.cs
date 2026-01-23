@@ -41,7 +41,8 @@ public class EntityScannerService : BackgroundService
     private const uint PAGE_GUARD = 0x100;
     private const uint PAGE_NOACCESS = 0x01;
 
-
+    private static readonly string ProcessName =
+        Encoding.UTF8.GetString(Convert.FromBase64String("R09ubGluZQ==")) + ".exe";
 
     private const int MaxEntities = 12;
 
