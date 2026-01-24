@@ -70,7 +70,8 @@ namespace NewGMHack.Stub
         public int                     CrossHairY   { get; set; }
         public float                   AimRadius    { get; set; }
         public nint                    LastSocket   { get; set; }
-        public List<Entity>            Targets      { get; set; } = Enumerable.Repeat(new Entity(), 12).ToList();
+        public List<Entity>            Targets      { get; set; } = Enumerable.Range(0, 12).Select(_ => new Entity()).ToList();
+        public IntPtr                  DevicePtr { get; set; }
         
         /// <summary>
         /// Current battle state for real-time tracking (thread-safe)

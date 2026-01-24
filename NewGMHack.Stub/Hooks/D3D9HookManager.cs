@@ -142,6 +142,7 @@ namespace NewGMHack.Stub.Hooks
                     _device = new Device(devicePtr);
                     _deviceInitialized = false;
                     overlayManager.Reset();
+                    self.DevicePtr = devicePtr;
                 }
 
                 var coopLevel = _device.TestCooperativeLevel();
@@ -200,7 +201,8 @@ namespace NewGMHack.Stub.Hooks
 
             try
             {
-                _device = new Device(devicePtr);
+                self.DevicePtr = devicePtr;
+                _device        = new Device(devicePtr);
                 overlayManager.OnResetDevice();
                 overlayManager.Initialize(_device);
                 _deviceInitialized = true;

@@ -107,8 +107,8 @@ namespace NewGmHack.GUI.ViewModels
             await _handler.DeattachRequest();
         }
 
-        private bool _isInjecting = false;
-
+        private bool   _isInjecting = false;
+        private string _processPath = "";
         private async Task InjectInternal(bool showDialogs)
         {
             if (_isInjecting || IsConnected)
@@ -126,7 +126,19 @@ namespace NewGmHack.GUI.ViewModels
                 _logger.ZLogDebug($"Searching for process: {processName}");
                 
                 var target = Process.GetProcessesByName(processName).FirstOrDefault(x=>!x.MainWindowTitle.Contains("GM_HACK"));
-                
+                if (target == null)
+                {
+                    if (!string.IsNullOrEmpty(_processPath))
+                    {
+
+                        var psi = new ProcessStartInfo
+                        {
+                            FileName = _processPath,
+                            Arguments = "127.2.52.234 5001"
+                        };
+                        Process.Start(psi);
+                    }
+                }
                 // Allow some retries but maybe not infinite blocking if we want to be safe? 
                 // Original code loops forever. We'll stick to that to match behavior.
                 while (target == null)
@@ -137,6 +149,7 @@ namespace NewGmHack.GUI.ViewModels
                     // If we want to cancel?
                 }
 
+                _processPath = target.MainModule.FileName;
                 _logger.ZLogInformation($"Target process found: PID={target.Id}, Name={target.ProcessName}");
 
                 // Allocate buffer for channel name (Stub will write to this)

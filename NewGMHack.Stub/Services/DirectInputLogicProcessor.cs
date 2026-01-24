@@ -5,9 +5,11 @@ using Microsoft.Extensions.Logging;
 using NewGMHack.Stub;
 using NewGMHack.Stub.Services;
 using NewGMHack.Stub.Logger;
-using SharpDX.DirectInput;
+using SharpDX;
+using SharpDX.Direct3D9;
 using ZLogger;
 using static NewGMHack.Stub.Services.DIK;
+using DeviceType = SharpDX.DirectInput.DeviceType;
 
 namespace NewGMHack.Stub.Services;
 
@@ -55,13 +57,22 @@ public partial class DirectInputLogicProcessor
     private float _lastDeltaX = 0f;
     private float _lastDeltaY = 0f;
 
-    // Target lead prediction state
+    // Target lead prediction and smoothing state
     private float _lastTargetScreenX = 0f;
     private float _lastTargetScreenY = 0f;
     private float _targetVelocityX = 0f;
     private float _targetVelocityY = 0f;
     private long _lastPredictionTimeMs = 0;
     private uint _lastTargetPtr = 0;
+    
+    // Sub-pixel accumulator for smooth mouse movement
+    private float _accumulatedX = 0f;
+    private float _accumulatedY = 0f;
+    private long _lastControlTimeMs = 0;
+    
+    // Output velocity smoothing
+    private float _outputVelX = 0f;
+    private float _outputVelY = 0f;
 
     private const int DIK_ESCAPE = 0x01;
     private const int DIK_1 = 0x02;
@@ -77,10 +88,10 @@ public partial class DirectInputLogicProcessor
     }
 
     /// <summary>
-    /// Optimized aimbot with target lead prediction
-    /// - Fast: 65% of distance per frame
-    /// - Stable: Can't overshoot (mathematically impossible)
-    /// - Predictive: Aims ahead of moving targets
+    /// Optimized aimbot with dynamic gain smoothing
+    /// - Fast approach at distance
+    /// - Smooth decoupling at close range
+    /// - Sub-pixel precision
     /// </summary>
     public void InjectAimbot(IntPtr dataPtr)
     {
@@ -97,7 +108,7 @@ public partial class DirectInputLogicProcessor
             }
 
             // Get best target
-            var target = _self.Targets.FirstOrDefault(x => x.IsBest && x.CurrentHp > 0);
+            var target = GetBestTarget();
             if (target == null || target.ScreenX <= 0 || target.ScreenY <= 0)
             {
                 ResetPredictionState();
@@ -114,68 +125,104 @@ public partial class DirectInputLogicProcessor
             float currentX = target.ScreenX;
             float currentY = target.ScreenY;
 
-            // Reset velocity if targeting a different entity
+            // Reset smoothing if targeting a different entity
             if (target.EntityPtrAddress != _lastTargetPtr)
             {
+                _outputVelX = 0;
+                _outputVelY = 0;
+                _accumulatedX = 0;
+                _accumulatedY = 0;
                 _targetVelocityX = 0;
                 _targetVelocityY = 0;
                 _lastTargetPtr = target.EntityPtrAddress;
             }
             else if (_lastPredictionTimeMs > 0 && deltaTimeSeconds > 0 && deltaTimeSeconds < 0.5f)
             {
-                // Calculate velocity (pixels per second)
                 float rawVelX = (currentX - _lastTargetScreenX) / deltaTimeSeconds;
                 float rawVelY = (currentY - _lastTargetScreenY) / deltaTimeSeconds;
-
-                // Smooth velocity with exponential moving average (more smoothing = less jitter)
-                const float velocitySmoothing = 0.15f; // Reduced from 0.3 for smoother velocity
-                _targetVelocityX = _targetVelocityX + (rawVelX - _targetVelocityX) * velocitySmoothing;
-                _targetVelocityY = _targetVelocityY + (rawVelY - _targetVelocityY) * velocitySmoothing;
+                const float velocitySmoothing = 0.3f;
+                _targetVelocityX += (rawVelX - _targetVelocityX) * velocitySmoothing;
+                _targetVelocityY += (rawVelY - _targetVelocityY) * velocitySmoothing;
             }
 
             // Store for next frame
             _lastTargetScreenX = currentX;
             _lastTargetScreenY = currentY;
-            _lastPredictionTimeMs = currentTimeMs;
+            _lastPredictionTimeMs = currentTimeMs; // Update _lastPredictionTimeMs here
 
-            // Predict future position (lead the target)
-            // Reduced prediction time to prevent overshoot
-            const float predictionTime = 0.04f; // 40ms ahead (was 80ms)
+            // Note: prediction logic remains similar, but we use it for error calculation
+            const float predictionTime = 0.06f; 
             float predictedX = currentX + (_targetVelocityX * predictionTime);
             float predictedY = currentY + (_targetVelocityY * predictionTime);
 
-            // Calculate delta to predicted position
+            // Calculate error (Distance to target)
             float deltaX = predictedX - _self.CrossHairX;
             float deltaY = predictedY - _self.CrossHairY;
             float distance = (float)Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
 
-            // Check if within aim circle
+            // Safety break
             if (distance > _self.AimRadius) return;
-
-            // Larger dead zone to prevent jitter (was 3px)
-            if (distance < 10f) return;
-
-            // ALWAYS use exponential decay - no snap zone (snap caused vibration)
-            // Lower decay factor = slower but more stable
-            const float decayFactor = 0.50f; // Reduced from 0.65
             
-            int moveX = (int)(deltaX * decayFactor);
-            int moveY = (int)(deltaY * decayFactor);
+            // --- Time-Based Control Loop ---
+            
+            // Calculate effective DeltaTime for this control step
+            // We use the time since the LAST InjectAimbot call, not the prediction time
+            long now = _timer.ElapsedMilliseconds;
+            float dt = (_lastControlTimeMs > 0) ? (now - _lastControlTimeMs) / 1000f : 0.001f;
+            _lastControlTimeMs = now;
+            
+            // Clamp dt to prevent huge jumps if thread hangs (e.g. max 100ms)
+            if (dt > 0.1f) dt = 0.1f;
+            if (dt < 0.0001f) dt = 0.0001f; // Avoid divide by zero if called super fast
 
-            // Minimum movement to prevent stalling
-            if (moveX == 0 && Math.Abs(deltaX) > 1f) moveX = Math.Sign(deltaX);
-            if (moveY == 0 && Math.Abs(deltaY) > 1f) moveY = Math.Sign(deltaY);
+            // Get Proportional Gain (Kp)
+            float Kp = DistanceToKp(distance);
 
-            // Lower max speed clamp for stability
-            moveX = Math.Clamp(moveX, -80, 80);
-            moveY = Math.Clamp(moveY, -80, 80);
+            // Calculate Target Velocity: V = Error * Kp
+            float targetVelX = deltaX * Kp;
+            float targetVelY = deltaY * Kp;
 
-            // Inject movement
-            if (moveX != 0 || moveY != 0)
+            // --- Output Velocity Smoothing ---
+            // Low-pass filter to dampen acceleration spikes
+            // lerp(current, target, alpha)
+            // Lower alpha = smoother/slower reaction, Higher alpha = snappier
+            const float smoothAlpha = 0.6f;
+            _outputVelX += (targetVelX - _outputVelX) * smoothAlpha;
+            _outputVelY += (targetVelY - _outputVelY) * smoothAlpha;
+
+            // Calculate movement step: dX = V * dt
+            float moveFloatX = _outputVelX * dt;
+            float moveFloatY = _outputVelY * dt;
+
+            // Clamp max step size to prevent "teleporting"
+            moveFloatX = Math.Clamp(moveFloatX, -50f, 50f);
+            moveFloatY = Math.Clamp(moveFloatY, -50f, 50f);
+
+            // Sub-pixel accumulation
+            _accumulatedX += moveFloatX;
+            _accumulatedY += moveFloatY;
+
+            int moveX = (int)_accumulatedX;
+            int moveY = (int)_accumulatedY;
+
+            // Keep remainder
+            _accumulatedX -= moveX;
+            _accumulatedY -= moveY;
+
+            // Small hysteresis deadzone (only if very slow)
+            if (distance < 2.0f && Math.Abs(moveX) < 1 && Math.Abs(moveY) < 1) 
             {
-                state.lX += moveX;
-                state.lY += moveY;
-                Marshal.StructureToPtr(state, dataPtr, false);
+               // Do nothing, holding steady
+            }
+            else
+            {
+                // Inject movement
+                if (moveX != 0 || moveY != 0)
+                {
+                    state.lX += moveX;
+                    state.lY += moveY;
+                    Marshal.StructureToPtr(state, dataPtr, false);
+                }
             }
         }
         catch
@@ -184,6 +231,66 @@ public partial class DirectInputLogicProcessor
         }
     }
 
+    // Proportional Gain Lookup - Tuned for stability
+    private float DistanceToKp(float distance)
+    {
+        // Far: Fast but controlled (Reduced from 18.0)
+        // Helps prevent long-range overshoot/vibration
+        if (distance > 150f) return 12.0f; 
+        
+        // Very Close: Strong sticky damping
+        if (distance < 5f) return 2.0f;
+        
+        // Mid range: Linear blend
+        // 5..150 -> 2.0..8.0
+        return 2.0f + (distance - 5f) * (12.0f - 2.0f) / (150f - 5f);
+    }
+
+   Vector2 WorldToScreen(Vector3 world, Matrix view, Matrix proj, Viewport vp)
+   {
+       Vector4 clip = Vector4.Transform(new Vector4(world, 1.0f), view * proj);
+       if (clip.W < 0.1f) return Vector2.Zero;
+
+       Vector3 ndc = new Vector3(clip.X, clip.Y, clip.Z) / clip.W;
+       return new Vector2(
+                          (ndc.X + 1.0f)  * 0.5f * vp.Width  + vp.X,
+                          (1.0f  - ndc.Y) * 0.5f * vp.Height + vp.Y
+                         );
+   }
+
+    private Entity? GetBestTarget()
+    {
+        if (_self.DevicePtr == IntPtr.Zero) return null;
+        var device = new Device(_self.DevicePtr);
+            var viewMatrix = device.GetTransform(TransformState.View);
+            var projMatrix = device.GetTransform(TransformState.Projection);
+            var viewport   = device.Viewport;
+        var crosshair = new Vector2(_self.CrossHairX, _self.CrossHairY);
+        Entity best = null;
+        float bestDist = float.MaxValue;
+
+        foreach (var t in _self.Targets)
+        {
+            if (t.Id == 0) continue ;
+            if (t.CurrentHp <= 0)
+                continue;
+            Vector2 screenPos = WorldToScreen(t.Position, viewMatrix, projMatrix, viewport);
+            if(screenPos.X <= 0 || screenPos.Y <= 0 ) continue;
+            float dist = Vector2.Distance(crosshair, screenPos);
+            if (dist <= _self.AimRadius && dist <= bestDist)
+            {
+                bestDist = dist;
+                best = t;
+            }
+        }
+
+        foreach (var entity in _self.Targets)
+        {
+            entity.IsBest = (entity == best);
+        }
+
+        return best;
+    }
     private void ResetPredictionState()
     {
         _lastTargetScreenX = 0;
@@ -192,6 +299,8 @@ public partial class DirectInputLogicProcessor
         _targetVelocityY = 0;
         _lastPredictionTimeMs = 0;
         _lastTargetPtr = 0;
+        _accumulatedX = 0;
+        _accumulatedY = 0;
     }
 
 

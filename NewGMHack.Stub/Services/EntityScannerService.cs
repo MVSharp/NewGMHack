@@ -28,6 +28,16 @@ public class EntityScannerService : BackgroundService
         public uint Type;
     }
 
+    private struct EntityScanData
+    {
+        public int Id;
+        public int CurrentHp;
+        public int MaxHp;
+        public Vector3 Position;
+        public uint EntityPtrAddress;
+        public uint EntityPosPtrAddress;
+    }
+
     [DllImport("kernel32.dll")]
     private static extern int VirtualQuery(IntPtr lpAddress, out MEMORY_BASIC_INFORMATION lpBuffer, uint dwLength);
 
@@ -88,30 +98,72 @@ public class EntityScannerService : BackgroundService
                     continue;
                 }
 
-                var found = await ScanEntities();
-                if (!found)
+                var scanResults = ScanEntities();
+                if (scanResults != null)
                 {
-                    for (int i = 0; i < MaxEntities; i++)
+                    var targets = _selfInfo.Targets;
+                    var usedSlots = new bool[targets.Count];
+                    var scanUsed = new bool[scanResults.Count];
+
+                    // 1. Pass 1: Update existing matches (preserve object identity/IsBest flags if possible)
+                    for (int t = 0; t < targets.Count; t++)
                     {
-                        _selfInfo.Targets[i].CurrentHp           = 0;
-                        _selfInfo.Targets[i].MaxHp               = 0;
-                        _selfInfo.Targets[i].EntityPtrAddress    = 0;
-                        _selfInfo.Targets[i].EntityPosPtrAddress = 0;
+                        var targetId = targets[t].Id;
+                        if (targetId == 0) continue;
+
+                        for (int s = 0; s < scanResults.Count; s++)
+                        {
+                            if (!scanUsed[s] && scanResults[s].Id == targetId)
+                            {
+                                UpdateTarget(targets[t], scanResults[s]);
+                                usedSlots[t] = true;
+                                scanUsed[s] = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    // 2. Pass 2: Place new entities into free or stale slots
+                    int currentScanIdx = 0;
+                    for (int t = 0; t < targets.Count; t++)
+                    {
+                        if (usedSlots[t]) continue;
+
+                        // Find next unused scan result
+                        while (currentScanIdx < scanResults.Count && scanUsed[currentScanIdx])
+                        {
+                            currentScanIdx++;
+                        }
+
+                        if (currentScanIdx < scanResults.Count)
+                        {
+                            UpdateTarget(targets[t], scanResults[currentScanIdx]);
+                            usedSlots[t] = true;
+                            scanUsed[currentScanIdx] = true;
+                        }
+                        else
+                        {
+                            // No more new entities, clear if it has data
+                            if (targets[t].Id != 0)
+                            {
+                                ClearTarget(targets[t]);
+                            }
+                        }
                     }
                 }
 
                 var foundSelf = ScanMySelf();
-                if (found && foundSelf)
-                {
-                    GetBestTarget();
-                }
+                //if (scanResults != null  && scanResults.Count > 0 && foundSelf)
+                //{
+                //    GetBestTarget();
+                //}
             }
             catch (Exception ex)
             {
                 _logger.LogScanLoopError(ex);
             }
 
-            await Task.Delay(1, stoppingToken);
+            await Task.Delay(10, stoppingToken);
         }
 
         _logger.LogServiceStopped();
@@ -234,25 +286,26 @@ public class EntityScannerService : BackgroundService
             : (4096, 8191, 4096);
     }
 
-    private async Task<bool> ScanEntities()
+    private List<EntityScanData>? ScanEntities()
     {
         try
         {
             var moduleBase = GetModuleBaseAddress();
-            if (moduleBase == 0) return false;
+            if (moduleBase == 0) return null;
 
             var baseAddr = moduleBase + BaseOffset;
-            if (!IsAddressValid(baseAddr)) return false;
+            if (!IsAddressValid(baseAddr)) return null;
             var entityAddr = ReadPointerChain(baseAddr, Offsets);
-            if (entityAddr == 0) return false;
+            if (entityAddr == 0) return null;
 
-            if (!TryReadUInt(entityAddr - 0x8, out var listHead) || listHead == 0) return false;
+            if (!TryReadUInt(entityAddr - 0x8, out var listHead) || listHead == 0) return null;
 
-            var       visited      = new HashSet<uint>();
-            int       currentIndex = 0;
-            int       scannedCount = 0;
-            uint      current      = listHead;
-            const int scanLimit    = 100;
+            var visited = new HashSet<uint>();
+            int scannedCount = 0;
+            uint current = listHead;
+            const int scanLimit = 100;
+
+            var results = new List<EntityScanData>(MaxEntities);
 
             while (current != 0 && !visited.Contains(current) && scannedCount < scanLimit)
             {
@@ -271,39 +324,32 @@ public class EntityScannerService : BackgroundService
                     continue;
                 }
 
-                if (TryReadEntityData(dataAddr, out var entity))
+                if (TryReadEntityData(dataAddr, out var data))
                 {
-                    entity.Id = eid;
-                    if (currentIndex < MaxEntities)
+                    data.Id = eid;
+                    if (results.Count < MaxEntities)
                     {
-                        _selfInfo.Targets[currentIndex++] = entity;
+                        results.Add(data);
                     }
                 }
 
                 current = TryReadUInt(current, out var nextNode) ? nextNode : 0;
             }
 
-            // Clear remaining slots
-            for (int i = currentIndex; i < MaxEntities; i++)
-            {
-                _selfInfo.Targets[i].CurrentHp = 0;
-                _selfInfo.Targets[i].MaxHp     = 0;
-            }
-
-            return currentIndex > 0;
+            return results;
         }
         catch (Exception ex)
         {
             _logger.LogScanEntitiesFailed(ex);
-            return false;
+            return null;
         }
     }
 
-    private bool TryReadEntityData(uint entityStruct, out Entity entity)
+    private bool TryReadEntityData(uint entityStruct, out EntityScanData entity)
     {
-        entity = new Entity();
+        entity = new EntityScanData();
 
-        if (!TryReadInt(entityStruct + HpOffset,    out int hp) ||
+        if (!TryReadInt(entityStruct + HpOffset, out int hp) ||
             !TryReadInt(entityStruct + MaxHpOffset, out int maxHp))
             return false;
 
@@ -315,17 +361,18 @@ public class EntityScannerService : BackgroundService
             !TryReadFloat(posPtr + XyzOffsets[2], out float z))
             return false;
         if (hp > 600_000 || maxHp > 600_000) return false;
-        if (hp < 0       || maxHp < 0) return false;
+        if (hp < 0 || maxHp < 0) return false;
         var pos = new Vector3(x, y + 50, z);
-        // if (!IsValidPosition(pos)) return false;
 
-        entity.CurrentHp           = hp;
-        entity.MaxHp               = maxHp;
-        entity.Position            = pos;
-        entity.EntityPtrAddress    = entityStruct;
+        entity.CurrentHp = hp;
+        entity.MaxHp = maxHp;
+        entity.Position = pos;
+        entity.EntityPtrAddress = entityStruct;
         entity.EntityPosPtrAddress = posPtr;
         return true;
     }
+
+
 
     private static bool IsValidPosition(Vector3 pos)
     {
@@ -355,32 +402,32 @@ public class EntityScannerService : BackgroundService
         }
     }
 
-    private Entity GetBestTarget()
-    {
-        var    crosshair = new Vector2(_selfInfo.CrossHairX, _selfInfo.CrossHairY);
-        Entity best      = null;
-        float  bestDist  = float.MaxValue;
+    //private Entity GetBestTarget()
+    //{
+    //    var    crosshair = new Vector2(_selfInfo.CrossHairX, _selfInfo.CrossHairY);
+    //    Entity best      = null;
+    //    float  bestDist  = float.MaxValue;
 
-        foreach (var t in _selfInfo.Targets)
-        {
-            if (t.CurrentHp <= 0 || t.ScreenX <= 0 || t.ScreenY <= 0)
-                continue;
+    //    foreach (var t in _selfInfo.Targets)
+    //    {
+    //        if (t.CurrentHp <= 0 || t.ScreenX <= 0 || t.ScreenY <= 0)
+    //            continue;
 
-            float dist = Vector2.Distance(crosshair, new Vector2(t.ScreenX, t.ScreenY));
-            if (dist <= _selfInfo.AimRadius && dist < bestDist)
-            {
-                bestDist = dist;
-                best     = t;
-            }
-        }
+    //        float dist = Vector2.Distance(crosshair, new Vector2(t.ScreenX, t.ScreenY));
+    //        if (dist <= _selfInfo.AimRadius && dist < bestDist)
+    //        {
+    //            bestDist = dist;
+    //            best     = t;
+    //        }
+    //    }
 
-        foreach (var entity in _selfInfo.Targets)
-        {
-            entity.IsBest = (entity == best);
-        }
+    //    foreach (var entity in _selfInfo.Targets)
+    //    {
+    //        entity.IsBest = (entity == best);
+    //    }
 
-        return best;
-    }
+    //    return best;
+    //}
 
     private static uint ReadPointerChain(uint baseAddr, uint[] offsets)
     {
@@ -505,6 +552,26 @@ public class EntityScannerService : BackgroundService
             }
         }
         catch { }
+    }
+
+    private void UpdateTarget(Entity target, EntityScanData data)
+    {
+        target.Id = data.Id;
+        target.CurrentHp = data.CurrentHp;
+        target.MaxHp = data.MaxHp;
+        target.Position = data.Position;
+        target.EntityPtrAddress = data.EntityPtrAddress;
+        target.EntityPosPtrAddress = data.EntityPosPtrAddress;
+    }
+
+    private void ClearTarget(Entity target)
+    {
+        target.Id = 0;
+        target.CurrentHp = 0;
+        target.MaxHp = 0;
+        target.EntityPtrAddress = 0;
+        target.EntityPosPtrAddress = 0;
+        target.IsBest = false;
     }
 }
 
