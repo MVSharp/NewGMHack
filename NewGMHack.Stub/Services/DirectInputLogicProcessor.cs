@@ -238,12 +238,12 @@ public partial class DirectInputLogicProcessor
         // Helps prevent long-range overshoot/vibration
         if (distance > 150f) return 12.0f; 
         
-        // Very Close: Strong sticky damping
-        if (distance < 5f) return 2.0f;
+        // Very Close: Increased from 2.0 to 5.0 for better tracking
+        if (distance < 5f) return 5.0f;
         
         // Mid range: Linear blend
-        // 5..150 -> 2.0..8.0
-        return 2.0f + (distance - 5f) * (12.0f - 2.0f) / (150f - 5f);
+        // 5..150 -> 5.0..12.0
+        return 5.0f + (distance - 5f) * (12.0f - 5.0f) / (150f - 5f);
     }
 
    Vector2 WorldToScreen(Vector3 world, Matrix view, Matrix proj, Viewport vp)
