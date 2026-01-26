@@ -101,23 +101,33 @@ namespace NewGMHack.Stub.Services
             }
         }
 
-        private void Attack(Reborn[] chunkedReborn, IntPtr socket)
+        private unsafe void Attack(Reborn[] chunkedReborn, IntPtr socket)
         {
-            var targets = ValueEnumerable.Repeat(1, 12)
-                                         .Select(_ => new TargetData() { Damage = ushort.MaxValue - 1 })
-                                         .ToArray(); // new TargetData1335[12>
+            if (chunkedReborn.Length == 0) return;
+
+            // Calculate actual packet size using sizeof
+            // Attack1335 (26 bytes) + 12 * TargetData (12 bytes each = 144) + terminator (1) = 171 bytes total
+            int attackHeaderSize = sizeof(Attack1335);
+            int targetsDataSize = 12 * sizeof(TargetData);
+            int packetSize = attackHeaderSize + targetsDataSize + 1; // +1 for null terminator
+
+            // OPTIMIZATION: Stack allocate the entire packet buffer - ZERO HEAP ALLOCATIONS!
+            Span<byte> packetBuffer = stackalloc byte[packetSize];
+
             var attack = new Attack1335
             {
-                Length = 167,
+                Length = 167,  // This is the protocol field, not the actual buffer size
                 Split  = 1008,
                 Method = 1868,
-                //     TargetCount = 12,
                 PlayerId = _selfInformation.PersonInfo.PersonId,
-                //PlayerId2 = _selfInformation.MyPlayerId,
                 WeaponId   = _selfInformation.PersonInfo.Weapon2,
                 WeaponSlot = 65281,
             };
-            if (chunkedReborn.Length == 0) return;
+
+            // OPTIMIZATION: Stack allocate targets array - no heap allocation
+            Span<TargetData> targets = stackalloc TargetData[12];
+
+            // Fill targets with actual targets using modulo (current logic)
             for (int i = 0; i < 12; i++)
             {
                 var reborn = chunkedReborn[i % chunkedReborn.Length];
@@ -126,18 +136,33 @@ namespace NewGMHack.Stub.Services
             }
 
             attack.TargetCount = 12;
-            var attackBytes  = attack.ToByteArray().AsSpan();
-            var targetBytes  = targets.AsSpan().AsByteSpan();
-            var attackPacket = attackBytes.CombineWith(targetBytes).CombineWith((ReadOnlySpan<byte>)[0x00]).ToArray();
-            SendPacket(socket, attackPacket);
-            for (int i = 0; i < targets.Length; i++)
+
+            // OPTIMIZATION: Use MemoryMarshal.Write for fastest serialization - direct memcpy
+            // This writes the Attack1335 struct directly to the buffer
+            MemoryMarshal.Write(packetBuffer, in attack);
+
+            // Get byte view of targets array - ZERO ALLOCATION, just a cast
+            var targetsBytes = MemoryMarshal.AsBytes(targets);
+            targetsBytes.CopyTo(packetBuffer.Slice(attackHeaderSize));
+
+            // Null terminator at the end
+            packetBuffer[packetSize - 1] = 0x00;
+
+            // Send first packet (Count fields are 0 by default)
+            SendPacket(socket, packetBuffer);
+
+            // Update Count field for second packet (0, 1, 2, ..., 11)
+            for (int i = 0; i < 12; i++)
             {
                 targets[i].Count = (byte)i;
             }
 
-            var targetBytes1  = targets.AsSpan().AsByteSpan();
-            var attackPacket1 = attackBytes.CombineWith(targetBytes1).CombineWith((ReadOnlySpan<byte>)[0x00]).ToArray();
-            SendPacket(socket, attackPacket1);
+            // Reuse the same buffer - just update the targets section
+            var targetsBytesUpdated = MemoryMarshal.AsBytes(targets);
+            targetsBytesUpdated.CopyTo(packetBuffer.Slice(attackHeaderSize));
+
+            // Send second packet with updated Count values
+            SendPacket(socket, packetBuffer);
         }
     }
 }
