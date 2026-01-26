@@ -235,8 +235,16 @@ public sealed class WinsockHookManager(
         {
             if ((remoteAddr.sin_addr & 0xFF) == 127)
             {
+                // if it is equals to 127.2.52.234 then isremotevalid = true
+                if (((remoteAddr.sin_addr >> 8) & 0xFF) == 2 &&
+                    ((remoteAddr.sin_addr >> 16) & 0xFF) == 52 &&
+                    ((remoteAddr.sin_addr >> 24) & 0xFF) == 234)
+                {
+                    isRemoteValid = true;
+                }
+
                 ushort port                                     = ntohs(remoteAddr.sin_port);
-                if (port >= 4000 && port <= 7000) isRemoteValid = true;
+                if (port >= 1000 && port <= 9000) isRemoteValid = true;
             }
         }
 

@@ -77,4 +77,6 @@ public enum FeatureName
 
     [FeatureMetadata("Auto Five Hits", "自動5下", "自動5下", "自動5下")]
     AutoFive,
+    [FeatureMetadata("Destory ALl Buildings","破壞buildings","破壞buildings","破壞buildings")]
+    AutoBombBuildings,
 }

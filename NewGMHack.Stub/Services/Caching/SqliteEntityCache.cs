@@ -93,8 +93,8 @@ public class SqliteEntityCache<T> : IEntityCache<T> where T : class
                 $@"INSERT OR REPLACE INTO {_tableName} (Id, Data, LastUpdatedAt) 
                    VALUES (@Id, @Data, @LastUpdatedAt)",
                 new { Id = (long)id, Data = data, LastUpdatedAt = now });
-            
-            _logger.ZLogInformation($"Cached {typeof(T).Name} Id={id} to SQLite");
+
+            _logger.ZLogDebug($"Cached {typeof(T).Name} Id={id} to SQLite");
         }
         catch (Exception ex)
         {

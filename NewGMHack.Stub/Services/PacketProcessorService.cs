@@ -1394,11 +1394,10 @@ public partial class PacketProcessorService : BackgroundService
      //ReadOnlySpan<byte>   unknownSkip  = [0x0C, 0x00, 0xF0, 0x03, 0x1E, 0x08, 0x00, 0x00, 0x00, 0x00, 0xFA, 0x52, 0x00, 0x80, 0x00, 0x02
 //];
         _winsockHookManager.SendPacket(socket, escBuffer);
-        //if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
-        //    _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
-        //{
-        //    DestroyAllBuildings();
-        //}
+        if ( _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.AutoBombBuildings))
+        {
+            DestroyAllBuildings();
+        }
         //_winsockHookManager.SendPacket(socket, zone1);
 
         //_winsockHookManager.SendPacket(socket, zone2);
@@ -1487,7 +1486,7 @@ public partial class PacketProcessorService : BackgroundService
             var packet = new BuildingDamageFrame
             {
                 // Header
-                Length      = (ushort)sizeof(BuildingDamageFrame), // Should be 79 (0x4F)
+                Length      = 0x4F, // Should be 79 (0x4F)
                 Split       = 0x03F0,
                 Method      = 0x08E6,
                 Padding1    = 0,
