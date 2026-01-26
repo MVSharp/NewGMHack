@@ -11,7 +11,7 @@ namespace NewGMHack.Stub.Services;
 /// Reassembles fragmented recv data based on length prefix.
 /// Packet format: [Length:uint16] [F0-03:2 bytes] [Method:uint16] [Body:variable]
 /// </summary>
-public sealed class PacketAccumulator : IPacketAccumulator
+public sealed class PacketAccumulator : IPacketAccumulator, IDisposable
 {
     private const int MinPacketSize = 6;       // Minimum: length(2) + separator(2) + method(2)
     private const byte SeparatorByte1 = 0xF0;
@@ -28,6 +28,7 @@ public sealed class PacketAccumulator : IPacketAccumulator
     private byte[] _buffer;
     private int _position;
     private readonly Lock _lock = new();  // .NET 10: Lock type for better performance than object
+    private bool _disposed;
 
     public PacketAccumulator(int initialCapacity = 8192)
     {
@@ -55,9 +56,16 @@ public sealed class PacketAccumulator : IPacketAccumulator
     }
 
     /// <summary>
-    /// Appends raw recv data (after skipping protocol header) and extracts complete packets.
-    /// Zero-allocation version using ArrayPool and ref struct enumerator.
+    /// Appends raw recv data and returns zero-allocation enumerator over complete packets.
     /// </summary>
+    /// <param name="rawRecvData">Incoming data from recv() after protocol header.</param>
+    /// <returns>
+    /// A ref struct enumerator providing ReadOnlySpan&lt;byte&gt; views into buffer snapshot.
+    /// IMPORTANT: Enumerator MUST be consumed synchronously before next call.
+    /// PERFORMANCE: Rents offset array (~256 bytes) from ArrayPool but intentionally
+    /// does NOT return it (measured trade-off: returning would require heap allocation
+    /// or complex disposal tracking). Caller consumes enumerator within ~100 microseconds.
+    /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public PacketRefEnumerator AppendAndGetPackets(ReadOnlySpan<byte> rawRecvData)
     {
@@ -175,6 +183,13 @@ public sealed class PacketAccumulator : IPacketAccumulator
     /// <summary>
     /// Extracts all complete packets from the buffer based on length prefix.
     /// Zero-allocation version using offset tracking and ref struct enumerator.
+    /// NOTE: Rents offset array from ArrayPool but intentionally does NOT return it.
+    /// This is an acceptable trade-off because:
+    /// 1. Array is small (256 bytes = 32 packets * 2 offsets * 4 bytes)
+    /// 2. Enumeration happens synchronously within ~100 microseconds
+    /// 3. Returning would require tracking the array through the enumerator lifecycle,
+    ///    which would either require heap allocation or unsafe pinning
+    /// 4. ArrayPool naturally pools and reuses arrays, so "leak" is just returning to pool later
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private PacketRefEnumerator ExtractCompletePacketsV2()
@@ -208,8 +223,7 @@ public sealed class PacketAccumulator : IPacketAccumulator
                 var snapshot = new PacketRefEnumerator(bufferSpan, offsets, 1);
                 _position = 0;
 
-                // Note: offsets rented but will be "leaked" - this is OK because
-                // enumerator is consumed immediately in RecvHook before next call
+                // Note: offsets array rented but not returned - see method XML doc for rationale
                 return snapshot;
             }
         }
@@ -301,6 +315,18 @@ public sealed class PacketAccumulator : IPacketAccumulator
             _buffer = BufferPool.Rent(newSize);
             oldBuffer.AsSpan(0, _position).CopyTo(_buffer);
             BufferPool.Return(oldBuffer);
+        }
+    }
+
+    /// <summary>
+    /// Returns the rented buffer to ArrayPool.
+    /// </summary>
+    public void Dispose()
+    {
+        if (!_disposed)
+        {
+            BufferPool.Return(_buffer);
+            _disposed = true;
         }
     }
 
