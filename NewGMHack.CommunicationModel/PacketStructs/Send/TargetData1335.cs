@@ -7,5 +7,7 @@ public struct TargetData
 {
     public uint   TargetId;
     public ushort Damage;
-    public ushort Unknown1, Unknown2, Unknown3;
+    public ushort Unknown1, Unknown2;
+    public byte   Unknown3;
+    public byte   Count;
 }

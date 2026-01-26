@@ -140,11 +140,16 @@ public static float DecodePosition(byte high, byte low)
                     attack.WeaponSlot = 1;
                     for (int i = 0; i < targets.Length; i++)
                     {
-                            targets[i].TargetId = tmpId;
+                        targets[i].TargetId = tmpId;
                     }
                 }
+
                 for (int i = 0; i < targets.Length; i++)
+                {
+                        if (targets[i].TargetId == 0)continue;
+                    //targets[i].Count = (ushort)i;
                     targets[i].Damage = ushort.MaxValue;
+                }
 
                 var attackBytes  = attack.ToByteArray();
                 var targetsBytes = targets.AsByteSpan().CombineWith((ReadOnlySpan<byte>)[0x00]);

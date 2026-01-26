@@ -23,9 +23,6 @@ namespace NewGMHack.Stub.Services
         SelfInformation               _selfInformation) : BackgroundService
     {
         /// <inheritdoc />
-        // [DllImport("ws2_32.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Unicode,
-        //            SetLastError = true)]
-        // private static extern int send(nint socket, nint buffer, int length, int flags);
         private readonly WinsockHookManager _hookManager = managers.OfType<WinsockHookManager>().First();
 
         public unsafe void SendPacket(nint socket, ReadOnlySpan<byte> data, int flags = 0)
@@ -36,8 +33,6 @@ namespace NewGMHack.Stub.Services
                 {
                     nint buffer = (nint)ptr;
                     _hookManager.SendPacket(socket, data, flags);
-                    //send(socket, buffer, data.Length, flags);
-                    //this.OriginalSend(socket, buffer, data.Length, flags);
                 }
             }
             catch
@@ -46,7 +41,6 @@ namespace NewGMHack.Stub.Services
             }
         }
 
-        //private IntPtr cachedSocket = 0;
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
@@ -65,14 +59,10 @@ namespace NewGMHack.Stub.Services
                 foreach (var chunkedReborn in distinctTargets.Item2.AsValueEnumerable().OrderBy(c => c.Location)
                                                              .Chunk(12).ToArray())
                 {
-                    //cachedSocket = distinctTargets.Item1;
-                    //   InitTargetData();
                     try
                     {
-                        
-                        await Attack(chunkedReborn, distinctTargets.Item1);
+                        Attack(chunkedReborn, distinctTargets.Item1);
                         AddHistories(chunkedReborn);
-                        //await HandleHistories();
                     }
                     catch
                     {
@@ -92,14 +82,13 @@ namespace NewGMHack.Stub.Services
                     {
                         if (count > 10)
                         {
-                            var isRemoved = _selfInformation.BombHistory.TryRemove(r.TargetId,out var _);
+                            var isRemoved = _selfInformation.BombHistory.TryRemove(r.TargetId, out var _);
                             if (isRemoved)
                             {
                                 _logger.ZLogInformation($"removed {r.TargetId} from bomb histroy due to exeed limit");
                             }
                             else
                             {
-
                                 _logger.ZLogInformation($"failed to remove {r.TargetId} from bomb histroy");
                             }
                         }
@@ -112,101 +101,43 @@ namespace NewGMHack.Stub.Services
             }
         }
 
-        //private async Task HandleHistories()
-        //{
-        //    foreach (var keys in _selfInformation.BombHistory.Keys.Chunk(12))
-        //    {
-        //        List<uint> reborns = new(12);
-        //        foreach (var key in keys)
-        //        {
-        //            var isGetSucessfully = _selfInformation.BombHistory.Get(key, out var count);
-        //            if (isGetSucessfully)
-        //            {
-        //                if (count >= 10)
-        //                {
-        //                    _selfInformation.BombHistory.Remove(key);
-        //                    continue;
-        //                }
-
-        //                _selfInformation.BombHistory.Update(key, ++count);
-        //                reborns.Add(key);
-        //            }
-        //        }
-
-        //        _logger.ZLogInformation($"bomb history bomb : {string.Join("|", reborns)}");
-        //        if (reborns.Count > 0)
-        //        {
-        //            await Attack(reborns.AsValueEnumerable()
-        //                                .Select(c => new Reborn(_selfInformation.PersonInfo.PersonId, c, 0)).ToArray(),
-        //                         _selfInformation.LastSocket);
-        //        }
-        //    }
-        //}
-
-        private async Task Attack(Reborn[] chunkedReborn, IntPtr socket)
+        private void Attack(Reborn[] chunkedReborn, IntPtr socket)
         {
             var targets = ValueEnumerable.Repeat(1, 12)
                                          .Select(_ => new TargetData() { Damage = ushort.MaxValue - 1 })
                                          .ToArray(); // new TargetData1335[12>
-            //var attack = new Attack1335
-            //{
-            //    Version = 166,
-            //    Split   = 1008,
-            //    Method  = 1335,
-            //    //     TargetCount = 12,
-            //    MyPlayerId = _selfInformation.PersonInfo.PersonId,
-            //    //PlayerId2 = _selfInformation.MyPlayerId,
-            //    WeaponId   = _selfInformation.PersonInfo.Weapon2,
-            //    WeaponSlot = 1
-            //};
-
             var attack = new Attack1335
             {
                 Length = 167,
-                Split   = 1008,
-                Method  = 1868,
+                Split  = 1008,
+                Method = 1868,
                 //     TargetCount = 12,
                 PlayerId = _selfInformation.PersonInfo.PersonId,
                 //PlayerId2 = _selfInformation.MyPlayerId,
                 WeaponId   = _selfInformation.PersonInfo.Weapon2,
                 WeaponSlot = 65281,
             };
-            var i = 0;
-            foreach (var reborn in chunkedReborn)
+            if (chunkedReborn.Length == 0) return;
+            for (int i = 0; i < 12; i++)
             {
-                //  targets[i]          = new TargetData1335();
+                var reborn = chunkedReborn[i % chunkedReborn.Length];
                 targets[i].TargetId = reborn.TargetId;
                 targets[i].Damage   = ushort.MaxValue;
-                i++;
             }
 
-            while (i < 12)
-            {
-                var randomReborn = chunkedReborn[Random.Shared.Next(chunkedReborn.Length)];
-                targets[i].TargetId = randomReborn.TargetId;
-                targets[i].Damage   = ushort.MaxValue;
-                i++;
-            }
-
-            //attack.TargetData  = targets;
-            attack.TargetCount = BitConverter.GetBytes(i)[0];
-            //var buf    = DefinitionsExtensions.WriteAttack(attack);
-            //if(buf.Length ==0)continue;
-            //var length = BitConverter.GetBytes(buf.Length);
-            // var hex = BitConverter.ToString(buf).Replace("-", " ");
+            attack.TargetCount = 12;
             var attackBytes  = attack.ToByteArray().AsSpan();
             var targetBytes  = targets.AsSpan().AsByteSpan();
             var attackPacket = attackBytes.CombineWith(targetBytes).CombineWith((ReadOnlySpan<byte>)[0x00]).ToArray();
-            //var hex = BitConverter.ToString(attackPacket);
-            //_logger.ZLogInformation($"bomb bomb {attackPacket.Length} |the hex: {hex}");
-            //await Task.Run(() =>
-            //{
-                for (int j = 0; j < 3; j++)
+            SendPacket(socket, attackPacket);
+            for (int i = 0; i < targets.Length; i++)
             {
-                SendPacket(socket, attackPacket);
-                //_hookManager.SendPacket(distinctTargets.Item1, buf);
+                targets[i].Count = (byte)i;
             }
-            //});
+
+            var targetBytes1  = targets.AsSpan().AsByteSpan();
+            var attackPacket1 = attackBytes.CombineWith(targetBytes1).CombineWith((ReadOnlySpan<byte>)[0x00]).ToArray();
+            SendPacket(socket, attackPacket1);
         }
     }
 }
