@@ -342,18 +342,23 @@ public class EntityScannerService : BackgroundService
     ///   <item><term>V</term><description>Down (world -Y axis)</description></item>
     /// </list>
     ///
-    /// <para><b>View Matrix to Direction Vectors (matching DrawRadar):</b></para>
+    /// <para><b>View Matrix to Direction Vectors:</b></para>
     /// <code>
-    /// // Extract forward direction from View Matrix (OverlayManager.cs:772-776)
-    /// float camForwardX = -viewMatrix.M31;
-    /// float camForwardZ = -viewMatrix.M33;
-    /// float cameraYaw = (float)Math.Atan2(camForwardX, camForwardZ) + (float)Math.PI;
+    /// // Extract forward direction from View Matrix row 2 (M31, M32, M33)
+    /// // Negate because View Matrix looks down -Z axis
+    /// float forwardX = -viewMatrix.M31;
+    /// float forwardZ = -viewMatrix.M33;
+    /// float length = Math.Sqrt(forwardX * forwardX + forwardZ * forwardZ);
     ///
-    /// // Calculate forward/right vectors using trigonometry
-    /// float cosYaw = (float)Math.Cos(-cameraYaw);
-    /// float sinYaw = (float)Math.Sin(-cameraYaw);
-    /// Vector3 cameraForward = new Vector3(cosYaw, 0f, sinYaw);
-    /// Vector3 cameraRight = new Vector3(sinYaw, 0f, -cosYaw);
+    /// // Normalize to get unit direction vector
+    /// float dirX = forwardX / length;
+    /// float dirZ = forwardZ / length;
+    ///
+    /// // Forward: direction camera is facing
+    /// Vector3 cameraForward = new Vector3(dirX, 0f, dirZ);
+    ///
+    /// // Right: perpendicular to forward (rotate 90° clockwise in XZ plane)
+    /// Vector3 cameraRight = new Vector3(dirZ, 0f, -dirX);
     /// </code>
     ///
     /// <para><b>Movement Speed:</b></para>
@@ -363,7 +368,8 @@ public class EntityScannerService : BackgroundService
     /// <para><b>Edge Cases Handled:</b></para>
     /// <list type="bullet">
     ///   <item>No keys pressed → returns original position</item>
-    ///   <item>Uses same trigonometric approach as DrawRadar for consistency</item>
+    ///   <item>Invalid forward vector (length < 0.001) → returns original position</item>
+    ///   <item>Directly extracts direction from View Matrix (no trigonometry)</item>
     /// </list>
     ///
     /// <para><b>Usage:</b></para>
@@ -374,23 +380,25 @@ public class EntityScannerService : BackgroundService
     {
         Vector3 movement = Vector3.Zero;
 
-        // Match DrawRadar approach for camera direction calculation
-        // Extract forward vector components (negated, matching OverlayManager.cs:772-773)
-        float camForwardX = -viewMatrix.M31;
-        float camForwardZ = -viewMatrix.M33;
+        // Extract forward direction from View Matrix (row 2, negated)
+        // View Matrix M31/M33 look down -Z, so we negate to get forward direction
+        float forwardX = -viewMatrix.M31;
+        float forwardZ = -viewMatrix.M33;
+        float length = (float)Math.Sqrt(forwardX * forwardX + forwardZ * forwardZ);
 
-        // Calculate camera yaw angle (same as DrawRadar line 774)
-        float cameraYaw = (float)Math.Atan2(camForwardX, camForwardZ) + (float)Math.PI;
+        if (length < 0.001f)
+            return position; // Invalid forward vector
 
-        // Calculate direction vectors using trigonometry (matching DrawRadar lines 775-776)
-        float cosYaw = (float)Math.Cos(-cameraYaw);
-        float sinYaw = (float)Math.Sin(-cameraYaw);
+        // Normalize to get direction
+        float dirX = forwardX / length;
+        float dirZ = forwardZ / length;
 
-        // Forward direction: use cos/sin directly
-        Vector3 cameraForward = new Vector3(cosYaw, 0f, sinYaw);
+        // Forward vector: direction camera is facing
+        Vector3 cameraForward = new Vector3(dirX, 0f, dirZ);
 
-        // Right direction: perpendicular to forward (rotate 90 degrees clockwise)
-        Vector3 cameraRight = new Vector3(sinYaw, 0f, -cosYaw);
+        // Right vector: perpendicular to forward (rotate 90° clockwise in XZ plane)
+        // If forward is (dirX, dirZ), then right is (dirZ, -dirX)
+        Vector3 cameraRight = new Vector3(dirZ, 0f, -dirX);
 
         // Calculate camera-relative movement
         if ((GetAsyncKeyState((int)Keys.W) & 0x8000) != 0)
