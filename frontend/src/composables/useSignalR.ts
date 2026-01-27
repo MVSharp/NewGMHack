@@ -2,6 +2,9 @@ import { HubConnectionBuilder, HubConnection, LogLevel } from '@microsoft/signal
 import { ref, computed, onUnmounted } from 'vue'
 import { api, type PilotInfo, type Roommate, type HistoryItem, type PlayerStats } from '@/services/api'
 import debounce from 'lodash-es/debounce'
+import { useToast } from './useToast'
+
+const { showToast } = useToast()
 
 // === Types ===
 
@@ -112,13 +115,14 @@ function stopMockData() {
 
 async function inject() {
     isInjecting.value = true
-    
+
     // MOCK MODE INTERCEPTION
     if (isDev()) {
         console.log('[MOCK] Simulating Injection...')
         setTimeout(() => {
             isGameConnected.value = true
             isInjecting.value = false
+            showToast('Injection successful (mock)', 'success')
             console.log('[MOCK] Injection Successful')
         }, 2000)
         return
@@ -127,8 +131,10 @@ async function inject() {
     // REAL MODE
     try {
         await api.inject()
+        showToast('Injection successful', 'success')
     } catch (e) {
         console.error('Inject failed:', e)
+        showToast('Injection failed: ' + (e as Error).message, 'error')
         isInjecting.value = false
     }
 }
@@ -139,6 +145,7 @@ async function deattach() {
         console.log('[MOCK] Simulating Deattach...')
         setTimeout(() => {
             isGameConnected.value = false
+            showToast('Detached successfully (mock)', 'success')
             console.log('[MOCK] Deattached')
         }, 1000)
         return
@@ -148,8 +155,10 @@ async function deattach() {
     try {
         await api.deattach()
         isGameConnected.value = false
+        showToast('Detached successfully', 'success')
     } catch (e) {
         console.error('Deattach failed:', e)
+        showToast('Failed to detach: ' + (e as Error).message, 'error')
     }
 }
 
@@ -178,6 +187,7 @@ async function refreshStatsImpl() {
         }
     } catch (e) {
         console.error('Refresh stats error:', e)
+        showToast('Failed to refresh stats: ' + (e as Error).message, 'error')
     }
 }
 
@@ -289,6 +299,7 @@ async function startSignalR() {
         connection.value = conn
     } catch (err) {
         console.error('SignalR Connection Failed', err)
+        showToast('Failed to connect to server. Retrying in 5s...', 'error')
         setTimeout(() => startSignalR(), 5000)
     }
 }
