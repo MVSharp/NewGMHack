@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using AutoUpdaterDotNET;
 using Microsoft.Extensions.Logging;
 
@@ -105,6 +106,7 @@ public class AutoUpdateService
     {
         try
         {
+            _logger.LogInformation("Fetching latest release from {Url}", ReleasesUrl);
             var response = await _httpClient.GetAsync(ReleasesUrl);
             if (!response.IsSuccessStatusCode)
             {
@@ -113,10 +115,23 @@ public class AutoUpdateService
             }
 
             var json = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<GitHubRelease>(json, new JsonSerializerOptions
+            _logger.LogDebug("GitHub API response: {Json}", json);
+
+            var release = JsonSerializer.Deserialize<GitHubRelease>(json, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
+
+            if (release == null)
+            {
+                _logger.LogWarning("Failed to deserialize GitHub release response");
+                return null;
+            }
+
+            _logger.LogInformation("Successfully fetched release: {TagName}, {AssetCount} assets",
+                release.TagName, release.Assets?.Length ?? 0);
+
+            return release;
         }
         catch (Exception ex)
         {
@@ -414,11 +429,22 @@ public class AutoUpdateService
     /// <summary>
     /// Parse version from tag name (e.g., "v1.0.747.10419")
     /// </summary>
-    private Version ParseVersion(string tagName)
+    private Version ParseVersion(string? tagName)
     {
+        if (string.IsNullOrEmpty(tagName))
+        {
+            _logger.LogWarning("Tag name is null or empty, returning default version");
+            return new Version("1.0.0.0");
+        }
+
         var versionString = tagName.TrimStart('v');
-        Version.TryParse(versionString, out var version);
-        return version ?? new Version("1.0.0.0");
+        if (Version.TryParse(versionString, out var version))
+        {
+            return version;
+        }
+
+        _logger.LogWarning("Failed to parse version from tag: {TagName}", tagName);
+        return new Version("1.0.0.0");
     }
 
     /// <summary>
@@ -450,20 +476,32 @@ public class AutoUpdateService
 /// <summary>
 /// GitHub Release API response
 /// </summary>
-internal record GitHubRelease(
-    string TagName,
-    string HtmlUrl,
-    GitHubAsset[] Assets
-);
+internal record GitHubRelease
+{
+    [JsonPropertyName("tag_name")]
+    public string TagName { get; init; } = string.Empty;
+
+    [JsonPropertyName("html_url")]
+    public string HtmlUrl { get; init; } = string.Empty;
+
+    [JsonPropertyName("assets")]
+    public GitHubAsset[] Assets { get; init; } = Array.Empty<GitHubAsset>();
+}
 
 /// <summary>
 /// GitHub Release Asset
 /// </summary>
-internal record GitHubAsset(
-    string Name,
-    string BrowserDownloadUrl,
-    long Size
-);
+internal record GitHubAsset
+{
+    [JsonPropertyName("name")]
+    public string Name { get; init; } = string.Empty;
+
+    [JsonPropertyName("browser_download_url")]
+    public string BrowserDownloadUrl { get; init; } = string.Empty;
+
+    [JsonPropertyName("size")]
+    public long Size { get; init; }
+}
 
 /// <summary>
 /// Component change detection result
