@@ -119,7 +119,7 @@ public class DirectInputHookManager(
         {
             IntPtr foreground = GetForegroundWindow();
             if (foreground == IntPtr.Zero) return false;
-            
+
             GetWindowThreadProcessId(foreground, out uint foregroundPid);
             return foregroundPid == Environment.ProcessId;
         }
@@ -129,6 +129,42 @@ public class DirectInputHookManager(
         }
     }
 
+    /// <summary>
+    /// Determines if aimbot should be injected based on focus state and feature flag.
+    /// Aimbot requires BOTH: game focused AND feature enabled.
+    /// The right-click button check happens separately in InjectAimbot().
+    /// </summary>
+    private bool ShouldInjectAimbot()
+    {
+        bool isAutoAim = self.ClientConfig.Features.IsFeatureEnable(FeatureName.EnableAutoAim);
+        bool isGameFocused = IsGameFocused();
+
+        // Aimbot: only when game is focused (even if right-click is held elsewhere)
+        // This prevents aimbot from working when user is in browser/other apps
+        return isAutoAim && isGameFocused;
+    }
+
+    /// <summary>
+    /// Hooked GetDeviceState implementation that handles input injection.
+    ///
+    /// Behavior:
+    /// - When GAME IS FOCUSED:
+    ///   - Pass through real user input (keyboard/mouse)
+    ///   - Inject AutoReady synthetic input (if enabled)
+    ///   - Inject Aimbot mouse movement (if enabled AND right-click held)
+    ///
+    /// - When GAME IS NOT FOCUSED:
+    ///   - Zero all real input (prevent background control)
+    ///   - Inject AutoReady synthetic input (if enabled) - WORKS IN BACKGROUND
+    ///   - NEVER inject Aimbot (disabled by ShouldInjectAimbot())
+    ///
+    /// Safety layers:
+    /// 1. Focus check: ShouldInjectAimbot() returns false when backgrounded
+    /// 2. Button check: InjectAimbot() checks right mouse button internally
+    ///
+    /// This ensures AutoReady works even when user is in browser/other app,
+    /// but Aimbot only works when game is actively focused.
+    /// </summary>
     private int HookedGetDeviceState(IntPtr devicePtr, int size, IntPtr dataPtr, DeviceType deviceType)
     {
         var original = deviceType switch
@@ -150,7 +186,6 @@ public class DirectInputHookManager(
 
         bool isGameFocused = IsGameFocused();
         bool isAutoReady = self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoReady);
-        bool isAutoAim = self.ClientConfig.Features.IsFeatureEnable(FeatureName.EnableAutoAim);
 
         // If game is focused: pass through real input (don't zero, don't modify)
         // Unless AutoReady or AutoAim is enabled, then also inject synthetic input
@@ -164,7 +199,7 @@ public class DirectInputHookManager(
             }
 
             // Aimbot: inject mouse delta when aiming (using refined algorithm in logicProcessor)
-            if (isAutoAim && deviceType == DeviceType.Mouse && size == Marshal.SizeOf<DIMOUSESTATE>())
+            if (deviceType == DeviceType.Mouse && size == Marshal.SizeOf<DIMOUSESTATE>() && ShouldInjectAimbot())
             {
                 logicProcessor.InjectAimbot(dataPtr);
             }
@@ -183,8 +218,9 @@ public class DirectInputHookManager(
                 InjectAutoReadyInput(deviceType, size, dataPtr);
             }
 
-            // Aimbot also works in background
-            if (isAutoAim && deviceType == DeviceType.Mouse && size == Marshal.SizeOf<DIMOUSESTATE>())
+            // Aimbot: disabled when game is not focused
+            // (ShouldInjectAimbot() returns false, preventing background injection)
+            if (deviceType == DeviceType.Mouse && size == Marshal.SizeOf<DIMOUSESTATE>() && ShouldInjectAimbot())
             {
                 logicProcessor.InjectAimbot(dataPtr);
             }
