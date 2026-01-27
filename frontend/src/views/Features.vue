@@ -2,8 +2,10 @@
 import { ref, onMounted } from 'vue'
 import { api, type Feature } from '@/services/api'
 import { useI18n } from '@/composables/useI18n'
+import { useToast } from '@/composables/useToast'
 
 const { t, currentLang } = useI18n()
+const { showToast } = useToast()
 
 const features = ref<Feature[]>([])
 const loading = ref(true)
@@ -32,26 +34,24 @@ function getDisplayName(feature: Feature): string {
 async function toggleFeature(feature: Feature, event: Event) {
     event.preventDefault()
     event.stopPropagation()
-    
+
     if (togglingId.value === feature.Id) return
-    
-    const newState = !feature.Enabled
+
+    const previousState = feature.Enabled
+    const newState = !previousState
+
+    // Optimistic update
+    feature.Enabled = newState
     togglingId.value = feature.Id
-    
+
     try {
-        feature.Enabled = newState
         await api.updateFeature(feature.Id, newState)
-        
-        const updatedFeatures = await api.getFeatures()
-        updatedFeatures.forEach(updated => {
-            const existing = features.value.find(f => f.Id === updated.Id)
-            if (existing) {
-                existing.Enabled = updated.Enabled
-            }
-        })
+        // Success - optimistic update already applied
     } catch (e) {
         console.error('Toggle Failed:', e)
-        feature.Enabled = !newState
+        // Rollback on error
+        feature.Enabled = previousState
+        showToast(`Failed to toggle ${feature.Name}: ` + (e as Error).message, 'error')
     } finally {
         togglingId.value = null
     }
