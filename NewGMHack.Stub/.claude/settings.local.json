@@ -5,7 +5,15 @@
       "Bash(findstr:*)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Michael.Van\\\\source\\\\repos\\\\MVSharp\\\\NewGMHack\\\\NewGMHack\\\\NewGMHack.Stub\" -Filter \"*.cs\" -Recurse)",
       "Bash(Where-Object { $_Directory.Name -eq \"PacketStructs\" })",
-      "Skill(superpowers:brainstorming)"
+      "Skill(superpowers:brainstorming)",
+      "Skill(superpowers:writing-plans)",
+      "Skill(superpowers:subagent-driven-development)",
+      "Bash(dotnet build:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(Select-String:*)",
+      "Bash(ls:*)",
+      "Bash(git rev-parse:*)"
     ]
   }
 }
