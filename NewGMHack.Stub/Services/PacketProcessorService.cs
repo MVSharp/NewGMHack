@@ -817,14 +817,18 @@ public partial class PacketProcessorService : BackgroundService
     {
         _logger.LogGiftBuffer(string.Join(" ", buffer.ToArray().Select(b => b.ToString("X2"))));
         if (!_selfInformation.ClientConfig.Features.GetFeature(FeatureName.CollectGift).IsEnabled) return;
-        var personId = BitConverter.ToUInt32(buffer.Slice(0, 4)); // EB 02 00 00 → 0x000002EB
+
+        var personId = MemoryMarshal.Read<uint>(buffer);
         _selfInformation.PersonInfo.PersonId = personId;
 
-        var giftStructs = buffer.Slice(4).CastTo<GiftStruct>().ToArray();
+        var giftStructs = buffer.Slice(4).CastTo<GiftStruct>();
+        int giftCount = Math.Min(giftStructs.Length, 256); // Safety bound
 
-        _logger.LogGiftsCount(giftStructs.Length);
-        foreach (var gift in giftStructs.Where(x => x.ItemType != 301))
+        _logger.LogGiftsCount(giftCount);
+        for (int i = 0; i < giftCount; i++)
         {
+            var gift = giftStructs[i];
+            if (gift.ItemType == 301) continue;
 
             //_logger.ZLogInformation($"accepting gift:{gift.GiftId}");
             AcceptGiftPacket acceptGiftPacket = new AcceptGiftPacket()
