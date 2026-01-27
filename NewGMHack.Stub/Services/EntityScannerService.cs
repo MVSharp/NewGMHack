@@ -151,10 +151,32 @@ public class EntityScannerService : BackgroundService
                 }
 
                 var (playerPos, viewMatrix, foundSelf) = ScanMySelf();
-                //if (scanResults != null  && scanResults.Count > 0 && foundSelf)
-                //{
-                //    GetBestTarget();
-                //}
+
+                // Apply camera-relative movement if FreeMove enabled
+                if (foundSelf && _selfInfo.ClientConfig.Features.IsFeatureEnable(FeatureName.FreeMove))
+                {
+                    Vector3 newPos = ApplyFreeMovement(playerPos, viewMatrix);
+
+                    // Write back to memory (reuse existing logic from old ScanMySelf)
+                    // Need to re-read entityStruct pointer to get position pointer
+                    var moduleBase = GetModuleBaseAddress();
+                    if (moduleBase != 0)
+                    {
+                        var pointerBase = moduleBase + BaseOffset;
+                        if (TryReadUInt(pointerBase, out var firstPtr) && firstPtr != 0)
+                        {
+                            if (TryReadUInt(firstPtr + MySelfOffset, out var entityStruct) && entityStruct != 0)
+                            {
+                                if (TryReadUInt(entityStruct + PosPtrOffset, out var posPtr) && posPtr != 0)
+                                {
+                                    WriteFloat(posPtr + XyzOffsets[0], newPos.X);
+                                    //WriteFloat(posPtr + XyzOffsets[1], newPos.Y); // Y commented out in original
+                                    WriteFloat(posPtr + XyzOffsets[2], newPos.Z);
+                                }
+                            }
+                        }
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -215,23 +237,6 @@ public class EntityScannerService : BackgroundService
             _selfInfo.PersonInfo.X         = entity.Position.X;
             _selfInfo.PersonInfo.Y         = entity.Position.Y;
             _selfInfo.PersonInfo.Z         = entity.Position.Z;
-            // Mission Bomb Teleport Feature
-            if (_selfInfo.ClientConfig.Features.IsFeatureEnable(FeatureName.FreeMove))
-            {
-                Vector3 loc = new Vector3 { X = entity.Position.X, Y = entity.Position.Y , Z = entity.Position.Z };
-                if ((GetAsyncKeyState((int)Keys.W)     & 0x8000) != 0) loc.Z += 50f;
-                if ((GetAsyncKeyState((int)Keys.S)     & 0x8000) != 0) loc.Z -= 50f;
-                if ((GetAsyncKeyState((int)Keys.A)     & 0x8000) != 0) loc.X -= 50f;
-                if ((GetAsyncKeyState((int)Keys.D)     & 0x8000) != 0) loc.X += 50f;
-                if ((GetAsyncKeyState((int)Keys.Space) & 0x8000) != 0) loc.Y += 50f;
-                if ((GetAsyncKeyState((int)Keys.V)     & 0x8000) != 0) loc.Y -= 50f;
-                if (TryReadUInt(entityStruct + PosPtrOffset, out var posPtr) && posPtr != 0)
-                {
-                    WriteFloat(posPtr + XyzOffsets[0], loc.X);
-                    //WriteFloat(posPtr + XyzOffsets[1], loc.Y);
-                    WriteFloat(posPtr + XyzOffsets[2], loc.Z);
-                }
-            }
 
             if (_selfInfo.ClientConfig.Features.IsFeatureEnable(FeatureName.IsIllusion))
             {
@@ -290,6 +295,52 @@ public class EntityScannerService : BackgroundService
         {
             return (Vector3.Zero, Matrix.Identity, false);
         }
+    }
+
+    /// <summary>
+    /// Applies camera-relative movement based on WASD key states.
+    /// Uses View Matrix to transform key inputs into camera-space movement.
+    /// </summary>
+    /// <param name="position">Current player position</param>
+    /// <param name="viewMatrix">View Matrix containing camera rotation</param>
+    /// <returns>Modified position if keys pressed, original if none</returns>
+    private Vector3 ApplyFreeMovement(Vector3 position, Matrix viewMatrix)
+    {
+        Vector3 movement = Vector3.Zero;
+        float speed = 50f; // Movement speed (units per key press)
+
+        // Extract camera direction vectors from View Matrix
+        // View Matrix layout (row-major):
+        //   Right.X    Up.X     Forward.X    Translation.X
+        //   Right.Y    Up.Y     Forward.Y    Translation.Y
+        //   Right.Z    Up.Z     Forward.Z    Translation.Z
+
+        // Column 1 (Right vector): M11, M21, M31
+        Vector3 cameraRight = new Vector3(viewMatrix.M11, viewMatrix.M21, viewMatrix.M31);
+
+        // Column 3 (Forward vector): M13, M23, M33 (negated in View Matrix)
+        Vector3 cameraForward = new Vector3(-viewMatrix.M13, -viewMatrix.M23, -viewMatrix.M33);
+
+        // Normalize vectors (in case of scaling)
+        cameraRight = Vector3.Normalize(cameraRight);
+        cameraForward = Vector3.Normalize(cameraForward);
+
+        // Calculate camera-relative movement
+        if ((GetAsyncKeyState((int)Keys.W) & 0x8000) != 0)
+            movement += cameraForward * speed;  // Forward
+        if ((GetAsyncKeyState((int)Keys.S) & 0x8000) != 0)
+            movement -= cameraForward * speed;  // Backward
+        if ((GetAsyncKeyState((int)Keys.A) & 0x8000) != 0)
+            movement -= cameraRight * speed;   // Left (opposite of right)
+        if ((GetAsyncKeyState((int)Keys.D) & 0x8000) != 0)
+            movement += cameraRight * speed;   // Right
+        if ((GetAsyncKeyState((int)Keys.Space) & 0x8000) != 0)
+            movement.Y += speed;              // Up (world Y)
+        if ((GetAsyncKeyState((int)Keys.V) & 0x8000) != 0)
+            movement.Y -= speed;              // Down (world Y)
+
+        // Apply movement to position
+        return position + movement;
     }
 
     private (float x, float y, float z) GetRandomEntitesLoc()
