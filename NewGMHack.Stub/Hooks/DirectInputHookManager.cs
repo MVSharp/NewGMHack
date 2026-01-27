@@ -119,7 +119,7 @@ public class DirectInputHookManager(
         {
             IntPtr foreground = GetForegroundWindow();
             if (foreground == IntPtr.Zero) return false;
-            
+
             GetWindowThreadProcessId(foreground, out uint foregroundPid);
             return foregroundPid == Environment.ProcessId;
         }
@@ -127,6 +127,21 @@ public class DirectInputHookManager(
         {
             return true; // Assume focused on error
         }
+    }
+
+    /// <summary>
+    /// Determines if aimbot should be injected based on focus state and feature flag.
+    /// Aimbot requires BOTH: game focused AND feature enabled.
+    /// The right-click button check happens separately in InjectAimbot().
+    /// </summary>
+    private bool ShouldInjectAimbot()
+    {
+        bool isAutoAim = self.ClientConfig.Features.IsFeatureEnable(FeatureName.EnableAutoAim);
+        bool isGameFocused = IsGameFocused();
+
+        // Aimbot: only when game is focused (even if right-click is held elsewhere)
+        // This prevents aimbot from working when user is in browser/other apps
+        return isAutoAim && isGameFocused;
     }
 
     private int HookedGetDeviceState(IntPtr devicePtr, int size, IntPtr dataPtr, DeviceType deviceType)
