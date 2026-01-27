@@ -16,6 +16,12 @@ public class ModuleWaitOptions
     public int CheckIntervalMs { get; set; } = 500;
 
     /// <summary>
+    /// Initial stabilization delay after injection before checking modules (default: 2000ms)
+    /// CRITICAL: Prevents access violations from calling toolhelp32 APIs too early during DLL injection
+    /// </summary>
+    public int InitialStabilizationDelayMs { get; set; } = 2000;
+
+    /// <summary>
     /// Critical module names that must be loaded before hooks initialize
     /// </summary>
     public string[] RequiredModules { get; set; } =

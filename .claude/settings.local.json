@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git push:*)",
+      "Bash(gh pr list:*)",
+      "Bash(git show-ref:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git checkout:*)",
+      "Skill(superpowers:subagent-driven-development)",
+      "Bash(dotnet build:*)",
+      "Bash(Select-String:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git rm:*)",
+      "WebSearch",
+      "Bash(git show:*)",
+      "Bash(git reset:*)",
+      "Bash(ls:*)",
+      "Bash(Select-Object:*)"
+    ]
+  }
+}

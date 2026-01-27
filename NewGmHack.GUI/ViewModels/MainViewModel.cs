@@ -130,7 +130,7 @@ namespace NewGmHack.GUI.ViewModels
                 {
                     if (!string.IsNullOrEmpty(_processPath))
                     {
-
+                        
                         var psi = new ProcessStartInfo
                         {
                             FileName = _processPath,

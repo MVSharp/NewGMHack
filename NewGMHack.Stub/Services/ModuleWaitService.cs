@@ -86,10 +86,28 @@ public class ModuleWaitService
         BootstrapLog(msg);
         _logger.ZLogInformation($"[ModuleWait] {msg}");
 
+        // CRITICAL: Add initial stabilization delay to allow process to settle after injection
+        // Without this, CreateToolhelp32Snapshot can cause access violations if called too early
+        BootstrapLog($"Initial stabilization delay: {_options.InitialStabilizationDelayMs}ms before module enumeration");
+        Thread.Sleep(_options.InitialStabilizationDelayMs);
+
         var startTime = DateTime.UtcNow;
         while (true)
         {
-            var loadedModules = GetLoadedModules();
+            HashSet<string> loadedModules;
+            try
+            {
+                loadedModules = GetLoadedModules();
+            }
+            catch (Exception ex)
+            {
+                // If toolhelp32 API fails, log and retry after delay
+                var errorMsg = $"GetLoadedModules failed: {ex.Message}. Retrying...";
+                BootstrapLog(errorMsg);
+                _logger.ZLogWarning($"[ModuleWait] {errorMsg}");
+                Thread.Sleep(_options.CheckIntervalMs);
+                continue;
+            }
 
             var missingModules = _options.RequiredModules.Where(m => !loadedModules.Contains(m)).ToArray();
 
