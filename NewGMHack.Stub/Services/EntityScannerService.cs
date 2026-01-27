@@ -342,31 +342,22 @@ public class EntityScannerService : BackgroundService
     ///   <item><term>V</term><description>Down (world -Y axis)</description></item>
     /// </list>
     ///
-    /// <para><b>View Matrix to Direction Vectors (dynamic correction):</b></para>
+    /// <para><b>View Matrix to Direction Vectors (simplified):</b></para>
     /// <code>
-    /// // Extract right vector from row 0 (M11, M13)
-    /// float rightX = viewMatrix.M11;
-    /// float rightZ = viewMatrix.M13;
+    /// // Extract forward from row 2 (M31, M33)
+    /// float forwardX = viewMatrix.M31;
+    /// float forwardZ = viewMatrix.M33;
     ///
-    /// // Extract forward vector from row 2 (M31, M33, negated)
-    /// float forwardX = -viewMatrix.M31;
-    /// float forwardZ = -viewMatrix.M33;
+    /// // Normalize
+    /// float dirX = forwardX / length;
+    /// float dirZ = forwardZ / length;
     ///
-    /// // Check coordinate handedness with 2D cross product
-    /// float crossProduct = rightX * forwardZ - rightZ * forwardX;
-    ///
-    /// // If cross product is negative, flip forward vector
-    /// if (crossProduct < 0) {
-    ///     forwardX = -forwardX;
-    ///     forwardZ = -forwardZ;
-    /// }
-    ///
-    /// // Normalize and use for movement
+    /// // Forward: (dirX, 0, dirZ)
+    /// // Right: perpendicular clockwise = (dirZ, 0, -dirX)
     /// </code>
     /// <para>
-    /// <b>Why This Works:</b> View Matrix forward vector alternates sign based on camera direction.
-    /// Cross product check dynamically detects when forward is flipped and corrects it.
-    /// This ensures consistent right-handed coordinate system in all 4 directions.
+    /// <b>Note:</b> Right vector is calculated as perpendicular to forward, not extracted from matrix.
+    /// This avoids issues with alternating vector signs in View Matrix rows.
     /// </para>
     ///
     /// <para><b>Movement Speed:</b></para>
@@ -376,9 +367,8 @@ public class EntityScannerService : BackgroundService
     /// <para><b>Edge Cases Handled:</b></para>
     /// <list type="bullet">
     ///   <item>No keys pressed → returns original position</item>
-    ///   <item>Invalid direction vectors (length < 0.001) → returns original position</item>
-    ///   <item>Forward vector auto-flipped when coordinate system is left-handed (cross product < 0)</item>
-    ///   <item>Extracts both right and forward from View Matrix rows (no trigonometry)</item>
+    ///   <item>Invalid forward vector (length < 0.001) → returns original position</item>
+    ///   <item>Right vector calculated from forward (perpendicular, not from matrix)</item>
     /// </list>
     ///
     /// <para><b>Usage:</b></para>
@@ -389,42 +379,24 @@ public class EntityScannerService : BackgroundService
     {
         Vector3 movement = Vector3.Zero;
 
-        // Extract direction vectors directly from View Matrix rows
-        // In View Matrix, row 0 = Right, row 2 = Forward (but may be negated depending on game)
-
-        // Right vector from row 0
-        float rightX = viewMatrix.M11;
-        float rightZ = viewMatrix.M13;
-        float rightLength = (float)Math.Sqrt(rightX * rightX + rightZ * rightZ);
-
-        // Forward vector from row 2 (try both with and without negation)
-        float forwardX = -viewMatrix.M31;
-        float forwardZ = -viewMatrix.M33;
+        // Extract forward direction from View Matrix row 2
+        float forwardX = viewMatrix.M31;
+        float forwardZ = viewMatrix.M33;
         float forwardLength = (float)Math.Sqrt(forwardX * forwardX + forwardZ * forwardZ);
 
-        if (rightLength < 0.001f || forwardLength < 0.001f)
+        if (forwardLength < 0.001f)
             return position;
 
-        // Check if forward vector needs flipping by comparing with right vector
-        // Cross product in 2D: if (rightX, rightZ) x (forwardX, forwardZ) is positive,
-        // they form a right-handed coordinate system
-        float crossProduct = rightX * forwardZ - rightZ * forwardX;
+        // Normalize forward
+        float dirX = forwardX / forwardLength;
+        float dirZ = forwardZ / forwardLength;
 
-        // If cross product is negative, flip forward vector
-        if (crossProduct < 0)
-        {
-            forwardX = -forwardX;
-            forwardZ = -forwardZ;
-        }
+        // Forward vector (camera facing direction)
+        Vector3 cameraForward = new Vector3(dirX, 0f, dirZ);
 
-        // Normalize
-        rightX /= rightLength;
-        rightZ /= rightLength;
-        forwardX /= forwardLength;
-        forwardZ /= forwardLength;
-
-        Vector3 cameraRight = new Vector3(rightX, 0f, rightZ);
-        Vector3 cameraForward = new Vector3(forwardX, 0f, forwardZ);
+        // Calculate right vector as perpendicular to forward (90° clockwise)
+        // If forward is (dirX, dirZ), then right is (dirZ, -dirX)
+        Vector3 cameraRight = new Vector3(dirZ, 0f, -dirX);
 
         // Calculate camera-relative movement
         if ((GetAsyncKeyState((int)Keys.W) & 0x8000) != 0)
