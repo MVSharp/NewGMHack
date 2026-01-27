@@ -128,35 +128,35 @@ const chartExpData = computed(() => {
                         <div class="text-center border border-neon-blue p-4 flex-1 bg-black/30 transition-all duration-300 hover:border-neon-cyan hover:shadow-[0_0_15px_rgba(102,252,241,0.2)] flex flex-col justify-center">
                             <div class="text-xs text-gray-500 mb-2">{{ t('perf_score') }}</div>
                             <div class="text-5xl font-bold font-rajdhani text-white">
-                                <AnimatedNumber :value="latestMatch?.points ?? 0" />
+                                <AnimatedNumber :value="latestMatch?.Points ?? 0" />
                             </div>
                         </div>
                         <!-- Grade Display -->
                         <div class="text-center border border-amber-500/30 p-4 w-24 bg-black/30 transition-all duration-300 hover:border-amber-400 flex flex-col justify-center">
                             <div class="text-xs text-gray-500 mb-2">{{ t('grade') }}</div>
-                            <GradeBadge :grade="latestMatch?.gradeRank ?? null" size="lg" />
+                            <GradeBadge :grade="latestMatch?.GradeRank ?? null" size="lg" />
                         </div>
                         <!-- Win/Loss Status (no separate box, just badge) -->
                         <div class="flex flex-col justify-center items-center w-24">
-                            <GameStatusBadge :status="latestMatch?.gameStatus ?? null" size="lg" :showText="true" />
+                            <GameStatusBadge :status="latestMatch?.GameStatus ?? null" size="lg" :showText="true" />
                         </div>
                         <!-- Stats Grid -->
                         <div class="grid grid-cols-2 gap-3 flex-1">
                             <div class="mini-stat">
                                 <div class="text-xs text-gray-400">{{ t('kills') }}</div>
-                                <div class="text-2xl text-neon-cyan font-bold"><AnimatedNumber :value="latestMatch?.kills ?? 0" /></div>
+                                <div class="text-2xl text-neon-cyan font-bold"><AnimatedNumber :value="latestMatch?.Kills ?? 0" /></div>
                             </div>
                             <div class="mini-stat">
                                 <div class="text-xs text-gray-400">{{ t('deaths') }}</div>
-                                <div class="text-2xl text-neon-cyan font-bold"><AnimatedNumber :value="latestMatch?.deaths ?? 0" /></div>
+                                <div class="text-2xl text-neon-cyan font-bold"><AnimatedNumber :value="latestMatch?.Deaths ?? 0" /></div>
                             </div>
                             <div class="mini-stat">
                                 <div class="text-xs text-gray-400">{{ t('assist') }}</div>
-                                <div class="text-2xl text-neon-cyan font-bold"><AnimatedNumber :value="latestMatch?.supports ?? 0" /></div>
+                                <div class="text-2xl text-neon-cyan font-bold"><AnimatedNumber :value="latestMatch?.Supports ?? 0" /></div>
                             </div>
                             <div class="mini-stat">
                                 <div class="text-xs text-gray-400">{{ t('gain') }}</div>
-                                <div class="text-xl text-gundam-gold font-bold"><AnimatedNumber :value="latestMatch?.gbGain ?? 0" /></div>
+                                <div class="text-xl text-gundam-gold font-bold"><AnimatedNumber :value="latestMatch?.GBGain ?? 0" /></div>
                             </div>
                         </div>
                     </div>

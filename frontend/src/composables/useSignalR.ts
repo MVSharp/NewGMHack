@@ -1,6 +1,7 @@
 import { HubConnectionBuilder, HubConnection, LogLevel } from '@microsoft/signalr'
 import { ref, computed, onUnmounted } from 'vue'
 import { api, type PilotInfo, type Roommate, type HistoryItem, type PlayerStats } from '@/services/api'
+import debounce from 'lodash-es/debounce'
 
 // === Types ===
 
@@ -38,14 +39,14 @@ const machineInfo = ref<any>(null)  // MachineInfo data
 
 // Latest match display
 const latestMatch = ref<{
-    points: number
-    kills: number
-    deaths: number
-    supports: number
-    gbGain: number
+    Points: number
+    Kills: number
+    Deaths: number
+    Supports: number
+    GBGain: number
     timestamp: string
-    gameStatus: string | null
-    gradeRank: string | null
+    GameStatus: string | null
+    GradeRank: string | null
 } | null>(null)
 
 // === Helper ===
@@ -157,37 +158,7 @@ async function deattach() {
 
 let statusInterval: number | null = null
 
-async function pollData() {
-    if (!isGameConnected.value) return
-
-    try {
-        // Fetch pilot info
-        pilotInfo.value = await api.getMe()
-        const newPid = pilotInfo.value.PersonId
-
-        if (newPid && newPid > 0) {
-            // Always update currentPlayerId if we have a valid one
-            if (currentPlayerId.value !== newPid) {
-                console.log(`Player ID changed: ${currentPlayerId.value} -> ${newPid}`)
-                currentPlayerId.value = newPid
-                await refreshStats()
-            }
-
-            // Always refresh stats if we don't have any yet, or periodically
-            if (!stats.value || !combatLog.value || combatLog.value.length === 0) {
-                await refreshStats()
-            }
-        }
-
-        // Fetch roommates
-        roommates.value = await api.getRoommates()
-
-    } catch (e) {
-        console.error('Poll data error:', e)
-    }
-}
-
-async function refreshStats() {
+async function refreshStatsImpl() {
     if (currentPlayerId.value === 0) return
     try {
         stats.value = await api.getStats(currentPlayerId.value)
@@ -195,20 +166,23 @@ async function refreshStats() {
         if (combatLog.value.length > 0) {
             const latest = combatLog.value[0]!
             latestMatch.value = {
-                points: latest.Points,
-                kills: latest.Kills,
-                deaths: latest.Deaths,
-                supports: latest.Supports,
-                gbGain: (latest.GBGain ?? 0) + (latest.TotalBonus ?? 0),
+                Points: latest.Points,
+                Kills: latest.Kills,
+                Deaths: latest.Deaths,
+                Supports: latest.Supports,
+                GBGain: (latest.GBGain ?? 0) + (latest.TotalBonus ?? 0),
                 timestamp: new Date(latest.CreatedAtUtc).toLocaleString(),
-                gameStatus: latest.GameStatus ?? null,
-                gradeRank: latest.GradeRank ?? null
+                GameStatus: latest.GameStatus ?? null,
+                GradeRank: latest.GradeRank ?? null
             }
         }
     } catch (e) {
         console.error('Refresh stats error:', e)
     }
 }
+
+// Debounce to max 1 call per 500ms
+const refreshStats = debounce(refreshStatsImpl, 500)
 
 // === SignalR Connection ===
 
@@ -223,14 +197,14 @@ async function startSignalR() {
     conn.on('ReceiveReward', (notification: any) => {
         console.log('Reward Received:', notification)
         latestMatch.value = {
-            points: notification.Points ?? 0,
-            kills: notification.Kills ?? 0,
-            deaths: notification.Deaths ?? 0,
-            supports: notification.Supports ?? 0,
-            gbGain: (notification.GBGain ?? 0) + (notification.TotalBonus ?? 0),
+            Points: notification.Points ?? 0,
+            Kills: notification.Kills ?? 0,
+            Deaths: notification.Deaths ?? 0,
+            Supports: notification.Supports ?? 0,
+            GBGain: (notification.GBGain ?? 0) + (notification.TotalBonus ?? 0),
             timestamp: new Date().toLocaleString(),
-            gameStatus: notification.GameStatus ?? null,
-            gradeRank: notification.GradeRank ?? null
+            GameStatus: notification.GameStatus ?? null,
+            GradeRank: notification.GradeRank ?? null
         }
 
         const pid = notification.PlayerId ?? 0
