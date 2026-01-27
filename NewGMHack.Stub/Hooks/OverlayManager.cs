@@ -898,6 +898,19 @@ public class OverlayManager(SelfInformation self)
 
         string fpsText = $"FPS: {_fps:F0}";
         _font.DrawText(sprite, fpsText, new Rectangle(20, 20, 80, 16), FontDrawFlags.NoClip, new ColorBGRA(0, 255, 0, 180));
+
+        // Debug: View Matrix values
+        if (self != null && _selfInfo.DevicePtr != IntPtr.Zero)
+        {
+            try
+            {
+                var device = new SharpDX.Direct3D9.Device(_selfInfo.DevicePtr);
+                var viewMatrix = device.GetTransform(SharpDX.Direct3D9.TransformState.View);
+                string vmText = $"VM: M31={viewMatrix.M31:F2} M33={viewMatrix.M33:F2}";
+                _font.DrawText(sprite, vmText, new Rectangle(20, 40, 200, 16), FontDrawFlags.NoClip, new ColorBGRA(255, 255, 0, 180));
+            }
+            catch { /* Ignore if device not available */ }
+        }
     }
 
     /// <summary>
