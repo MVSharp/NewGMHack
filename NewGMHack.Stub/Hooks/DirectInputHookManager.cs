@@ -165,7 +165,6 @@ public class DirectInputHookManager(
 
         bool isGameFocused = IsGameFocused();
         bool isAutoReady = self.ClientConfig.Features.IsFeatureEnable(FeatureName.IsAutoReady);
-        bool isAutoAim = self.ClientConfig.Features.IsFeatureEnable(FeatureName.EnableAutoAim);
 
         // If game is focused: pass through real input (don't zero, don't modify)
         // Unless AutoReady or AutoAim is enabled, then also inject synthetic input
