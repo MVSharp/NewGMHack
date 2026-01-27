@@ -382,6 +382,17 @@ public class EntityScannerService : BackgroundService
         // Extract forward direction from View Matrix row 2
         float forwardX = viewMatrix.M31;
         float forwardZ = viewMatrix.M33;
+
+        // Detect if we need to negate based on sign pattern
+        // When M31 and M33 have opposite signs (quadrants 2 & 4), negate
+        bool needNegation = (forwardX * forwardZ) < 0;
+
+        if (needNegation)
+        {
+            forwardX = -forwardX;
+            forwardZ = -forwardZ;
+        }
+
         float forwardLength = (float)Math.Sqrt(forwardX * forwardX + forwardZ * forwardZ);
 
         if (forwardLength < 0.001f)
