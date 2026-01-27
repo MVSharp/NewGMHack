@@ -185,6 +185,41 @@ public class EntityScannerService : BackgroundService
         V     = 0x56
     }
 
+    /// <summary>
+    /// Scans player entity and extracts position, View Matrix, and validation status.
+    /// Pure data reader - no modification, no feature flags.
+    /// </summary>
+    /// <returns>
+    /// A tuple containing:
+    ///   - <c>Position</c>: Current player world position (X, Y, Z)
+    ///   - <c>ViewMatrix</c>: Camera view matrix for camera-relative calculations (row-major layout)
+    ///   - <c>IsValid</c>: <c>true</c> if data extraction succeeded; <c>false</c> if any read failed or data is invalid
+    /// </returns>
+    /// <remarks>
+    /// <para><b>View Matrix Layout (row-major, SharpDX/Direct3D):</b></para>
+    /// <code>
+    /// | Right.X   Right.Y   Right.Z   0 |
+    /// | Up.X      Up.Y      Up.Z      0 |
+    /// | Forward.X Forward.Y Forward.Z 0 |
+    /// | Tx        Ty        Tz        1 |
+    /// </code>
+    /// <para>Rows 0, 1, 2 contain the camera's Right, Up, and Forward direction vectors.</para>
+    /// <para>The View Matrix is used by <see cref="ApplyFreeMovement"/> to transform WASD key inputs
+    /// into camera-relative movement vectors.</para>
+    ///
+    /// <para><b>Pointer Chain Traversed:</b></para>
+    /// <para><c>moduleBase + BaseOffset</c> → <c>firstPtr</c> → <c>entityStruct</c> → player data</para>
+    ///
+    /// <para><b>Validation Rules:</b></para>
+    /// <list type="bullet">
+    ///   <item>Module base address must be valid (non-zero)</item>
+    ///   <item>All pointer reads must succeed (non-null pointers)</item>
+    ///   <item>HP values must be in valid range (0 to 300,000)</item>
+    /// </list>
+    ///
+    /// <para><b>Side Effects:</b></para>
+    /// <para>Updates <c>_selfInfo.PersonInfo</c> with current HP and position for other features.</para>
+    /// </remarks>
     private (Vector3 Position, Matrix ViewMatrix, bool IsValid) ScanMySelf()
     {
         try
@@ -284,9 +319,53 @@ public class EntityScannerService : BackgroundService
     /// Applies camera-relative movement based on WASD key states.
     /// Uses View Matrix to transform key inputs into camera-space movement.
     /// </summary>
-    /// <param name="position">Current player position</param>
-    /// <param name="viewMatrix">View Matrix containing camera rotation</param>
-    /// <returns>Modified position if keys pressed, original if none</returns>
+    /// <param name="position">Current player position in world coordinates.</param>
+    /// <param name="viewMatrix">View Matrix containing camera rotation (row-major layout).</param>
+    /// <returns>
+    /// Modified position if movement keys are pressed; otherwise returns the original <paramref name="position"/>.
+    /// </returns>
+    /// <remarks>
+    /// <para><b>Coordinate System:</b></para>
+    /// <list type="bullet">
+    ///   <item><b>WASD Movement:</b> Camera-relative (follows camera direction)</item>
+    ///   <item><b>Space/V Movement:</b> World Y-axis (vertical, independent of camera)</item>
+    /// </list>
+    ///
+    /// <para><b>Key Bindings:</b></para>
+    /// <list type="table">
+    ///   <listheader><term>Key</term><description>Movement</description></listheader>
+    ///   <item><term>W</term><description>Forward (along camera's forward vector)</description></item>
+    ///   <item><term>S</term><description>Backward (opposite to camera's forward vector)</description></item>
+    ///   <item><term>A</term><description>Left (opposite to camera's right vector)</description></item>
+    ///   <item><term>D</term><description>Right (along camera's right vector)</description></item>
+    ///   <item><term>Space</term><description>Up (world +Y axis)</description></item>
+    ///   <item><term>V</term><description>Down (world -Y axis)</description></item>
+    /// </list>
+    ///
+    /// <para><b>View Matrix Extraction (row-major layout):</b></para>
+    /// <code>
+    /// // Row 0 (Right vector): M11, M12, M13
+    /// Vector3 cameraRight = new Vector3(viewMatrix.M11, viewMatrix.M12, viewMatrix.M13);
+    ///
+    /// // Row 2 (Forward vector): M31, M32, M33
+    /// Vector3 cameraForward = new Vector3(viewMatrix.M31, viewMatrix.M32, viewMatrix.M33);
+    /// </code>
+    ///
+    /// <para><b>Movement Speed:</b></para>
+    /// <para>Defined by <c>FreeMoveSpeed</c> constant (50 units per tick).</para>
+    /// <para>Multiple keys can be pressed simultaneously for diagonal movement.</para>
+    ///
+    /// <para><b>Edge Cases Handled:</b></para>
+    /// <list type="bullet">
+    ///   <item>Degenerate matrices (zero-length vectors) → returns original position</item>
+    ///   <item>No keys pressed → returns original position</item>
+    ///   <item>Normalizes direction vectors to ensure consistent speed</item>
+    /// </list>
+    ///
+    /// <para><b>Usage:</b></para>
+    /// <para>Called by <see cref="ExecuteAsync"/> when FreeMove feature is enabled.</para>
+    /// <para>Result is written to game memory via <see cref="WritePlayerPosition"/>.</para>
+    /// </remarks>
     private Vector3 ApplyFreeMovement(Vector3 position, Matrix viewMatrix)
     {
         Vector3 movement = Vector3.Zero;
@@ -334,11 +413,35 @@ public class EntityScannerService : BackgroundService
     }
 
     /// <summary>
-    /// Writes player position to memory at the entity position pointer.
-    /// Traverses the pointer chain: moduleBase + BaseOffset → firstPtr → entityStruct → posPtr.
-    /// Writes X and Z coordinates (Y is skipped per original behavior).
+    /// Writes player position to game memory at the entity position pointer.
+    /// Traverses the pointer chain to locate the position struct and writes X/Z coordinates.
     /// </summary>
-    /// <param name="newPos">New position to write</param>
+    /// <param name="newPos">New position to write (all components provided, but only X and Z are written).</param>
+    /// <remarks>
+    /// <para><b>Pointer Chain Traversed:</b></para>
+    /// <para><c>moduleBase + BaseOffset</c> → <c>firstPtr</c> → <c>firstPtr + MySelfOffset</c> → <c>entityStruct</c> → <c>entityStruct + PosPtrOffset</c> → <c>posPtr</c> → position data</para>
+    ///
+    /// <para><b>Memory Layout:</b></para>
+    /// <code>
+    /// posPtr + XyzOffsets[0] → X coordinate (written)
+    /// posPtr + XyzOffsets[1] → Y coordinate (skipped - height is game-controlled)
+    /// posPtr + XyzOffsets[2] → Z coordinate (written)
+    /// </code>
+    ///
+    /// <para><b>Y Coordinate Handling:</b></para>
+    /// <para>The Y coordinate (height/altitude) is intentionally NOT written to maintain game-controlled gravity and ground collision.
+    /// Only X (horizontal) and Z (depth) coordinates are modified for horizontal movement.</para>
+    ///
+    /// <para><b>Error Handling:</b></para>
+    /// <list type="bullet">
+    ///   <item>Fails silently if any pointer in the chain is null or invalid</item>
+    ///   <item>No exceptions thrown - all errors are caught and logged internally</item>
+    ///   <item>Uses <see cref="TryReadUInt"/> and <see cref="IsMemoryWritable"/> for safe memory access</item>
+    /// </list>
+    ///
+    /// <para><b>Usage:</b></para>
+    /// <para>Called by <see cref="ExecuteAsync"/> to apply camera-relative movement from <see cref="ApplyFreeMovement"/>.</para>
+    /// </remarks>
     private void WritePlayerPosition(Vector3 newPos)
     {
         var moduleBase = GetModuleBaseAddress();
