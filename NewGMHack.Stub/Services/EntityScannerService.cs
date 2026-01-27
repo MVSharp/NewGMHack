@@ -67,6 +67,8 @@ public class EntityScannerService : BackgroundService
     private const           uint   EntityIdOffset = 0x04;
     private const           uint   MySelfOffset   = 0x60;
 
+    private const float FreeMoveSpeed = 50f;
+
     // Cached module base address
     private uint _cachedModuleBase = 0;
     private Process _gameProcess;
@@ -307,37 +309,44 @@ public class EntityScannerService : BackgroundService
     private Vector3 ApplyFreeMovement(Vector3 position, Matrix viewMatrix)
     {
         Vector3 movement = Vector3.Zero;
-        float speed = 50f; // Movement speed (units per key press)
 
         // Extract camera direction vectors from View Matrix
-        // View Matrix layout (row-major):
-        //   Right.X    Up.X     Forward.X    Translation.X
-        //   Right.Y    Up.Y     Forward.Y    Translation.Y
-        //   Right.Z    Up.Z     Forward.Z    Translation.Z
+        // View Matrix layout (row-major, SharpDX/Direct3D):
+        // | Right.X   Right.Y   Right.Z   0 |
+        // | Up.X      Up.Y      Up.Z      0 |
+        // | Forward.X Forward.Y Forward.Z 0 |
+        // | Tx        Ty        Tz        1 |
 
-        // Column 1 (Right vector): M11, M21, M31
-        Vector3 cameraRight = new Vector3(viewMatrix.M11, viewMatrix.M21, viewMatrix.M31);
+        // Row 0 (Right vector): M11, M12, M13
+        Vector3 cameraRight = new Vector3(viewMatrix.M11, viewMatrix.M12, viewMatrix.M13);
 
-        // Column 3 (Forward vector): M13, M23, M33 (negated in View Matrix)
-        Vector3 cameraForward = new Vector3(-viewMatrix.M13, -viewMatrix.M23, -viewMatrix.M33);
+        // Row 2 (Forward vector): M31, M32, M33
+        Vector3 cameraForward = new Vector3(viewMatrix.M31, viewMatrix.M32, viewMatrix.M33);
 
-        // Normalize vectors (in case of scaling)
-        cameraRight = Vector3.Normalize(cameraRight);
-        cameraForward = Vector3.Normalize(cameraForward);
+        // Validate for degenerate matrices (avoid NaN/zero vectors)
+        float rightLength = cameraRight.Length();
+        float forwardLength = cameraForward.Length();
+
+        if (rightLength < 0.001f || forwardLength < 0.001f)
+            return position; // Invalid matrix, no movement
+
+        // Normalize vectors
+        cameraRight /= rightLength;
+        cameraForward /= forwardLength;
 
         // Calculate camera-relative movement
         if ((GetAsyncKeyState((int)Keys.W) & 0x8000) != 0)
-            movement += cameraForward * speed;  // Forward
+            movement += cameraForward * FreeMoveSpeed;  // Forward
         if ((GetAsyncKeyState((int)Keys.S) & 0x8000) != 0)
-            movement -= cameraForward * speed;  // Backward
+            movement -= cameraForward * FreeMoveSpeed;  // Backward
         if ((GetAsyncKeyState((int)Keys.A) & 0x8000) != 0)
-            movement -= cameraRight * speed;   // Left (opposite of right)
+            movement -= cameraRight * FreeMoveSpeed;   // Left (opposite of right)
         if ((GetAsyncKeyState((int)Keys.D) & 0x8000) != 0)
-            movement += cameraRight * speed;   // Right
+            movement += cameraRight * FreeMoveSpeed;   // Right
         if ((GetAsyncKeyState((int)Keys.Space) & 0x8000) != 0)
-            movement.Y += speed;              // Up (world Y)
+            movement.Y += FreeMoveSpeed;              // Up (world Y)
         if ((GetAsyncKeyState((int)Keys.V) & 0x8000) != 0)
-            movement.Y -= speed;              // Down (world Y)
+            movement.Y -= FreeMoveSpeed;              // Down (world Y)
 
         // Apply movement to position
         return position + movement;
