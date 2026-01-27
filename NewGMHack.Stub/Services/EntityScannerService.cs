@@ -342,24 +342,31 @@ public class EntityScannerService : BackgroundService
     ///   <item><term>V</term><description>Down (world -Y axis)</description></item>
     /// </list>
     ///
-    /// <para><b>View Matrix to Direction Vectors (trigonometric approach):</b></para>
+    /// <para><b>View Matrix to Direction Vectors (dynamic correction):</b></para>
     /// <code>
-    /// // Extract forward components (negated, matching DrawRadar)
-    /// float camForwardX = -viewMatrix.M31;
-    /// float camForwardZ = -viewMatrix.M33;
+    /// // Extract right vector from row 0 (M11, M13)
+    /// float rightX = viewMatrix.M11;
+    /// float rightZ = viewMatrix.M13;
     ///
-    /// // Calculate yaw angle (same as DrawRadar)
-    /// float cameraYaw = (float)Math.Atan2(camForwardX, camForwardZ) + (float)Math.PI;
+    /// // Extract forward vector from row 2 (M31, M33, negated)
+    /// float forwardX = -viewMatrix.M31;
+    /// float forwardZ = -viewMatrix.M33;
     ///
-    /// // Forward: (cos(cameraYaw), 0, sin(cameraYaw))
-    /// Vector3 cameraForward = new Vector3(cos(cameraYaw), 0f, sin(cameraYaw));
+    /// // Check coordinate handedness with 2D cross product
+    /// float crossProduct = rightX * forwardZ - rightZ * forwardX;
     ///
-    /// // Right: perpendicular counter-clockwise = (-sin(cameraYaw), 0, cos(cameraYaw))
-    /// Vector3 cameraRight = new Vector3(-sin(cameraYaw), 0f, cos(cameraYaw));
+    /// // If cross product is negative, flip forward vector
+    /// if (crossProduct < 0) {
+    ///     forwardX = -forwardX;
+    ///     forwardZ = -forwardZ;
+    /// }
+    ///
+    /// // Normalize and use for movement
     /// </code>
     /// <para>
-    /// <b>Key Difference from DrawRadar:</b> DrawRadar rotates World→Camera (uses -cameraYaw),
-    /// FreeMove transforms Camera→World (uses +cameraYaw, the inverse rotation).
+    /// <b>Why This Works:</b> View Matrix forward vector alternates sign based on camera direction.
+    /// Cross product check dynamically detects when forward is flipped and corrects it.
+    /// This ensures consistent right-handed coordinate system in all 4 directions.
     /// </para>
     ///
     /// <para><b>Movement Speed:</b></para>
@@ -369,8 +376,9 @@ public class EntityScannerService : BackgroundService
     /// <para><b>Edge Cases Handled:</b></para>
     /// <list type="bullet">
     ///   <item>No keys pressed → returns original position</item>
-    ///   <item>Invalid forward vector (length < 0.001) → returns original position</item>
-    ///   <item>Directly extracts direction from View Matrix (no trigonometry)</item>
+    ///   <item>Invalid direction vectors (length < 0.001) → returns original position</item>
+    ///   <item>Forward vector auto-flipped when coordinate system is left-handed (cross product < 0)</item>
+    ///   <item>Extracts both right and forward from View Matrix rows (no trigonometry)</item>
     /// </list>
     ///
     /// <para><b>Usage:</b></para>
@@ -381,25 +389,42 @@ public class EntityScannerService : BackgroundService
     {
         Vector3 movement = Vector3.Zero;
 
-        // Match DrawRadar trigonometric approach exactly
-        // Extract forward components (negated, as DrawRadar does)
-        float camForwardX = -viewMatrix.M31;
-        float camForwardZ = -viewMatrix.M33;
+        // Extract direction vectors directly from View Matrix rows
+        // In View Matrix, row 0 = Right, row 2 = Forward (but may be negated depending on game)
 
-        // Calculate yaw angle (same as DrawRadar line 774)
-        float cameraYaw = (float)Math.Atan2(camForwardX, camForwardZ) + (float)Math.PI;
+        // Right vector from row 0
+        float rightX = viewMatrix.M11;
+        float rightZ = viewMatrix.M13;
+        float rightLength = (float)Math.Sqrt(rightX * rightX + rightZ * rightZ);
 
-        // Use POSITIVE cameraYaw for movement (DrawRadar uses -cameraYaw for rotation)
-        // DrawRadar rotates World→Camera, we need Camera→World (inverse = flip sign of sin)
-        float cosYaw = (float)Math.Cos(cameraYaw);
-        float sinYaw = (float)Math.Sin(cameraYaw);
+        // Forward vector from row 2 (try both with and without negation)
+        float forwardX = -viewMatrix.M31;
+        float forwardZ = -viewMatrix.M33;
+        float forwardLength = (float)Math.Sqrt(forwardX * forwardX + forwardZ * forwardZ);
 
-        // Forward direction
-        Vector3 cameraForward = new Vector3(cosYaw, 0f, sinYaw);
+        if (rightLength < 0.001f || forwardLength < 0.001f)
+            return position;
 
-        // Right direction: perpendicular to forward (90° counter-clockwise)
-        // For (cos, sin), right is (-sin, cos)
-        Vector3 cameraRight = new Vector3(-sinYaw, 0f, cosYaw);
+        // Check if forward vector needs flipping by comparing with right vector
+        // Cross product in 2D: if (rightX, rightZ) x (forwardX, forwardZ) is positive,
+        // they form a right-handed coordinate system
+        float crossProduct = rightX * forwardZ - rightZ * forwardX;
+
+        // If cross product is negative, flip forward vector
+        if (crossProduct < 0)
+        {
+            forwardX = -forwardX;
+            forwardZ = -forwardZ;
+        }
+
+        // Normalize
+        rightX /= rightLength;
+        rightZ /= rightLength;
+        forwardX /= forwardLength;
+        forwardZ /= forwardLength;
+
+        Vector3 cameraRight = new Vector3(rightX, 0f, rightZ);
+        Vector3 cameraForward = new Vector3(forwardX, 0f, forwardZ);
 
         // Calculate camera-relative movement
         if ((GetAsyncKeyState((int)Keys.W) & 0x8000) != 0)
