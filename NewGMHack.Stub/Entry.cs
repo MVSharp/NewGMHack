@@ -16,6 +16,7 @@ using NewGMHack.Stub.Services;
 using NewGMHack.Stub.Services.Scanning;
 using NewGMHack.Stub.Services.Caching;
 using NewGMHack.Stub.Models;
+using NewGMHack.Stub.Configuration;
 using NewGMHack.CommunicationModel.Models;
 using Reloaded.Hooks;
 using Reloaded.Hooks.Definitions;
@@ -73,6 +74,10 @@ namespace NewGMHack.Stub
                                            hostOptions
                                                   .BackgroundServiceExceptionBehavior =
                                                BackgroundServiceExceptionBehavior.Ignore;
+                                       });
+                                       services.Configure<ModuleWaitOptions>(options =>
+                                       {
+                                           // Use defaults, can be overridden via config.json in future
                                        });
                                        // services.AddMessagePipe()
                                        //                         .AddNamedPipeInterprocess("SdHook",
@@ -234,8 +239,7 @@ services.AddSingleton<IReloadedHooks>(provider =>
                 {
                     // Wait for critical game modules to load before hooking
                     var moduleWaiter = hostBuilder.Services.GetRequiredService<ModuleWaitService>();
-                    var criticalModules = new[] { "dinput8.dll", "ws2_32.dll", "d3d9.dll" };
-                    moduleWaiter.WaitForModules(criticalModules, timeoutMs: 30000, checkIntervalMs: 500);
+                    moduleWaiter.WaitForModules();
 
                     await hostBuilder.RunAsync();
                 }

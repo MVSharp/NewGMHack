@@ -5,7 +5,9 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using ZLogger;
+using NewGMHack.Stub.Configuration;
 
 namespace NewGMHack.Stub.Services;
 
@@ -16,11 +18,13 @@ public class ModuleWaitService
 
     private readonly ILogger<ModuleWaitService> _logger;
     private readonly int _targetPid;
+    private readonly ModuleWaitOptions _options;
 
-    public ModuleWaitService(ILogger<ModuleWaitService> logger)
+    public ModuleWaitService(ILogger<ModuleWaitService> logger, IOptions<ModuleWaitOptions> options)
     {
         _logger = logger;
         _targetPid = Process.GetCurrentProcess().Id;
+        _options = options.Value;
     }
 
     public HashSet<string> GetLoadedModules()
@@ -62,16 +66,16 @@ public class ModuleWaitService
         return modules;
     }
 
-    public void WaitForModules(string[] requiredModules, int timeoutMs, int checkIntervalMs)
+    public void WaitForModules()
     {
-        _logger.ZLogInformation($"[ModuleWait] Waiting for {requiredModules.Length} modules to load: [{string.Join(", ", requiredModules)}]");
+        _logger.ZLogInformation($"[ModuleWait] Waiting for {_options.RequiredModules.Length} modules to load: [{string.Join(", ", _options.RequiredModules)}]");
 
         var startTime = DateTime.UtcNow;
         while (true)
         {
             var loadedModules = GetLoadedModules();
 
-            var missingModules = requiredModules.Where(m => !loadedModules.Contains(m)).ToArray();
+            var missingModules = _options.RequiredModules.Where(m => !loadedModules.Contains(m)).ToArray();
 
             if (missingModules.Length == 0)
             {
@@ -79,17 +83,17 @@ public class ModuleWaitService
                 return;
             }
 
-            _logger.ZLogDebug($"[ModuleWait] Missing modules: {string.Join(", ", missingModules)}, waiting {checkIntervalMs}ms...");
+            _logger.ZLogDebug($"[ModuleWait] Missing modules: {string.Join(", ", missingModules)}, waiting {_options.CheckIntervalMs}ms...");
 
             var elapsed = (int)(DateTime.UtcNow - startTime).TotalMilliseconds;
-            if (elapsed > timeoutMs)
+            if (elapsed > _options.TimeoutMs)
             {
                 throw new TimeoutException(
-                    $"[ModuleWait] Timeout waiting for modules after {timeoutMs}ms. " +
+                    $"[ModuleWait] Timeout waiting for modules after {_options.TimeoutMs}ms. " +
                     $"Missing: [{string.Join(", ", missingModules)}]");
             }
 
-            Thread.Sleep(checkIntervalMs);
+            Thread.Sleep(_options.CheckIntervalMs);
         }
     }
 
