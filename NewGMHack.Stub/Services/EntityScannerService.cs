@@ -347,8 +347,8 @@ public class EntityScannerService : BackgroundService
     /// // Row 0 (Right vector): M11, M12, M13
     /// Vector3 cameraRight = new Vector3(viewMatrix.M11, viewMatrix.M12, viewMatrix.M13);
     ///
-    /// // Row 2 (Forward vector): M31, M32, M33
-    /// Vector3 cameraForward = new Vector3(viewMatrix.M31, viewMatrix.M32, viewMatrix.M33);
+    /// // Row 2 (Forward vector): M31, M32, M33 (NEGATED - View Matrix looks down -Z)
+    /// Vector3 cameraForward = new Vector3(-viewMatrix.M31, -viewMatrix.M32, -viewMatrix.M33);
     /// </code>
     ///
     /// <para><b>Movement Speed:</b></para>
@@ -380,8 +380,8 @@ public class EntityScannerService : BackgroundService
         // Row 0 (Right vector): M11, M12, M13
         Vector3 cameraRight = new Vector3(viewMatrix.M11, viewMatrix.M12, viewMatrix.M13);
 
-        // Row 2 (Forward vector): M31, M32, M33
-        Vector3 cameraForward = new Vector3(viewMatrix.M31, viewMatrix.M32, viewMatrix.M33);
+        // Row 2 (Forward vector): M31, M32, M33 (negated because View Matrix looks down -Z)
+        Vector3 cameraForward = new Vector3(-viewMatrix.M31, -viewMatrix.M32, -viewMatrix.M33);
 
         // Validate for degenerate matrices (avoid NaN/zero vectors)
         float rightLength = cameraRight.Length();
