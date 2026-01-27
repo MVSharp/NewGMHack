@@ -219,17 +219,17 @@ async function startSignalR() {
     conn.on('ReceiveReward', (notification: any) => {
         console.log('Reward Received:', notification)
         latestMatch.value = {
-            points: notification.points ?? notification.Points ?? 0,
-            kills: notification.kills ?? notification.Kills ?? 0,
-            deaths: notification.deaths ?? notification.Deaths ?? 0,
-            supports: notification.supports ?? notification.Supports ?? 0,
-            gbGain: (notification.gbGain ?? notification.GBGain ?? 0) + (notification.totalBonus ?? notification.TotalBonus ?? 0),
+            points: notification.Points ?? 0,
+            kills: notification.Kills ?? 0,
+            deaths: notification.Deaths ?? 0,
+            supports: notification.Supports ?? 0,
+            gbGain: (notification.GBGain ?? 0) + (notification.TotalBonus ?? 0),
             timestamp: new Date().toLocaleString(),
-            gameStatus: notification.gameStatus ?? notification.GameStatus ?? null,
-            gradeRank: notification.gradeRank ?? notification.GradeRank ?? null
+            gameStatus: notification.GameStatus ?? null,
+            gradeRank: notification.GradeRank ?? null
         }
-        
-        const pid = notification.playerId ?? notification.PlayerId ?? 0
+
+        const pid = notification.PlayerId ?? 0
         if (currentPlayerId.value === pid || currentPlayerId.value === 0) {
             if (currentPlayerId.value === 0) currentPlayerId.value = pid
             refreshStats()
@@ -239,18 +239,18 @@ async function startSignalR() {
     // UpdatePersonInfo
     conn.on('UpdatePersonInfo', (info: any) => {
         pilotInfo.value = {
-            personId: info.personId ?? info.PersonId ?? 0,
-            condomId: info.condomId ?? info.CondomId ?? info.gundamId ?? info.GundamId ?? 0,
-            condomName: info.condomName ?? info.CondomName ?? info.gundamName ?? info.GundamName ?? '--',
-            slot: info.slot ?? info.Slot ?? 0,
-            weapon1: info.weapon1 ?? info.Weapon1 ?? '--',
-            weapon2: info.weapon2 ?? info.Weapon2 ?? '--',
-            weapon3: info.weapon3 ?? info.Weapon3 ?? '--',
-            x: info.x ?? info.X ?? 0,
-            y: info.y ?? info.Y ?? 0,
-            z: info.z ?? info.Z ?? 0
+            personId: info.PersonId ?? 0,
+            condomId: info.CondomId ?? 0,
+            condomName: info.CondomName ?? '--',
+            slot: info.Slot ?? 0,
+            weapon1: info.Weapon1 ?? '--',
+            weapon2: info.Weapon2 ?? '--',
+            weapon3: info.Weapon3 ?? '--',
+            x: info.X ?? 0,
+            y: info.Y ?? 0,
+            z: info.Z ?? 0
         }
-        
+
         const newPid = pilotInfo.value.personId
         if (newPid && newPid !== currentPlayerId.value) {
             currentPlayerId.value = newPid
@@ -260,8 +260,8 @@ async function startSignalR() {
 
     conn.on('UpdateRoommates', (list: any[]) => {
         roommates.value = list.map(r => ({
-            name: r.name ?? r.Name ?? 'Unknown',
-            id: r.id ?? r.Id ?? 0
+            name: r.Name ?? 'Unknown',
+            id: r.Id ?? 0
         }))
     })
 
