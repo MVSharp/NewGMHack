@@ -144,6 +144,27 @@ public class DirectInputHookManager(
         return isAutoAim && isGameFocused;
     }
 
+    /// <summary>
+    /// Hooked GetDeviceState implementation that handles input injection.
+    ///
+    /// Behavior:
+    /// - When GAME IS FOCUSED:
+    ///   - Pass through real user input (keyboard/mouse)
+    ///   - Inject AutoReady synthetic input (if enabled)
+    ///   - Inject Aimbot mouse movement (if enabled AND right-click held)
+    ///
+    /// - When GAME IS NOT FOCUSED:
+    ///   - Zero all real input (prevent background control)
+    ///   - Inject AutoReady synthetic input (if enabled) - WORKS IN BACKGROUND
+    ///   - NEVER inject Aimbot (disabled by ShouldInjectAimbot())
+    ///
+    /// Safety layers:
+    /// 1. Focus check: ShouldInjectAimbot() returns false when backgrounded
+    /// 2. Button check: InjectAimbot() checks right mouse button internally
+    ///
+    /// This ensures AutoReady works even when user is in browser/other app,
+    /// but Aimbot only works when game is actively focused.
+    /// </summary>
     private int HookedGetDeviceState(IntPtr devicePtr, int size, IntPtr dataPtr, DeviceType deviceType)
     {
         var original = deviceType switch
