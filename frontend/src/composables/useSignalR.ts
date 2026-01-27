@@ -16,12 +16,17 @@ export interface RewardNotification {
     timestamp: Date
 }
 
+interface StatusResponse {
+    isConnected: boolean
+}
+
 // === Shared State (Singleton Pattern) ===
 
 const connection = ref<HubConnection | null>(null)
 const isConnected = ref(false)        // SignalR connected
 const isGameConnected = ref(false)    // Game injected (from /api/status)
 const isInjecting = ref(false)        // Currently injecting
+let initialStatusFetchComplete = false  // Prevent race condition with SignalR events
 
 const currentPlayerId = ref(0)
 const pilotInfo = ref<PilotInfo | null>(null)
@@ -268,6 +273,7 @@ async function startSignalR() {
     conn.on('UpdateConnectionStatus', (status: { IsConnected: boolean }) => {
         console.log('Connection Status Update:', status.IsConnected)
         isGameConnected.value = status.IsConnected
+        initialStatusFetchComplete = true  // Mark that SignalR has started sending updates
         if (status.IsConnected) {
             isInjecting.value = false
         }
@@ -290,9 +296,17 @@ async function startSignalR() {
 
         // Request initial connection status
         await fetch('/api/status')
-            .then(res => res.json())
-            .then(data => { isGameConnected.value = data.isConnected })
-            .catch(() => { isGameConnected.value = false })
+            .then(res => res.json() as Promise<StatusResponse>)
+            .then((data: StatusResponse) => {
+                // Only set if SignalR hasn't updated yet (prevent race condition)
+                if (!initialStatusFetchComplete) {
+                    isGameConnected.value = data.isConnected
+                }
+            })
+            .catch((err) => {
+                console.error('Initial status fetch failed:', err)
+                isGameConnected.value = false
+            })
 
         connection.value = conn
     } catch (err) {
