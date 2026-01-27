@@ -93,14 +93,21 @@ jobs:
       - name: Get Version from Stub
         id: version
         run: |
-          $stubDll = "bin/x86/Release/net10.0-windows7.0/NewGMHack.Stub.dll"
-          if (Test-Path $stubDll) {
-            $version = [Reflection.AssemblyName]::GetAssemblyName($stubDll).Version.ToString()
-            echo "version=$version" >> $env:GITHUB_OUTPUT
-            echo "Version: $version"
+          # Try both possible locations for Stub DLL
+          $stubDll1 = "bin/x86/Release/NewGMHack.Stub.dll"
+          $stubDll2 = "bin/x86/Release/net10.0-windows7.0/NewGMHack.Stub.dll"
+
+          if (Test-Path $stubDll1) {
+            $stubDll = $stubDll1
+          } elseif (Test-Path $stubDll2) {
+            $stubDll = $stubDll2
           } else {
-            throw "Stub DLL not found at $stubDll"
+            throw "Stub DLL not found at either $stubDll1 or $stubDll2"
           }
+
+          $version = [Reflection.AssemblyName]::GetAssemblyName($stubDll).Version.ToString()
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "Version: $version"
 
       - name: Create Release Directory
         run: |
@@ -109,12 +116,24 @@ jobs:
       - name: Package GUI
         if: needs.detect-changes.outputs.gui-changed == 'true' || needs.detect-changes.outputs.any-changed == 'true'
         run: |
-          Copy-Item "bin/x86/Release/net10.0-windows7.0/NewGmHack.GUI.exe" "release/"
+          # GUI outputs to framework-specific folder
+          $guiExe = "bin/x86/Release/net10.0-windows7.0/NewGMHack.GUI.exe"
+          if (Test-Path $guiExe) {
+            Copy-Item $guiExe "release/"
+          } else {
+            Write-Error "GUI exe not found at $guiExe"
+          }
 
       - name: Package Stub
         if: needs.detect-changes.outputs.stub-changed == 'true' || needs.detect-changes.outputs.any-changed == 'true'
         run: |
-          Copy-Item "bin/x86/Release/net10.0-windows7.0/NewGMHack.Stub.dll" "release/"
+          # Stub outputs directly to Release folder (no framework subfolder)
+          $stubDll = "bin/x86/Release/NewGMHack.Stub.dll"
+          if (Test-Path $stubDll) {
+            Copy-Item $stubDll "release/"
+          } else {
+            Write-Error "Stub DLL not found at $stubDll"
+          }
 
       - name: Package Frontend (wwwroot.zip)
         if: needs.detect-changes.outputs.frontend-changed == 'true' || needs.detect-changes.outputs.any-changed == 'true'
