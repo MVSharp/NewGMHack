@@ -275,6 +275,14 @@ async function startSignalR() {
         machineInfo.value = info
     })
 
+    conn.on('UpdateConnectionStatus', (status: { IsConnected: boolean }) => {
+        console.log('Connection Status Update:', status.IsConnected)
+        isGameConnected.value = status.IsConnected
+        if (status.IsConnected) {
+            isInjecting.value = false
+        }
+    })
+
     conn.onclose(() => {
         isConnected.value = false
         console.warn('SignalR Disconnected')
