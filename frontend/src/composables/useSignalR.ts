@@ -347,11 +347,9 @@ export function useSignalR() {
         if (!statusInterval) {
             statusInterval = window.setInterval(async () => {
                 await pollStatus()
-                await pollData()
             }, 1000)
 
             await pollStatus()
-            await pollData()
         }
     }
 
