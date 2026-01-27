@@ -144,20 +144,10 @@ async function deattach() {
 
 // === Status Polling (Production) ===
 
+// @ts-expect-error - Will be cleaned up in Task 4.1
 let statusInterval: number | null = null
 
-async function pollStatus() {
-    try {
-        const status = await api.getStatus()
-        isGameConnected.value = status.isConnected
-        if (status.isConnected) {
-            isInjecting.value = false
-        }
-    } catch {
-        isGameConnected.value = false
-    }
-}
-
+// @ts-expect-error - Will be cleaned up in Task 4.1
 async function pollData() {
     if (!isGameConnected.value) return
 
@@ -297,6 +287,13 @@ async function startSignalR() {
         await conn.start()
         isConnected.value = true
         console.log('SignalR Connected')
+
+        // Request initial connection status
+        await fetch('/api/status')
+            .then(res => res.json())
+            .then(data => { isGameConnected.value = data.isConnected })
+            .catch(() => { isGameConnected.value = false })
+
         connection.value = conn
     } catch (err) {
         console.error('SignalR Connection Failed', err)
@@ -343,14 +340,7 @@ export function useSignalR() {
             appVersion.value = '1.0.0.0'
         }
 
-        // Start status polling
-        if (!statusInterval) {
-            statusInterval = window.setInterval(async () => {
-                await pollStatus()
-            }, 1000)
-
-            await pollStatus()
-        }
+        // Polling removed - connection status now managed by SignalR UpdateConnectionStatus event
     }
 
     // Computed for UI
