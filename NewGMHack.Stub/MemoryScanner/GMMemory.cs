@@ -4,9 +4,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
-using System.Security;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -789,8 +787,6 @@ namespace NewGMHack.Stub.MemoryScanner
         private const uint PAGE_READWRITE = 0x04;
         private const uint PAGE_EXECUTE_READWRITE = 0x40;
 
-        [HandleProcessCorruptedStateExceptions]
-        [SecurityCritical]
         private bool TryReadMemory(IntPtr address, byte[] buffer, int size)
         {
             try
@@ -831,8 +827,6 @@ namespace NewGMHack.Stub.MemoryScanner
         public unsafe void ReadRef<T>(nuint offset, ref T value) where T : unmanaged
             => value = Unsafe.ReadUnaligned<T>((void*)offset);
 
-        [HandleProcessCorruptedStateExceptions]
-        [SecurityCritical]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public unsafe void ReadRaw(nuint offset, Span<byte> value)
         {

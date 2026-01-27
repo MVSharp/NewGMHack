@@ -7,13 +7,11 @@ using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
-using System.Runtime.ExceptionServices;
-using System.Security;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using ZLogger;
-using System.Runtime.CompilerServices; // For Unsafe
+using System.Runtime.CompilerServices;
 
 using NewGMHack.Stub.Logger;
 
@@ -149,11 +147,9 @@ namespace NewGMHack.Stub.Services.Scanning
         }
 
         /// <summary>
-        /// Scans a job directly using unsafe pointers. Must be a separate method
-        /// with HandleProcessCorruptedStateExceptions to catch AccessViolationException.
+        /// Scans a job directly using unsafe pointers.
+        /// Uses VirtualQueryEx to validate memory before reading to prevent access violations.
         /// </summary>
-        [HandleProcessCorruptedStateExceptions]
-        [SecurityCritical]
         private unsafe void ScanJobDirect(ScanJob job, int maxPatternLength, List<PatternInfo> patterns, ConcurrentDictionary<int, ConcurrentBag<long>> results)
         {             
             try

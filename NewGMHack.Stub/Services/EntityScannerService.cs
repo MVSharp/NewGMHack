@@ -1,6 +1,4 @@
 using System.Runtime.InteropServices;
-using System.Runtime.ExceptionServices;
-using System.Security;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NewGMHack.Stub;
@@ -484,8 +482,6 @@ public class EntityScannerService : BackgroundService
         return writable;
     }
 
-    [HandleProcessCorruptedStateExceptions]
-    [SecurityCritical]
     private static bool TryReadUInt(uint address, out uint value)
     {
         value = 0;
@@ -502,8 +498,6 @@ public class EntityScannerService : BackgroundService
         catch { return false; }
     }
 
-    [HandleProcessCorruptedStateExceptions]
-    [SecurityCritical]
     private static bool TryReadInt(uint address, out int value)
     {
         value = 0;
@@ -520,8 +514,6 @@ public class EntityScannerService : BackgroundService
         catch { return false; }
     }
 
-    [HandleProcessCorruptedStateExceptions]
-    [SecurityCritical]
     private static bool TryReadFloat(uint address, out float value)
     {
         value = 0;
@@ -538,8 +530,6 @@ public class EntityScannerService : BackgroundService
         catch { return false; }
     }
 
-    [HandleProcessCorruptedStateExceptions]
-    [SecurityCritical]
     public static void WriteFloat(uint address, float value)
     {
         if (!IsMemoryWritable(address)) return;

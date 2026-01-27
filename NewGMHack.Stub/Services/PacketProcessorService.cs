@@ -433,10 +433,12 @@ public partial class PacketProcessorService : BackgroundService
     private void SendFiveHits(List<UInt32> ids)
     {
         var idChunks = ids.Where(x => x != _selfInformation.PersonInfo.PersonId).Chunk(12);
+
+        // Move stackalloc outside the loop to avoid CA2014 warning
+        Span<TargetData> targets = stackalloc TargetData[12];
+
         foreach (var idChunk in idChunks)
         {
-            // Use stackalloc for zero allocation
-            Span<TargetData> targets = stackalloc TargetData[12];
             targets.Clear();
 
             var attack = new Attack1335
