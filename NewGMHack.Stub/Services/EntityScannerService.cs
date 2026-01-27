@@ -150,7 +150,7 @@ public class EntityScannerService : BackgroundService
                     }
                 }
 
-                var foundSelf = ScanMySelf();
+                var (playerPos, viewMatrix, foundSelf) = ScanMySelf();
                 //if (scanResults != null  && scanResults.Count > 0 && foundSelf)
                 //{
                 //    GetBestTarget();
@@ -180,20 +180,36 @@ public class EntityScannerService : BackgroundService
         V     = 0x56
     }
 
-    private bool ScanMySelf()
+    private (Vector3 Position, Matrix ViewMatrix, bool IsValid) ScanMySelf()
     {
         try
         {
             var moduleBase = GetModuleBaseAddress();
-            if (moduleBase == 0) return false;
+            if (moduleBase == 0) return (Vector3.Zero, Matrix.Identity, false);
+
+            // Read View Matrix for camera-relative movement calculation
+            Matrix viewMatrix = Matrix.Identity;
+            if (_selfInfo.DevicePtr != IntPtr.Zero)
+            {
+                try
+                {
+                    var device = new SharpDX.Direct3D9.Device(_selfInfo.DevicePtr);
+                    viewMatrix = device.GetTransform(SharpDX.Direct3D9.TransformState.View);
+                }
+                catch
+                {
+                    // Fallback to identity if Device read fails
+                    viewMatrix = Matrix.Identity;
+                }
+            }
 
             var pointerBase = moduleBase + BaseOffset;
-            if (!TryReadUInt(pointerBase,                      out var firstPtr)     || firstPtr     == 0) return false;
-            if (!TryReadUInt(firstPtr + MySelfOffset, out var entityStruct) || entityStruct == 0) return false;
-            if (!TryReadEntityData(entityStruct, out var entity)) return false;
+            if (!TryReadUInt(pointerBase,                      out var firstPtr)     || firstPtr     == 0) return (Vector3.Zero, Matrix.Identity, false);
+            if (!TryReadUInt(firstPtr + MySelfOffset, out var entityStruct) || entityStruct == 0) return (Vector3.Zero, Matrix.Identity, false);
+            if (!TryReadEntityData(entityStruct, out var entity)) return (Vector3.Zero, Matrix.Identity, false);
 
-            if (entity.CurrentHp > 300_000 || entity.MaxHp > 300_000) return false;
-            if (entity.CurrentHp < 0       || entity.MaxHp < 0) return false;
+            if (entity.CurrentHp > 300_000 || entity.MaxHp > 300_000) return (Vector3.Zero, Matrix.Identity, false);
+            if (entity.CurrentHp < 0       || entity.MaxHp < 0) return (Vector3.Zero, Matrix.Identity, false);
             _selfInfo.PersonInfo.CurrentHp = entity.CurrentHp;
             _selfInfo.PersonInfo.MaxHp     = entity.MaxHp;
             _selfInfo.PersonInfo.X         = entity.Position.X;
@@ -268,11 +284,11 @@ public class EntityScannerService : BackgroundService
                 }
             }
 
-            return true;
+            return (entity.Position, viewMatrix, true);
         }
         catch
         {
-            return false;
+            return (Vector3.Zero, Matrix.Identity, false);
         }
     }
 
