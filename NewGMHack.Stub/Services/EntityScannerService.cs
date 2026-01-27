@@ -345,9 +345,9 @@ public class EntityScannerService : BackgroundService
     /// <para><b>View Matrix to Direction Vectors:</b></para>
     /// <code>
     /// // Extract forward direction from View Matrix row 2 (M31, M32, M33)
-    /// // Negate because View Matrix looks down -Z axis
-    /// float forwardX = -viewMatrix.M31;
-    /// float forwardZ = -viewMatrix.M33;
+    /// // Note: Don't negate - View Matrix already has correct direction
+    /// float forwardX = viewMatrix.M31;
+    /// float forwardZ = viewMatrix.M33;
     /// float length = Math.Sqrt(forwardX * forwardX + forwardZ * forwardZ);
     ///
     /// // Normalize to get unit direction vector
@@ -380,10 +380,10 @@ public class EntityScannerService : BackgroundService
     {
         Vector3 movement = Vector3.Zero;
 
-        // Extract forward direction from View Matrix (row 2, negated)
-        // View Matrix M31/M33 look down -Z, so we negate to get forward direction
-        float forwardX = -viewMatrix.M31;
-        float forwardZ = -viewMatrix.M33;
+        // Extract forward direction from View Matrix row 2 (M31, M33)
+        // Note: Don't negate - View Matrix already has correct direction
+        float forwardX = viewMatrix.M31;
+        float forwardZ = viewMatrix.M33;
         float length = (float)Math.Sqrt(forwardX * forwardX + forwardZ * forwardZ);
 
         if (length < 0.001f)
