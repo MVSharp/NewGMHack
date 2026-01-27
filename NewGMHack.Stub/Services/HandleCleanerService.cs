@@ -24,9 +24,9 @@ namespace NewGMHack.Stub.Services
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.ZLogInformation($"[HandleCleaner] Started. Waiting for initialization...");
-            // Wait a bit for the game to create its initial locks
-            await Task.Delay(5000, stoppingToken);
+            _logger.ZLogInformation($"[HandleCleaner] Started. Modules already verified by ModuleWaitService, brief pause for handle stabilization...");
+            // Reduced delay since ModuleWaitService already ensures modules are loaded
+            await Task.Delay(2000, stoppingToken);
 
             while (!stoppingToken.IsCancellationRequested)
             {
