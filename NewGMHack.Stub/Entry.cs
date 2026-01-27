@@ -94,6 +94,7 @@ namespace NewGMHack.Stub
                                        services.AddSingleton<IEntityCache<WeaponBaseInfo>, SqliteEntityCache<WeaponBaseInfo>>();
                                        
                                        services.AddTransient<GmMemory>();
+                                       services.AddSingleton<ModuleWaitService>();
                                        //services.AddSingleton<FullAoBScanner>();
                                        services.AddTransient<IBuffSplitter, BuffSplitter>();
                                        services.AddSingleton<IPacketAccumulator, PacketAccumulator>();
@@ -231,7 +232,12 @@ services.AddSingleton<IReloadedHooks>(provider =>
 
                 try
                 {
-                     await hostBuilder.RunAsync();
+                    // Wait for critical game modules to load before hooking
+                    var moduleWaiter = hostBuilder.Services.GetRequiredService<ModuleWaitService>();
+                    var criticalModules = new[] { "dinput8.dll", "ws2_32.dll", "d3d9.dll" };
+                    moduleWaiter.WaitForModules(criticalModules, timeoutMs: 30000, checkIntervalMs: 500);
+
+                    await hostBuilder.RunAsync();
                 }
                 catch (Exception ex)
                 {
