@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -27,6 +28,17 @@ public class ModuleWaitService
         _options = options.Value;
     }
 
+    private static void BootstrapLog(string message)
+    {
+        try
+        {
+            var dllDir = Path.GetDirectoryName(typeof(ModuleWaitService).Assembly.Location);
+            var path = Path.Combine(dllDir ?? ".", "sdlog.txt");
+            File.AppendAllText(path, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [ModuleWait]: {message}\n");
+        }
+        catch { }
+    }
+
     public HashSet<string> GetLoadedModules()
     {
         var modules = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -38,7 +50,9 @@ public class ModuleWaitService
             if (hSnapshot == IntPtr.Zero || hSnapshot == new IntPtr(-1))
             {
                 int error = Marshal.GetLastWin32Error();
-                _logger.ZLogWarning($"[ModuleWait] CreateToolhelp32Snapshot failed for PID {_targetPid}. Error: {error}");
+                var errorMsg = $"CreateToolhelp32Snapshot failed for PID {_targetPid}. Error: {error}";
+                BootstrapLog(errorMsg);
+                _logger.ZLogWarning($"[ModuleWait] {errorMsg}");
                 return modules;
             }
 
@@ -68,7 +82,9 @@ public class ModuleWaitService
 
     public void WaitForModules()
     {
-        _logger.ZLogInformation($"[ModuleWait] Waiting for {_options.RequiredModules.Length} modules to load: [{string.Join(", ", _options.RequiredModules)}]");
+        var msg = $"Waiting for {_options.RequiredModules.Length} modules to load: [{string.Join(", ", _options.RequiredModules)}]";
+        BootstrapLog(msg);
+        _logger.ZLogInformation($"[ModuleWait] {msg}");
 
         var startTime = DateTime.UtcNow;
         while (true)
@@ -79,18 +95,22 @@ public class ModuleWaitService
 
             if (missingModules.Length == 0)
             {
-                _logger.ZLogInformation($"[ModuleWait] All required modules loaded!");
+                var successMsg = $"All required modules loaded!";
+                BootstrapLog(successMsg);
+                _logger.ZLogInformation($"[ModuleWait] {successMsg}");
                 return;
             }
 
-            _logger.ZLogDebug($"[ModuleWait] Missing modules: {string.Join(", ", missingModules)}, waiting {_options.CheckIntervalMs}ms...");
+            var debugMsg = $"Missing modules: {string.Join(", ", missingModules)}, waiting {_options.CheckIntervalMs}ms...";
+            BootstrapLog(debugMsg);
+            _logger.ZLogDebug($"[ModuleWait] {debugMsg}");
 
             var elapsed = (int)(DateTime.UtcNow - startTime).TotalMilliseconds;
             if (elapsed > _options.TimeoutMs)
             {
-                throw new TimeoutException(
-                    $"[ModuleWait] Timeout waiting for modules after {_options.TimeoutMs}ms. " +
-                    $"Missing: [{string.Join(", ", missingModules)}]");
+                var timeoutMsg = $"Timeout waiting for modules after {_options.TimeoutMs}ms. Missing: [{string.Join(", ", missingModules)}]";
+                BootstrapLog(timeoutMsg);
+                throw new TimeoutException($"[ModuleWait] {timeoutMsg}");
             }
 
             Thread.Sleep(_options.CheckIntervalMs);
