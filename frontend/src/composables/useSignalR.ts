@@ -1,5 +1,5 @@
 import { HubConnectionBuilder, HubConnection, LogLevel } from '@microsoft/signalr'
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { api, type PilotInfo, type Roommate, type HistoryItem, type PlayerStats } from '@/services/api'
 
 // === Types ===
@@ -101,6 +101,12 @@ function startMockData() {
     }, 100)
 }
 
+function stopMockData() {
+    console.warn('[MOCK] Stopping Simulation Mode')
+    mockIntervals.forEach(clearInterval)
+    mockIntervals = []
+}
+
 // === Actions ===
 
 async function inject() {
@@ -149,10 +155,8 @@ async function deattach() {
 
 // === Status Polling (Production) ===
 
-// @ts-expect-error - Will be cleaned up in Task 4.1
 let statusInterval: number | null = null
 
-// @ts-expect-error - Will be cleaned up in Task 4.1
 async function pollData() {
     if (!isGameConnected.value) return
 
@@ -365,6 +369,27 @@ export function useSignalR() {
         const start = new Date(stats.value.stats.FirstSortieDate).toLocaleDateString()
         const end = new Date(stats.value.stats.LastSortieDate).toLocaleDateString()
         return `${start} - ${end}`
+    })
+
+    // Cleanup on component unmount
+    onUnmounted(() => {
+        // Clear mock intervals
+        if (isDev()) {
+            stopMockData()
+        }
+
+        // Clear status polling interval
+        if (statusInterval) {
+            clearInterval(statusInterval)
+            statusInterval = null
+        }
+
+        // Stop SignalR connection
+        if (connection.value) {
+            connection.value.stop().catch(err => {
+                console.error('Error stopping SignalR:', err)
+            })
+        }
     })
 
     return {
