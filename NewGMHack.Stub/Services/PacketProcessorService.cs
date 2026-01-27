@@ -104,15 +104,34 @@ public partial class PacketProcessorService : BackgroundService
         {
             if (packet.Data.Length == 0) return;
 
-            // Zero-allocation enumeration
-            var methodPackets = _buffSplitter.EnumeratePackets(packet.Data);
-
             var reborns = new ConcurrentQueue<Reborn>();
 
-            // Sequential processing - no parallel overhead
-            foreach (var methodPacket in methodPackets)
+            // Process packets with zero-allocation enumeration
+            // NOTE: We cannot use await inside foreach over ref struct enumerator
+            // So we process all sync packets first, then handle async ones separately
+            var asyncPackets = new List<(short Method, byte[] BodyArray)>();
+
+            foreach (var methodPacket in _buffSplitter.EnumeratePackets(packet.Data))
             {
-                await DoParseWork(packet.Socket, methodPacket, reborns, token);
+                var method = methodPacket.Method;
+                bool isAsyncCase = method is 2201 or 2567 or 2245 or 2877 or 1246 or 2535;
+
+                if (isAsyncCase)
+                {
+                    // Defer async packets
+                    asyncPackets.Add((method, methodPacket.MethodBody.ToArray()));
+                }
+                else
+                {
+                    // Process sync packets immediately with zero allocation
+                    DoParseWork(packet.Socket, methodPacket, reborns);
+                }
+            }
+
+            // Now process async packets (can use await here)
+            foreach (var (method, bodyArray) in asyncPackets)
+            {
+                await DoParseWorkAsync(packet.Socket, method, bodyArray, reborns, token);
             }
 
             if (!reborns.IsEmpty)
@@ -132,40 +151,18 @@ public partial class PacketProcessorService : BackgroundService
     /// <param name="socket"></param>
     /// <param name="methodPacket"></param>
     /// <param name="reborns"></param>
-    /// <returns></returns>
-    private async Task DoParseWork(IntPtr socket, MethodPacket methodPacket, ConcurrentQueue<Reborn> reborns,
-                                   CancellationToken token)
+    private void DoParseWork(IntPtr socket, MethodPacket methodPacket, ConcurrentQueue<Reborn> reborns)
     {
         var method = methodPacket.Method;
+        var body = methodPacket.MethodBody; // Zero-allocation span
 
-        // Only allocate for async cases - ref structs can't cross await boundaries
-        // Most cases are sync and can use zero-allocation spans
-        bool isAsyncCase = method is 2201 or 2567 or 2245 or 2877 or 1246 or 2535;
-
-        ReadOnlySpan<byte> body;
-        byte[]? bodyArray = null;
-
-        if (isAsyncCase)
-        {
-            // Async cases need array copy
-            bodyArray = methodPacket.MethodBody.ToArray();
-            body = bodyArray;
-        }
-        else
-        {
-            // Sync cases use zero-allocation span
-            body = methodPacket.MethodBody;
-        }
-
-        try
-        {
-            switch (method)
+        switch (method)
         {
             case 2604:
                 ReadSlotInfo(body);
                 break;
             case 2201:
-                await ReadCacheMachineGridsAsync(body, token);
+                // Handled by DoParseWorkAsync
                 break;
             case 2240:
                 SendSkipScreen(socket);
@@ -176,13 +173,11 @@ public partial class PacketProcessorService : BackgroundService
                 break;
             case 1473 or 1663://battle begin time start , 1443 follow to 1557
                 break;
-            case 2567: // get page
-                await ReadPageCondomAsync(body, token);
+            case 2567: // get page - handled by DoParseWorkAsync
                 break;
             // case 1992 or 1338 or 2312 or 1525 or 1521 or 2103:
             //1342 player reborn in battle
-            case 2245: //after F5
-                await ReadGameReadyAsync(body, token);
+            case 2245: //after F5 - handled by DoParseWorkAsync
                 break;
             case 2143: // battle reborn
                 _selfInformation.ClientConfig.IsInGame = true;
@@ -207,7 +202,7 @@ public partial class PacketProcessorService : BackgroundService
                 _selfInformation.ClientConfig.IsInGame = true;
                 if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.AutoFive))
                 {
-                    var born = ReadRebornFast(body, isReadLocation: false);
+                    var born = ReadRebornFast(body, readLocation: false);
                     SendFiveHits([born.TargetId]);
                 }
                 if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
@@ -224,46 +219,23 @@ public partial class PacketProcessorService : BackgroundService
                 ChargeCondom(socket, _selfInformation.PersonInfo.Slot);
                 SendF5(socket);
                 break;
-            case 2877:
-                await ReadPlayerBasicInfoAsync(body, token);
+            case 2877: // Handled by DoParseWorkAsync
                 ChargeCondom(socket, _selfInformation.PersonInfo.Slot);
                 SendF5(socket);
                 break;
             //case 1616: // Hit response - track damage
             //    ReadHitResponse1616(methodPacket.MethodBody.AsMemory(), reborns);
             //    break;
-            case 1246 or 2535:
+            case 1246 or 2535: // Handled by DoParseWorkAsync
                 _selfInformation.ClientConfig.IsInGame = false;
                 var changed = ReadChangedMachine(body);
                 _logger.LogCondomChangeDetected(changed.MachineId);
 
                 // Store both raw and processed machine data
-                //_selfInformation.CurrentMachine = changed;
                 _selfInformation.CurrentMachineModel = MachineModel.FromRaw(changed);
 
                 var slot = changed.Slot;
                 _selfInformation.PersonInfo.Slot = slot;
-
-                try
-                {
-                    var machineInfo = await ScanCondom(changed.MachineId, token: token);
-
-                    if (machineInfo != null)
-                    {
-                        // Notify Frontend via IPC -> SignalR
-                        _logger.LogSendingMachineInfoUpdate(changed.MachineId);
-                        var response = new NewGMHack.CommunicationModel.IPC.Responses.MachineInfoResponse
-                        {
-                            MachineModel    = _selfInformation.CurrentMachineModel,
-                            MachineBaseInfo = machineInfo
-                        };
-                        await _ipcService.SendMachineInfoUpdateAsync(response);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogScanCondomIPCError(ex);
-                }
 
                 ChargeCondom(socket, slot);
                 break;
@@ -373,6 +345,68 @@ public partial class PacketProcessorService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Handles async packet processing cases.
+    /// Async methods cannot have ref struct parameters, so this accepts byte[].
+    /// </summary>
+    private async Task DoParseWorkAsync(IntPtr socket, short method, byte[] bodyArray, ConcurrentQueue<Reborn> reborns,
+                                        CancellationToken token)
+    {
+        var body = bodyArray.AsSpan();
+
+        switch (method)
+        {
+            case 2201:
+                await ReadCacheMachineGridsAsync(bodyArray, token);
+                break;
+            case 2567: // get page
+                await ReadPageCondomAsync(bodyArray, token);
+                break;
+            case 2245: //after F5
+                await ReadGameReadyAsync(bodyArray, token);
+                break;
+            case 2877:
+                await ReadPlayerBasicInfoAsync(bodyArray, token);
+                ChargeCondom(socket, _selfInformation.PersonInfo.Slot);
+                SendF5(socket);
+                break;
+            case 1246 or 2535:
+                _selfInformation.ClientConfig.IsInGame = false;
+                var changed = ReadChangedMachine(body);
+                _logger.LogCondomChangeDetected(changed.MachineId);
+
+                // Store both raw and processed machine data
+                _selfInformation.CurrentMachineModel = MachineModel.FromRaw(changed);
+
+                var slot = changed.Slot;
+                _selfInformation.PersonInfo.Slot = slot;
+
+                try
+                {
+                    var machineInfo = await ScanCondom(changed.MachineId, token: token);
+
+                    if (machineInfo != null)
+                    {
+                        // Notify Frontend via IPC -> SignalR
+                        _logger.LogSendingMachineInfoUpdate(changed.MachineId);
+                        var response = new NewGMHack.CommunicationModel.IPC.Responses.MachineInfoResponse
+                        {
+                            MachineModel    = _selfInformation.CurrentMachineModel,
+                            MachineBaseInfo = machineInfo
+                        };
+                        await _ipcService.SendMachineInfoUpdateAsync(response);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogScanCondomIPCError(ex);
+                }
+
+                ChargeCondom(socket, slot);
+                break;
+        }
+    }
+
     private void ReadSlotInfo(ReadOnlySpan<byte> bytes)
     {
         var slotInfo = MemoryMarshal.Read<SlotInfoRev>(bytes);
@@ -380,13 +414,13 @@ public partial class PacketProcessorService : BackgroundService
         _logger.ZLogInformation($"machine:{machine.MachineId} slot:{machine.Slot} exp:{machine.CurrentExp} battery: {machine.Battery}");
     }
 
-    private async Task ReadCacheMachineGridsAsync(ReadOnlySpan<byte> methodPacketMethodBody, CancellationToken token)
+    private async Task ReadCacheMachineGridsAsync(byte[] methodPacketMethodBody, CancellationToken token)
     {
-        var header = methodPacketMethodBody.ReadStruct<MachineGridHeader>();
+        var header = methodPacketMethodBody.AsSpan().ReadStruct<MachineGridHeader>();
         if (header.TotalCount <= 0) return;
         _selfInformation.PersonInfo.PersonId = header.PlayerId;
         _logger.LogMachineGridCount(header.TotalCount);
-        var machines  = methodPacketMethodBody.SliceAfter<MachineGridHeader>().CastTo<MachineGrid>().ToArray();
+        var machines  = methodPacketMethodBody.AsSpan().SliceAfter<MachineGridHeader>().CastTo<MachineGrid>().ToArray();
         //if (machines.Length != header.TotalCount)
         //{
         //    _logger.ZLogError($"mis match count in grid {header.TotalCount} != {machines.Length} : {string.Join("," ,machines.Select(c=>c.MachineId))}");
@@ -430,13 +464,13 @@ public partial class PacketProcessorService : BackgroundService
             _winsockHookManager.SendPacket(_selfInformation.LastSocket, attackPacket);
         }
     }
-    private async Task ReadPageCondomAsync(ReadOnlySpan<byte> methodPacketMethodBody, CancellationToken token = default)
+    private async Task ReadPageCondomAsync(byte[] methodPacketMethodBody, CancellationToken token = default)
     {
-        var header = methodPacketMethodBody.ReadStruct<PageCondomRecv>();
+        var header = methodPacketMethodBody.AsSpan().ReadStruct<PageCondomRecv>();
         var count  = (int)header.Size;
         if (count <= 0) return;
         _selfInformation.PersonInfo.PersonId = header.MyPlayerId;
-        var condomSpan = methodPacketMethodBody.SliceAfter<PageCondomRecv>().CastTo<Machine>();
+        var condomSpan = methodPacketMethodBody.AsSpan().SliceAfter<PageCondomRecv>().CastTo<Machine>();
         var machines   = condomSpan.AsValueEnumerable().Where(c=>c.MachineId > 0).ToList();
         foreach (var condom in machines)
         {
@@ -446,13 +480,13 @@ public partial class PacketProcessorService : BackgroundService
         await gm.ScanMachinesWithDetails(machines.Select(c => c.MachineId),token);
     }
 
-    private async Task ReadPlayerBasicInfoAsync(ReadOnlySpan<byte> bytes, CancellationToken token = default)
+    private async Task ReadPlayerBasicInfoAsync(byte[] bytes, CancellationToken token = default)
     {
         try
         {
             _selfInformation.ClientConfig.IsInGame = false;
             
-            var (botId, botSlot) = ParsePlayerBasicInfoUnsafe(bytes.Span);
+            var (botId, botSlot) = ParsePlayerBasicInfoUnsafe(bytes.AsSpan());
 
             var machineInfo = await ScanCondom(botId, token);
             if (machineInfo != null)
@@ -539,13 +573,13 @@ public partial class PacketProcessorService : BackgroundService
         return MemoryMarshal.Read<uint>(data);
     }
 
-    private async Task ReadGameReadyAsync(ReadOnlySpan<byte> bytes, CancellationToken token)
+    private async Task ReadGameReadyAsync(byte[] bytes, CancellationToken token)
     {
         try
         {
-            var header = bytes.ReadStruct<GameReadyStruct>();
+            var header = bytes.AsSpan().ReadStruct<GameReadyStruct>();
             // Convert to array since Span can't cross await boundaries
-            var playersSpan = bytes.SliceAfter<GameReadyStruct>().CastTo<PlayerBattleStruct>();
+            var playersSpan = bytes.AsSpan().SliceAfter<GameReadyStruct>().CastTo<PlayerBattleStruct>();
             int count       = Math.Min(header.PlayerCount, playersSpan.Length);
             var players     = playersSpan.Slice(0, count).ToArray();
 
@@ -1306,7 +1340,7 @@ public partial class PacketProcessorService : BackgroundService
     {
         try
         {
-            var reborn = ReadRebornFast(data, isReadLocation);
+            var reborn = ReadRebornFast(data, readLocation: isReadLocation);
             if (reborn.PersionId == _selfInformation.PersonInfo.PersonId)
             {
                 reborns.Enqueue(reborn);
