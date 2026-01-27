@@ -8,6 +8,7 @@ import Features from '@/views/Features.vue'
 import Pilot from '@/views/Pilot.vue'
 import Lobby from '@/views/Lobby.vue'
 import MachineInfo from '@/views/MachineInfo.vue'
+import ToastContainer from '@/components/ui/toast/ToastContainer.vue'
 import { useTabs, TabNames } from '@/composables/useTabs'
 import { useSignalR } from '@/composables/useSignalR'
 
@@ -57,6 +58,9 @@ onMounted(() => {
                 <component :is="currentView" :key="currentTab" />
             </Transition>
         </main>
+
+        <!-- Toast Notifications -->
+        <ToastContainer />
     </div>
 </template>
 
