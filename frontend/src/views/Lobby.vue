@@ -29,9 +29,9 @@ const { t } = useI18n()
                                 {{ t('scanning_lobby') }}
                             </td>
                         </tr>
-                        <tr v-for="player in roommates" :key="player.id">
-                            <td class="text-white font-bold">{{ player.name }}</td>
-                            <td class="font-mono text-neon-cyan">{{ player.id }}</td>
+                        <tr v-for="player in roommates" :key="player.Id">
+                            <td class="text-white font-bold">{{ player.Name }}</td>
+                            <td class="font-mono text-neon-cyan">{{ player.Id }}</td>
                             <td><span class="text-neon-blue">{{ t('connected') }}</span></td>
                         </tr>
                     </tbody>

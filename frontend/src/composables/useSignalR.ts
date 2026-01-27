@@ -71,8 +71,8 @@ function startMockData() {
 
         // Mock Pilot
         pilotInfo.value = await api.getMe()
-        if (pilotInfo.value.personId && currentPlayerId.value === 0) {
-            currentPlayerId.value = pilotInfo.value.personId
+        if (pilotInfo.value.PersonId && currentPlayerId.value === 0) {
+            currentPlayerId.value = pilotInfo.value.PersonId
         }
 
         // Randomly update machine info to simulate live data
@@ -159,7 +159,7 @@ async function pollData() {
     try {
         // Fetch pilot info
         pilotInfo.value = await api.getMe()
-        const newPid = pilotInfo.value.personId
+        const newPid = pilotInfo.value.PersonId
 
         if (newPid && newPid > 0) {
             // Always update currentPlayerId if we have a valid one
@@ -239,19 +239,19 @@ async function startSignalR() {
     // UpdatePersonInfo
     conn.on('UpdatePersonInfo', (info: any) => {
         pilotInfo.value = {
-            personId: info.PersonId ?? 0,
-            condomId: info.CondomId ?? 0,
-            condomName: info.CondomName ?? '--',
-            slot: info.Slot ?? 0,
-            weapon1: info.Weapon1 ?? '--',
-            weapon2: info.Weapon2 ?? '--',
-            weapon3: info.Weapon3 ?? '--',
-            x: info.X ?? 0,
-            y: info.Y ?? 0,
-            z: info.Z ?? 0
+            PersonId: info.PersonId ?? 0,
+            CondomId: info.CondomId ?? 0,
+            CondomName: info.CondomName ?? '--',
+            Slot: info.Slot ?? 0,
+            Weapon1: info.Weapon1 ?? '--',
+            Weapon2: info.Weapon2 ?? '--',
+            Weapon3: info.Weapon3 ?? '--',
+            X: info.X ?? 0,
+            Y: info.Y ?? 0,
+            Z: info.Z ?? 0
         }
 
-        const newPid = pilotInfo.value.personId
+        const newPid = pilotInfo.value.PersonId
         if (newPid && newPid !== currentPlayerId.value) {
             currentPlayerId.value = newPid
             refreshStats()
@@ -260,8 +260,8 @@ async function startSignalR() {
 
     conn.on('UpdateRoommates', (list: any[]) => {
         roommates.value = list.map(r => ({
-            name: r.Name ?? 'Unknown',
-            id: r.Id ?? 0
+            Name: r.Name ?? 'Unknown',
+            Id: r.Id ?? 0
         }))
     })
 

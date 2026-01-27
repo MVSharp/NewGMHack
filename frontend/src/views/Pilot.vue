@@ -6,18 +6,18 @@ import { useI18n } from '@/composables/useI18n'
 const { pilotInfo } = useSignalR()
 const { t } = useI18n()
 
-const pilotId = computed(() => pilotInfo.value?.personId ?? '--')
-const condomId = computed(() => pilotInfo.value?.condomId ?? '--')
-const condomName = computed(() => pilotInfo.value?.condomName ?? '--')
-const slot = computed(() => pilotInfo.value?.slot ?? '--')
-const weapon1 = computed(() => pilotInfo.value?.weapon1 ?? '--')
-const weapon2 = computed(() => pilotInfo.value?.weapon2 ?? '--')
-const weapon3 = computed(() => pilotInfo.value?.weapon3 ?? '--')
+const pilotId = computed(() => pilotInfo.value?.PersonId ?? '--')
+const condomId = computed(() => pilotInfo.value?.CondomId ?? '--')
+const condomName = computed(() => pilotInfo.value?.CondomName ?? '--')
+const slot = computed(() => pilotInfo.value?.Slot ?? '--')
+const weapon1 = computed(() => pilotInfo.value?.Weapon1 ?? '--')
+const weapon2 = computed(() => pilotInfo.value?.Weapon2 ?? '--')
+const weapon3 = computed(() => pilotInfo.value?.Weapon3 ?? '--')
 const coords = computed(() => {
     if (!pilotInfo.value) return 'X:-- Y:-- Z:--'
-    const x = pilotInfo.value.x?.toFixed(2) ?? '--'
-    const y = pilotInfo.value.y?.toFixed(2) ?? '--'
-    const z = pilotInfo.value.z?.toFixed(2) ?? '--'
+    const x = pilotInfo.value.X?.toFixed(2) ?? '--'
+    const y = pilotInfo.value.Y?.toFixed(2) ?? '--'
+    const z = pilotInfo.value.Z?.toFixed(2) ?? '--'
     return `X:${x} Y:${y} Z:${z}`
 })
 </script>

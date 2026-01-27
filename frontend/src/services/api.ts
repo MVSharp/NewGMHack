@@ -74,21 +74,21 @@ export interface HistoryItem {
 }
 
 export interface PilotInfo {
-    personId: number
-    condomId: number
-    condomName: string
-    slot: number
-    weapon1: string
-    weapon2: string
-    weapon3: string
-    x: number
-    y: number
-    z: number
+    PersonId: number
+    CondomId: number
+    CondomName: string
+    Slot: number
+    Weapon1: string
+    Weapon2: string
+    Weapon3: string
+    X: number
+    Y: number
+    Z: number
 }
 
 export interface Roommate {
-    name: string
-    id: number
+    Name: string
+    Id: number
 }
 
 export interface ConnectionStatus {
@@ -152,22 +152,22 @@ const MOCK_FEATURES: Feature[] = [
 ]
 
 const MOCK_PILOT: PilotInfo = {
-    personId: 12345,
-    condomId: 58,
-    condomName: 'RX-78-2 GUNDAM',
-    slot: 1,
-    weapon1: 'Beam Rifle',
-    weapon2: 'Beam Saber',
-    weapon3: 'Shield',
-    x: 1234.56,
-    y: 78.90,
-    z: 2345.67
+    PersonId: 12345,
+    CondomId: 58,
+    CondomName: 'RX-78-2 GUNDAM',
+    Slot: 1,
+    Weapon1: 'Beam Rifle',
+    Weapon2: 'Beam Saber',
+    Weapon3: 'Shield',
+    X: 1234.56,
+    Y: 78.90,
+    Z: 2345.67
 }
 
 const MOCK_ROOMMATES: Roommate[] = [
-    { name: 'RedComet_Char', id: 10001 },
-    { name: 'WhiteDevil', id: 10002 },
-    { name: 'Zeon_Pilot03', id: 10003 },
+    { Name: 'RedComet_Char', Id: 10001 },
+    { Name: 'WhiteDevil', Id: 10002 },
+    { Name: 'Zeon_Pilot03', Id: 10003 },
 ]
 
 const MOCK_MACHINEINFO = {
@@ -419,31 +419,15 @@ export const api = {
     // --- Pilot Info ---
     async getMe(): Promise<PilotInfo> {
         if (isDev()) return MOCK_PILOT
-        const res = await client.get<any>('/me')
-        // Normalize casing
-        const d = res.data
-        return {
-            personId: d.personId ?? d.PersonId ?? 0,
-            condomId: d.condomId ?? d.CondomId ?? d.gundamId ?? d.GundamId ?? 0,
-            condomName: d.condomName ?? d.CondomName ?? d.gundamName ?? d.GundamName ?? '--',
-            slot: d.slot ?? d.Slot ?? 0,
-            weapon1: d.weapon1 ?? d.Weapon1 ?? '--',
-            weapon2: d.weapon2 ?? d.Weapon2 ?? '--',
-            weapon3: d.weapon3 ?? d.Weapon3 ?? '--',
-            x: d.x ?? d.X ?? 0,
-            y: d.y ?? d.Y ?? 0,
-            z: d.z ?? d.Z ?? 0
-        }
+        const res = await client.get<PilotInfo>('/me')
+        return res.data
     },
 
     // --- Roommates ---
     async getRoommates(): Promise<Roommate[]> {
         if (isDev()) return MOCK_ROOMMATES
-        const res = await client.get<any[]>('/roommates')
-        return res.data.map(r => ({
-            name: r.name ?? r.Name ?? 'Unknown',
-            id: r.id ?? r.Id ?? 0
-        }))
+        const res = await client.get<Roommate[]>('/roommates')
+        return res.data
     },
 
     // --- Status ---
