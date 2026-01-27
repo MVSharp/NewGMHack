@@ -11,17 +11,31 @@ namespace NewGmHack.GUI.Services
         System.Threading.Channels.Channel<WebMessage> webChannel
         ) : BackgroundService
     {
+        private bool _wasConnected = false;
+
         /// <inheritdoc />
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             //return;
+            bool isConnected = false;
+
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
-                    var healths = await handler.AskForHealth();
-                    healthCheckHandler.SetHealthStatus(healths);
-                    
+                    var health = await handler.AskForHealth();
+                    healthCheckHandler.SetHealthStatus(health);
+
+                    // Track connection state
+                    isConnected = health;
+
+                    // Broadcast connection status change
+                    if (isConnected != _wasConnected)
+                    {
+                        _wasConnected = isConnected;
+                        webChannel.Writer.TryWrite(new WebMessage("UpdateConnectionStatus", new { IsConnected = isConnected }));
+                    }
+
                     var info = await handler.AskForInfo();
                     personInfoHandler.SetInfo(info);
                     webChannel.Writer.TryWrite(new WebMessage("UpdatePersonInfo", info));
@@ -34,6 +48,13 @@ namespace NewGmHack.GUI.Services
                 }
                 catch
                 {
+                    // Connection lost
+                    if (_wasConnected)
+                    {
+                        _wasConnected = false;
+                        webChannel.Writer.TryWrite(new WebMessage("UpdateConnectionStatus", new { IsConnected = false }));
+                    }
+
                     // If failed, wait longer to avoid spamming exceptions on disconnect
                     await Task.Delay(2000, stoppingToken).ConfigureAwait(false);
                 }
