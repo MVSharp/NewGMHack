@@ -332,17 +332,19 @@ public sealed class WinsockHookManager(
             //    logger.ZLogInformation($"[RECV raw|length:{receivedLength}]{BitConverter.ToString(data.ToArray())}");
             //}
 
-            // Use accumulator to handle TCP fragmentation
-            var completePackets = accumulator.AppendAndExtract(data);
+            // Use zero-allocation enumerator
+            var packetEnumerator = accumulator.AppendAndGetPackets(data);
 
-            foreach (var packet in completePackets)
+            foreach (var packetSpan in packetEnumerator)
             {
-                if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.Debug) && packet[5] != 0x27)
+                if (self.ClientConfig.Features.IsFeatureEnable(FeatureName.Debug) && packetSpan[5] != 0x27)
                 {
-                    logger.ZLogInformation($"[RECV complete|length:{packet.Length}]{BitConverter.ToString(packet.ToArray())}");
+                    logger.ZLogInformation($"[RECV complete|length:{packetSpan.Length}]{BitConverter.ToString(packetSpan.ToArray())}");
                 }
 
-                var success = channel.Writer.TryWrite(new PacketContext(_lastSocket, packet));
+                // Copy to array for channel (single allocation per packet)
+                byte[] packetArray = packetSpan.ToArray();
+                var success = channel.Writer.TryWrite(new PacketContext(_lastSocket, packetArray));
                 if (!success)
                 {
                     logger.ZLogCritical($"[RECV] Channel is full, packet dropped!");

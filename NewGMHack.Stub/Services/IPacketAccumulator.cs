@@ -1,3 +1,5 @@
+using NewGMHack.Stub.PacketStructs;
+
 namespace NewGMHack.Stub.Services;
 
 /// <summary>
@@ -9,6 +11,11 @@ public interface IPacketAccumulator
     /// Appends raw recv data and extracts complete packets.
     /// </summary>
     List<byte[]> AppendAndExtract(ReadOnlySpan<byte> rawRecvData);
+
+    /// <summary>
+    /// Appends raw recv data and returns zero-allocation enumerator over complete packets.
+    /// </summary>
+    PacketRefEnumerator AppendAndGetPackets(ReadOnlySpan<byte> rawRecvData);
 
     /// <summary>
     /// Clears the accumulator buffer.

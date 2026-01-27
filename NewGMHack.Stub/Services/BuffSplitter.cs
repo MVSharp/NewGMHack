@@ -64,6 +64,12 @@ public sealed class BuffSplitter(ILogger<BuffSplitter> logger) : IBuffSplitter
     public static PacketEnumerator Enumerate(ReadOnlySpan<byte> input) => new(input);
 
     /// <summary>
+    /// Zero-allocation enumeration of method packets.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public MethodPacketEnumerator EnumeratePackets(ReadOnlySpan<byte> input) => new(input);
+
+    /// <summary>
     /// Finds the separator (0xF0 0x03) using .NET 10 SIMD-optimized SearchValues.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -89,6 +95,15 @@ public sealed class BuffSplitter(ILogger<BuffSplitter> logger) : IBuffSplitter
         }
 
         return -1;
+    }
+
+    /// <summary>
+    /// Public static version for MethodPacketEnumerator to use.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int FindSeparatorStatic(ReadOnlySpan<byte> span)
+    {
+        return FindSeparator(span);
     }
 
     /// <summary>

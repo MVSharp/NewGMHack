@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Channels;
@@ -101,31 +102,36 @@ public partial class PacketProcessorService : BackgroundService
     {
         try
         {
-
             if (packet.Data.Length == 0) return;
-            var methodPackets = _buffSplitter.Split(packet.Data);
-            if (methodPackets.Count == 0) return;
-            var reborns = new ConcurrentQueue<Reborn>(); // Use Queue for better performance than Bag
 
-            if (methodPackets.Count >= 20)
-            {
-                // Use 50% of processors or at least 2, cap at 8 to avoid saturation
-                int maxDegree = Math.Max(2, Math.Min(Environment.ProcessorCount / 2, 8));
+            var reborns = new ConcurrentQueue<Reborn>();
 
-                await Parallel.ForEachAsync(methodPackets,
-                                            new ParallelOptions()
-                                                { MaxDegreeOfParallelism = maxDegree, CancellationToken = token },
-                                            async (methodPacket, ct) =>
-                                            {
-                                                await DoParseWork(packet.Socket, methodPacket, reborns, ct);
-                                            });
-            }
-            else
+            // Process packets with zero-allocation enumeration
+            // NOTE: We cannot use await inside foreach over ref struct enumerator
+            // So we process all sync packets first, then handle async ones separately
+            var asyncPackets = new List<(short Method, byte[] BodyArray)>();
+
+            foreach (var methodPacket in _buffSplitter.EnumeratePackets(packet.Data))
             {
-                foreach (var methodPacket in methodPackets)
+                var method = methodPacket.Method;
+                bool isAsyncCase = method is 2201 or 2567 or 2245 or 2877 or 1246 or 2535;
+
+                if (isAsyncCase)
                 {
-                    await DoParseWork(packet.Socket, methodPacket, reborns, token);
+                    // Defer async packets
+                    asyncPackets.Add((method, methodPacket.MethodBody.ToArray()));
                 }
+                else
+                {
+                    // Process sync packets immediately with zero allocation
+                    DoParseWork(packet.Socket, methodPacket, reborns);
+                }
+            }
+
+            // Now process async packets (can use await here)
+            foreach (var (method, bodyArray) in asyncPackets)
+            {
+                await DoParseWorkAsync(packet.Socket, method, bodyArray, reborns, token);
             }
 
             if (!reborns.IsEmpty)
@@ -145,21 +151,18 @@ public partial class PacketProcessorService : BackgroundService
     /// <param name="socket"></param>
     /// <param name="methodPacket"></param>
     /// <param name="reborns"></param>
-    /// <returns></returns>
-    private async Task DoParseWork(IntPtr socket, PacketSegment methodPacket, ConcurrentQueue<Reborn> reborns,
-                                   CancellationToken token)
+    private void DoParseWork(IntPtr socket, MethodPacket methodPacket, ConcurrentQueue<Reborn> reborns)
     {
         var method = methodPacket.Method;
-        var reader = new ByteReader(methodPacket.MethodBody);
-        //_logger.ZLogInformation($"processing {method} {BitConverter.ToString(methodPacket.MethodBody)}");
-        ////_logger.ZLogInformation($"method: {method}");
+        var body = methodPacket.MethodBody; // Zero-allocation span
+
         switch (method)
         {
             case 2604:
-                await ReadSlotInfo(methodPacket.MethodBody);
+                ReadSlotInfo(body);
                 break;
             case 2201:
-                await ReadCacheMachineGrids(methodPacket.MethodBody,token);
+                // Handled by DoParseWorkAsync
                 break;
             case 2240:
                 SendSkipScreen(socket);
@@ -170,17 +173,15 @@ public partial class PacketProcessorService : BackgroundService
                 break;
             case 1473 or 1663://battle begin time start , 1443 follow to 1557
                 break;
-            case 2567: // get page
-                await ReadPageCondom(methodPacket.MethodBody,token);
+            case 2567: // get page - handled by DoParseWorkAsync
                 break;
             // case 1992 or 1338 or 2312 or 1525 or 1521 or 2103:
             //1342 player reborn in battle
-            case 2245: //after F5
-                await ReadGameReady(methodPacket.MethodBody.AsMemory(), token);
+            case 2245: //after F5 - handled by DoParseWorkAsync
                 break;
             case 2143: // battle reborn
                 _selfInformation.ClientConfig.IsInGame = true;
-                ReadPlayerStats(methodPacket.MethodBody, reborns);
+                ReadPlayerStats(body, reborns);
                 //if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
                 //{
                 //    _logger.ZLogInformation($"battle reborn packet with stats");
@@ -192,7 +193,7 @@ public partial class PacketProcessorService : BackgroundService
                 if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
                     _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
                 {
-                    ReadReborns(reader, reborns);
+                    ReadRebornsFast(body, reborns);
                 }
 
                 // _logger.ZLogInformation($"found reborn  : {reborn.TargetId}");
@@ -201,13 +202,13 @@ public partial class PacketProcessorService : BackgroundService
                 _selfInformation.ClientConfig.IsInGame = true;
                 if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.AutoFive))
                 {
-                     var born = reader.ReadReborn(false);
-                    SendFiveHits([born.TargetId]); 
+                    var born = ReadRebornFast(body, readLocation: false);
+                    SendFiveHits([born.TargetId]);
                 }
                 if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
                     _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
                 {
-                    ReadReborns(reader, reborns);
+                    ReadRebornsFast(body, reborns);
                 }
                 break;
             case 2722 or 2670 or 2361:
@@ -218,21 +219,163 @@ public partial class PacketProcessorService : BackgroundService
                 ChargeCondom(socket, _selfInformation.PersonInfo.Slot);
                 SendF5(socket);
                 break;
-            case 2877:
-                await ReadPlayerBasicInfo(methodPacket.MethodBody, token);
+            case 2877: // Handled by DoParseWorkAsync
                 ChargeCondom(socket, _selfInformation.PersonInfo.Slot);
                 SendF5(socket);
                 break;
             //case 1616: // Hit response - track damage
             //    ReadHitResponse1616(methodPacket.MethodBody.AsMemory(), reborns);
             //    break;
-            case 1246 or 2535:
+            case 1246 or 2535: // Handled by DoParseWorkAsync
                 _selfInformation.ClientConfig.IsInGame = false;
-                var changed = ReadChangedMachine(methodPacket.MethodBody);
+                var changed = ReadChangedMachine(body);
                 _logger.LogCondomChangeDetected(changed.MachineId);
 
                 // Store both raw and processed machine data
-                //_selfInformation.CurrentMachine = changed;
+                _selfInformation.CurrentMachineModel = MachineModel.FromRaw(changed);
+
+                var slot = changed.Slot;
+                _selfInformation.PersonInfo.Slot = slot;
+
+                ChargeCondom(socket, slot);
+                break;
+            case 1259: // get room list
+                _selfInformation.PersonInfo.PersonId = ReadPersonIdFast(body);
+                _selfInformation.ClientConfig.IsInGame = false;
+                break;
+            case 1244 or 2109 or 1885 or 1565:
+                _selfInformation.PersonInfo.PersonId = ReadPersonIdFast(body);
+
+                _selfInformation.ClientConfig.IsInGame = false;
+                break;
+            case 1550 or 1282 or 1490 or 2253 or 1933 or 2326: // 1691 or 2337 or 1550:
+                _selfInformation.BombHistory.Clear();
+                _selfInformation.ClientConfig.IsInGame = true;
+                SendSkipScreen(socket);
+                break;
+            case 2751:
+                _selfInformation.BombHistory.Clear();
+                _selfInformation.ClientConfig.IsInGame = false;
+                EndBattleSession(); // End battle session on first reward packet
+                ReadReport(body);
+                break;
+            case 2280:
+                _selfInformation.BombHistory.Clear();
+                _selfInformation.ClientConfig.IsInGame = false;
+                EndBattleSession(); // Safe to call multiple times - checks internally
+                ReadBonus(body);
+                break;
+            case 1940:
+                _selfInformation.BombHistory.Clear();
+                _selfInformation.ClientConfig.IsInGame = false;
+                EndBattleSession(); // Safe to call multiple times - checks internally
+                ReadRewardGrade(body);
+                break;
+            //case 1858 or 1270:
+            //    _selfInformation.BombHistory.Clear();
+            //    _selfInformation.ClientConfig.IsInGame = false;
+            //    var mates = ReadRoommates(methodPacket.MethodBody.AsMemory());
+            //    _logger.LogInformation($"local Roomate:{string.Join("|", mates)}");
+            //    _selfInformation.Roommates.Clear();
+            //    foreach (var c in mates)
+            //    {
+            //        _selfInformation.Roommates.Add(c);
+            //    }
+
+            //    _logger.LogInformation($" global Roomate:{string.Join("|", _selfInformation.Roommates)}");
+            //    break;
+            //case 1847: // someone join 
+            //    _selfInformation.ClientConfig.IsInGame = false;
+            //    _selfInformation.BombHistory.Clear();
+            //    RequestRoomInfo(socket);
+            //    break;
+            //case 1851: //someone leave
+
+            //    _selfInformation.ClientConfig.IsInGame = false;
+            //    _selfInformation.BombHistory.Clear();
+            //    HandleRoommateLeave(socket, methodPacket.MethodBody.AsMemory());
+            //break;
+            case 2472:
+                _selfInformation.ClientConfig.IsInGame = true;
+                ReadHitResponse2472(body, reborns);
+                break;
+
+            case 1616:
+                _selfInformation.ClientConfig.IsInGame = true;
+                ReadHitResponse1616(body, reborns);
+                break;
+            case 2360:
+                _selfInformation.ClientConfig.IsInGame = true;
+                ReadDeads(body);
+                break;
+            //case 1506:
+            //    _selfInformation.ClientConfig.IsInGame = true;
+            //    ReadDeads1506(methodPacket.MethodBody);
+            //    break;
+            //case 1338: // hitted or got hitted recv
+
+            //    _selfInformation.ClientConfig.IsInGame = true;
+            //    ReadHitResponse1338(methodPacket.MethodBody.AsMemory(), reborns);
+            //    break;
+            //case 1525: // non direct hit 
+
+            //    _selfInformation.ClientConfig.IsInGame = true;
+            //    ReadHitResponse1525(methodPacket.MethodBody.AsMemory(), reborns);
+            //    break;
+            //case 1340:
+
+            //    _selfInformation.ClientConfig.IsInGame = true;
+            //    ReadDeads(methodPacket.MethodBody.AsMemory());
+            //    break;
+            case 2042:
+//1E 00 F0 03 FA 07 46 EF 00 00 (personId[the guy changeit]) 4F 14 00 00 00 00 00 00 04 00 45 C7 00 00 30 75 45 24 14 00
+                break;
+            case 2080:
+                // No-op
+                break;
+            case 2070: // gift recv 16 08
+                ReadGifts(socket, body);
+                break;
+            //case 2132 : //funnel recv
+            //    _selfInformation.ClientConfig.IsInGame = true;
+            //    ReadAndSendFunnel(methodPacket.MethodBody.AsMemory());
+            //    break;
+            default:
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Handles async packet processing cases.
+    /// Async methods cannot have ref struct parameters, so this accepts byte[].
+    /// </summary>
+    private async Task DoParseWorkAsync(IntPtr socket, short method, byte[] bodyArray, ConcurrentQueue<Reborn> reborns,
+                                        CancellationToken token)
+    {
+        var body = bodyArray.AsSpan();
+
+        switch (method)
+        {
+            case 2201:
+                await ReadCacheMachineGridsAsync(bodyArray, token);
+                break;
+            case 2567: // get page
+                await ReadPageCondomAsync(bodyArray, token);
+                break;
+            case 2245: //after F5
+                await ReadGameReadyAsync(bodyArray, token);
+                break;
+            case 2877:
+                await ReadPlayerBasicInfoAsync(bodyArray, token);
+                ChargeCondom(socket, _selfInformation.PersonInfo.Slot);
+                SendF5(socket);
+                break;
+            case 1246 or 2535:
+                _selfInformation.ClientConfig.IsInGame = false;
+                var changed = ReadChangedMachine(body);
+                _logger.LogCondomChangeDetected(changed.MachineId);
+
+                // Store both raw and processed machine data
                 _selfInformation.CurrentMachineModel = MachineModel.FromRaw(changed);
 
                 var slot = changed.Slot;
@@ -261,133 +404,30 @@ public partial class PacketProcessorService : BackgroundService
 
                 ChargeCondom(socket, slot);
                 break;
-            case 1259: // get room list
-                AssignPersonId(reader);
-                _selfInformation.ClientConfig.IsInGame = false;
-                break;
-            case 1244 or 2109 or 1885 or 1565:
-                AssignPersonId(reader);
-
-                _selfInformation.ClientConfig.IsInGame = false;
-                break;
-            case 1550 or 1282 or 1490 or 2253 or 1933 or 2326: // 1691 or 2337 or 1550:
-                _selfInformation.BombHistory.Clear();
-                _selfInformation.ClientConfig.IsInGame = true;
-                SendSkipScreen(socket);
-                break;
-            case 2751:
-                _selfInformation.BombHistory.Clear();
-                _selfInformation.ClientConfig.IsInGame = false;
-                EndBattleSession(); // End battle session on first reward packet
-                ReadReport(methodPacket.MethodBody);
-                break;
-            case 2280:
-                _selfInformation.BombHistory.Clear();
-                _selfInformation.ClientConfig.IsInGame = false;
-                EndBattleSession(); // Safe to call multiple times - checks internally
-                ReadBonus(methodPacket.MethodBody);
-                break;
-            case 1940:
-                _selfInformation.BombHistory.Clear();
-                _selfInformation.ClientConfig.IsInGame = false;
-                EndBattleSession(); // Safe to call multiple times - checks internally
-                ReadRewardGrade(methodPacket.MethodBody);
-                break;
-            //case 1858 or 1270:
-            //    _selfInformation.BombHistory.Clear();
-            //    _selfInformation.ClientConfig.IsInGame = false;
-            //    var mates = ReadRoommates(methodPacket.MethodBody.AsMemory());
-            //    _logger.LogInformation($"local Roomate:{string.Join("|", mates)}");
-            //    _selfInformation.Roommates.Clear();
-            //    foreach (var c in mates)
-            //    {
-            //        _selfInformation.Roommates.Add(c);
-            //    }
-
-            //    _logger.LogInformation($" global Roomate:{string.Join("|", _selfInformation.Roommates)}");
-            //    break;
-            //case 1847: // someone join 
-            //    _selfInformation.ClientConfig.IsInGame = false;
-            //    _selfInformation.BombHistory.Clear();
-            //    RequestRoomInfo(socket);
-            //    break;
-            //case 1851: //someone leave
-
-            //    _selfInformation.ClientConfig.IsInGame = false;
-            //    _selfInformation.BombHistory.Clear();
-            //    HandleRoommateLeave(socket, methodPacket.MethodBody.AsMemory());
-            //break;
-            case 2472:
-                _selfInformation.ClientConfig.IsInGame = true;
-                ReadHitResponse2472(methodPacket.MethodBody, reborns);
-                break;
-
-            case 1616:
-                _selfInformation.ClientConfig.IsInGame = true;
-                ReadHitResponse1616(methodPacket.MethodBody, reborns);
-                break;
-            case 2360:
-                _selfInformation.ClientConfig.IsInGame = true;
-                ReadDeads(methodPacket.MethodBody);
-                break;
-            //case 1506:
-            //    _selfInformation.ClientConfig.IsInGame = true;
-            //    ReadDeads1506(methodPacket.MethodBody);
-            //    break;
-            //case 1338: // hitted or got hitted recv
-
-            //    _selfInformation.ClientConfig.IsInGame = true;
-            //    ReadHitResponse1338(methodPacket.MethodBody.AsMemory(), reborns);
-            //    break;
-            //case 1525: // non direct hit 
-
-            //    _selfInformation.ClientConfig.IsInGame = true;
-            //    ReadHitResponse1525(methodPacket.MethodBody.AsMemory(), reborns);
-            //    break;
-            //case 1340:
-
-            //    _selfInformation.ClientConfig.IsInGame = true;
-            //    ReadDeads(methodPacket.MethodBody.AsMemory());
-            //    break;
-            case 2042:
-//1E 00 F0 03 FA 07 46 EF 00 00 (personId[the guy changeit]) 4F 14 00 00 00 00 00 00 04 00 45 C7 00 00 30 75 45 24 14 00
-                break;
-            case 2080:
-                // No-op
-                break;
-            case 2070: // gift recv 16 08
-                ReadGifts(socket, methodPacket.MethodBody.AsMemory());
-                break;
-            //case 2132 : //funnel recv
-            //    _selfInformation.ClientConfig.IsInGame = true;
-            //    ReadAndSendFunnel(methodPacket.MethodBody.AsMemory());
-            //    break;
-            default:
-                break;
         }
     }
 
-    private async Task ReadSlotInfo(ReadOnlyMemory<byte> byes)
+    private void ReadSlotInfo(ReadOnlySpan<byte> bytes)
     {
-        var slotInfo = MemoryMarshal.Read<SlotInfoRev>(byes.Span);
+        var slotInfo = MemoryMarshal.Read<SlotInfoRev>(bytes);
         var machine  = slotInfo.Machine;
         _logger.ZLogInformation($"machine:{machine.MachineId} slot:{machine.Slot} exp:{machine.CurrentExp} battery: {machine.Battery}");
     }
 
-    private async Task ReadCacheMachineGrids(ReadOnlyMemory<byte> methodPacketMethodBody,CancellationToken token)
+    private async Task ReadCacheMachineGridsAsync(byte[] methodPacketMethodBody, CancellationToken token)
     {
-        var header = methodPacketMethodBody.Span.ReadStruct<MachineGridHeader>();
+        var header = methodPacketMethodBody.AsSpan().ReadStruct<MachineGridHeader>();
         if (header.TotalCount <= 0) return;
         _selfInformation.PersonInfo.PersonId = header.PlayerId;
         _logger.LogMachineGridCount(header.TotalCount);
-        var machines  = methodPacketMethodBody.Span.SliceAfter<MachineGridHeader>().CastTo<MachineGrid>().ToArray();
+        var machines  = methodPacketMethodBody.AsSpan().SliceAfter<MachineGridHeader>().CastTo<MachineGrid>().ToArray();
         //if (machines.Length != header.TotalCount)
         //{
         //    _logger.ZLogError($"mis match count in grid {header.TotalCount} != {machines.Length} : {string.Join("," ,machines.Select(c=>c.MachineId))}");
         //    return;
         //}
         if (machines.Length == 0) return;
-        await gm.ScanMachinesWithDetails(machines.Select(c=>c.MachineId),token);
+        await gm.ScanMachinesWithDetails(machines.Select(c=>c.MachineId), token);
     }
 
     private void SendFiveHits(List<UInt32> ids)
@@ -395,52 +435,42 @@ public partial class PacketProcessorService : BackgroundService
         var idChunks = ids.Where(x => x != _selfInformation.PersonInfo.PersonId).Chunk(12);
         foreach (var idChunk in idChunks)
         {
-            var targets = ValueEnumerable.Repeat(1, 12)
-                                         .Select(_ => new TargetData() { Damage = 1 })
-                                         .ToArray(); // new TargetData1335[12>
-            // var targets = _selfInformation.Enmery.Select(c=> new TargetData
-            // {
-            //     TargetId = c,
-            //     Damage   = 1,
-            //     Unknown1 = 0,
-            //     Unknown2 = 0,
-            //     Unknown3 = 0
-            // }).ToArray();
+            // Use stackalloc for zero allocation
+            Span<TargetData> targets = stackalloc TargetData[12];
+            targets.Clear();
+
             var attack = new Attack1335
             {
                 Length = 167,
                 Split  = 1008,
                 Method = 1868,
-                //     TargetCount = 12,
                 PlayerId = _selfInformation.PersonInfo.PersonId,
-                //PlayerId2 = _selfInformation.MyPlayerId,
                 WeaponId   = _selfInformation.PersonInfo.Weapon2,
                 WeaponSlot = 65281,
             };
-            attack.TargetCount = BitConverter.GetBytes(targets.Length)[0];
+            attack.TargetCount = BitConverter.GetBytes(idChunk.Count())[0];
 
             var i = 0;
             foreach (var reborn in idChunk)
             {
-                //  targets[i]          = new TargetData1335();
                 targets[i].TargetId = reborn;
                 targets[i].Damage   = 1;
                 i++;
             }
 
             var attackBytes  = attack.ToByteArray().AsSpan();
-            var targetBytes  = targets.AsSpan().AsByteSpan();
+            var targetBytes  = targets.AsByteSpan();
             var attackPacket = attackBytes.CombineWith(targetBytes).CombineWith((ReadOnlySpan<byte>)[0x00]).ToArray();
             _winsockHookManager.SendPacket(_selfInformation.LastSocket, attackPacket);
         }
     }
-    private async Task ReadPageCondom(ReadOnlyMemory<byte> methodPacketMethodBody,CancellationToken token = default)
+    private async Task ReadPageCondomAsync(byte[] methodPacketMethodBody, CancellationToken token = default)
     {
-        var header =methodPacketMethodBody.Span.ReadStruct<PageCondomRecv>();
+        var header = methodPacketMethodBody.AsSpan().ReadStruct<PageCondomRecv>();
         var count  = (int)header.Size;
         if (count <= 0) return;
         _selfInformation.PersonInfo.PersonId = header.MyPlayerId;
-        var condomSpan = methodPacketMethodBody.Span.SliceAfter<PageCondomRecv>().CastTo<Machine>();
+        var condomSpan = methodPacketMethodBody.AsSpan().SliceAfter<PageCondomRecv>().CastTo<Machine>();
         var machines   = condomSpan.AsValueEnumerable().Where(c=>c.MachineId > 0).ToList();
         foreach (var condom in machines)
         {
@@ -450,13 +480,13 @@ public partial class PacketProcessorService : BackgroundService
         await gm.ScanMachinesWithDetails(machines.Select(c => c.MachineId),token);
     }
 
-    private async Task ReadPlayerBasicInfo(ReadOnlyMemory<byte> bytes, CancellationToken token = default)
+    private async Task ReadPlayerBasicInfoAsync(byte[] bytes, CancellationToken token = default)
     {
         try
         {
             _selfInformation.ClientConfig.IsInGame = false;
             
-            var (botId, botSlot) = ParsePlayerBasicInfoUnsafe(bytes.Span);
+            var (botId, botSlot) = ParsePlayerBasicInfoUnsafe(bytes.AsSpan());
 
             var machineInfo = await ScanCondom(botId, token);
             if (machineInfo != null)
@@ -522,13 +552,34 @@ public partial class PacketProcessorService : BackgroundService
         _selfInformation.Enmery.Clear();
     }
 
-    private async Task ReadGameReady(ReadOnlyMemory<byte> bytes, CancellationToken token)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Reborn ReadRebornFast(ReadOnlySpan<byte> data, bool readLocation = true)
+    {
+        // Layout: personId(uint) + targetId(uint) + [18 bytes skip] + location(ushort)
+        var personId = MemoryMarshal.Read<uint>(data);
+        var targetId = MemoryMarshal.Read<uint>(data.Slice(4));
+
+        if (!readLocation)
+            return new Reborn(personId, targetId, 0);
+
+        // Skip 18 bytes after personId + targetId
+        var location = MemoryMarshal.Read<ushort>(data.Slice(4 + 4 + 18));
+        return new Reborn(personId, targetId, location);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint ReadPersonIdFast(ReadOnlySpan<byte> data)
+    {
+        return MemoryMarshal.Read<uint>(data);
+    }
+
+    private async Task ReadGameReadyAsync(byte[] bytes, CancellationToken token)
     {
         try
         {
-            var header = bytes.Span.ReadStruct<GameReadyStruct>();
+            var header = bytes.AsSpan().ReadStruct<GameReadyStruct>();
             // Convert to array since Span can't cross await boundaries
-            var playersSpan = bytes.Span.SliceAfter<GameReadyStruct>().CastTo<PlayerBattleStruct>();
+            var playersSpan = bytes.AsSpan().SliceAfter<GameReadyStruct>().CastTo<PlayerBattleStruct>();
             int count       = Math.Min(header.PlayerCount, playersSpan.Length);
             var players     = playersSpan.Slice(0, count).ToArray();
 
@@ -550,19 +601,23 @@ public partial class PacketProcessorService : BackgroundService
             // ---------------------------------------------------------
             try
             {
-                // 1. Batch Scan Machines
-                var distinctMachineIds = players.Select(p => p.MachineId).Where(id => id > 0).Distinct().ToList();
+                // 1. Batch Scan Machines using HashSet for deduplication
+                var distinctMachineIds = new HashSet<uint>();
+                foreach (var p in players)
+                {
+                    if (p.MachineId > 0)
+                        distinctMachineIds.Add(p.MachineId);
+                }
                 _logger.LogBatchScanningMachines(distinctMachineIds.Count);
                 var loadedMachines = await gm.ScanMachines(distinctMachineIds, token);
 
-                // 2. Batch Scan Transforms
-                // Filter out IDs we just scanned to avoid duplicates (though cache handles it, this saves logic in ScanMachines)
-                var transIds = loadedMachines.AsValueEnumerable()
-                              .Where(m => m.HasTransform && m.TransformId != 0 &&
-                                          !distinctMachineIds.Contains(m.TransformId))
-                              .Select(m => m.TransformId)
-                              .Distinct()
-                              .ToList();
+                // 2. Batch Scan Transforms using HashSet
+                var transIds = new HashSet<uint>();
+                foreach (var m in loadedMachines)
+                {
+                    if (m.HasTransform && m.TransformId != 0 && !distinctMachineIds.Contains(m.TransformId))
+                        transIds.Add(m.TransformId);
+                }
 
                 var loadedTrans = new List<MachineBaseInfo>();
                 if (transIds.Count > 0)
@@ -571,7 +626,7 @@ public partial class PacketProcessorService : BackgroundService
                     loadedTrans = await gm.ScanMachines(transIds, token);
                 }
 
-                // 3. Collect Weapon IDs from ALL machines (base + transforms)
+                // 3. Collect Weapon IDs from ALL machines (base + transforms) using HashSet
                 var allWeaponIds = new HashSet<uint>();
                 foreach (var m in loadedMachines.Concat(loadedTrans))
                 {
@@ -657,14 +712,15 @@ public partial class PacketProcessorService : BackgroundService
                 }
             }
 
+            // Find self and enemies using HashSet-based approach
             var myself = players.AsValueEnumerable()
                                 .FirstOrDefault(x => x.Player == _selfInformation.PersonInfo.PersonId);
             var myTeam = myself.TeamId1;
             _selfInformation.Enmery.Clear();
-            var en= players.Where(p => p.TeamId1 != myTeam).ToList();
-            foreach (var VARIABLE in en)
+            foreach (var p in players)
             {
-                _selfInformation.Enmery.Add(VARIABLE.Player); 
+                if (p.TeamId1 != myTeam)
+                    _selfInformation.Enmery.Add(p.Player);
             }
             // Send to battle logger for persistence
             _battleLogChannel.Writer.TryWrite(new BattleLogEvent
@@ -729,9 +785,9 @@ public partial class PacketProcessorService : BackgroundService
         }
     }
 
-    private Machine ReadChangedMachine(ReadOnlyMemory<byte> methodPacketMethodBody)
+    private Machine ReadChangedMachine(ReadOnlySpan<byte> methodPacketMethodBody)
     {
-        var changed = methodPacketMethodBody.Span.ReadStruct<GetChangedMachine>();
+        var changed = methodPacketMethodBody.ReadStruct<GetChangedMachine>();
         return changed.Machine;
     }
 
@@ -791,18 +847,22 @@ public partial class PacketProcessorService : BackgroundService
         _winsockHookManager.SendPacket(socket, msg7);
     }
 
-    public void ReadGifts(IntPtr socket, ReadOnlyMemory<byte> buffer)
+    public void ReadGifts(IntPtr socket, ReadOnlySpan<byte> buffer)
     {
         _logger.LogGiftBuffer(string.Join(" ", buffer.ToArray().Select(b => b.ToString("X2"))));
         if (!_selfInformation.ClientConfig.Features.GetFeature(FeatureName.CollectGift).IsEnabled) return;
-        var personId = BitConverter.ToUInt32(buffer.Span.Slice(0, 4)); // EB 02 00 00 → 0x000002EB
+
+        var personId = MemoryMarshal.Read<uint>(buffer);
         _selfInformation.PersonInfo.PersonId = personId;
 
-        var giftStructs = buffer.Slice(4).Span.CastTo<GiftStruct>().ToArray();
+        var giftStructs = buffer.Slice(4).CastTo<GiftStruct>();
+        int giftCount = Math.Min(giftStructs.Length, 256); // Safety bound
 
-        _logger.LogGiftsCount(giftStructs.Length);
-        foreach (var gift in giftStructs.Where(x => x.ItemType != 301))
+        _logger.LogGiftsCount(giftCount);
+        for (int i = 0; i < giftCount; i++)
         {
+            var gift = giftStructs[i];
+            if (gift.ItemType == 301) continue;
 
             //_logger.ZLogInformation($"accepting gift:{gift.GiftId}");
             AcceptGiftPacket acceptGiftPacket = new AcceptGiftPacket()
@@ -826,12 +886,12 @@ public partial class PacketProcessorService : BackgroundService
         }
     }
 
-    private void ReadDeads(ReadOnlyMemory<byte> buffer)
+    private void ReadDeads(ReadOnlySpan<byte> buffer)
     {
         try
         {
-            var deadStruct = buffer.Span.ReadStruct<DeadStruct>();
-            var deads      = buffer.Span.SliceAfter<DeadStruct>().CastTo<Deads>();
+            var deadStruct = buffer.ReadStruct<DeadStruct>();
+            var deads      = buffer.SliceAfter<DeadStruct>().CastTo<Deads>();
             // _logger.ZLogInformation($"sstruct : {deadStruct.PersonId}|{deadStruct.KillerId}|{deadStruct.Count}");
 
             // Enhanced logging: show header info
@@ -901,12 +961,12 @@ public partial class PacketProcessorService : BackgroundService
     /// Hit response handler for packet 2472
     /// Structure: MyId, AttackerId, AttackerSP, WeaponId, Unknown[3], VictimCount, Victim[]
     /// </summary>
-    private void ReadHitResponse2472(ReadOnlyMemory<byte> bytes, ConcurrentQueue<Reborn> reborns)
+    private void ReadHitResponse2472(ReadOnlySpan<byte> bytes, ConcurrentQueue<Reborn> reborns)
     {
         try
         {
-            var hitResponse = bytes.Span.ReadStruct<HitResponse2472>();
-            var victims     = bytes.Span.SliceAfter<HitResponse2472>().CastTo<Victim>();
+            var hitResponse = bytes.ReadStruct<HitResponse2472>();
+            var victims     = bytes.SliceAfter<HitResponse2472>().CastTo<Victim>();
 
             //_logger.ZLogInformation($"[2472] MyId={hitResponse.MyPlayerId} From={hitResponse.FromId} SP={hitResponse.AttackerSP} Weapon={hitResponse.WeaponId} VictimCount={hitResponse.VictimCount}");
 
@@ -999,12 +1059,12 @@ public partial class PacketProcessorService : BackgroundService
     /// Hit response handler for packet 1616
     /// Structure: MyId, AttackerId, Unknown1, AttackerSP, WeaponId, Unknown2, VictimCount, Victim[]
     /// </summary>
-    private void ReadHitResponse1616(ReadOnlyMemory<byte> bytes, ConcurrentQueue<Reborn> reborns)
+    private void ReadHitResponse1616(ReadOnlySpan<byte> bytes, ConcurrentQueue<Reborn> reborns)
     {
         try
         {
-            var hitResponse = bytes.Span.ReadStruct<HitResponse1616>();
-            var victims     = bytes.Span.SliceAfter<HitResponse1616>().CastTo<Victim>();
+            var hitResponse = bytes.ReadStruct<HitResponse1616>();
+            var victims     = bytes.SliceAfter<HitResponse1616>().CastTo<Victim>();
 
             //_logger.ZLogInformation($"[1616] MyId={hitResponse.MyPlayerId} From={hitResponse.FromId} SP={hitResponse.AttackerSP} Weapon={hitResponse.WeaponId} VictimCount={hitResponse.VictimCount}");
 
@@ -1275,19 +1335,16 @@ public partial class PacketProcessorService : BackgroundService
         }
     }
 
-    private void ReadReborns(ByteReader reader, ConcurrentQueue<Reborn> reborns, bool isReadLocation = true)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ReadRebornsFast(ReadOnlySpan<byte> data, ConcurrentQueue<Reborn> reborns, bool isReadLocation = true)
     {
         try
         {
-            var reborn = reader.ReadReborn(isReadLocation);
-
-            // lock (_lock)
-            // {
+            var reborn = ReadRebornFast(data, readLocation: isReadLocation);
             if (reborn.PersionId == _selfInformation.PersonInfo.PersonId)
             {
                 reborns.Enqueue(reborn);
             }
-            // }
         }
         catch
         {
@@ -1339,17 +1396,6 @@ public partial class PacketProcessorService : BackgroundService
 
         _logger.LogMachineInfo(machineInfo.ChineseName, machineInfo.Weapon1Code, machineInfo.Weapon2Code, machineInfo.Weapon3Code);
         return machineInfo;
-    }
-
-    private void AssignPersonId(ByteReader reader)
-    {
-        var s = reader.ReadPersonId();
-
-        //_logger.ZLogInformation($"personid :{s.PersionId}");
-        lock (_lock)
-        {
-            _selfInformation.PersonInfo.PersonId = s.PersionId;
-        }
     }
 
     private void SendZoneActiviate(IntPtr socket)
