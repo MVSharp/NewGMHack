@@ -39,6 +39,7 @@ namespace NewGmHack.GUI
                                                        services.AddSingleton<NewMainWindow>();
                                                        services.AddSingleton<IDialogCoordinator>(sp=> DialogCoordinator.Instance);
                                                        services.AddSingleton<MainViewModel>();
+                                                       services.AddSingleton<AutoUpdateService>();
 
                                                        
                                                        services.AddSingleton<NotificationHandler>();
@@ -105,21 +106,23 @@ namespace NewGmHack.GUI
         {
             try
             {
-                // Version check against GitHub (skipped in DEBUG mode)
-                var (versionOk, versionMessage) = await VersionCheckService.CheckVersionAsync();
-                if (!versionOk)
-                {
-                    MessageBox.Show(
-                        versionMessage ?? "Version mismatch detected. Please update to the latest version.",
-                        "Update Required",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning
-                    );
-                    Shutdown(1);
-                    return;
-                }
-
                 await _host.StartAsync();
+
+                // Check for updates (force update if needed)
+                var updateService = _host.Services.GetRequiredService<AutoUpdateService>();
+
+                // Subscribe to frontend update events for WebView2 hot-reload
+                updateService.FrontendUpdateRequired += async (s, args) =>
+                {
+                    // Get main window and reload WebView2
+                    var mainWindow = _host.Services.GetRequiredService<NewMainWindow>();
+                    await mainWindow.ReloadWebViewAsync();
+                };
+
+                // Check for updates (blocking call - will force update if needed)
+                await updateService.CheckForUpdatesAsync();
+
+                // Show main window
                 var main = _host.Services.GetRequiredService<NewMainWindow>();
                 main.Show();
             }

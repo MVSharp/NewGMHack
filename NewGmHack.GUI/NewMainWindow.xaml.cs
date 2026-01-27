@@ -61,5 +61,24 @@ namespace NewGmHack.GUI
                 DashboardWebView.ZoomFactor = 1.0;
             }
         }
+
+        /// <summary>
+        /// Reload WebView2 (called when frontend is updated)
+        /// </summary>
+        public async Task ReloadWebViewAsync()
+        {
+            try
+            {
+                if (DashboardWebView?.CoreWebView2 != null)
+                {
+                    // Reload the current page
+                    DashboardWebView.CoreWebView2.Reload();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to reload WebView2: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
     }
 }

@@ -1,0 +1,205 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:  # Allow manual triggering
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  NODE_VERSION: '20'
+
+jobs:
+  detect-changes:
+    name: Detect Changed Components
+    runs-on: ubuntu-latest
+    outputs:
+      frontend-changed: ${{ steps.changes.outputs.frontend }}
+      gui-changed: ${{ steps.changes.outputs.gui }}
+      stub-changed: ${{ steps.changes.outputs.stub }}
+      any-changed: ${{ steps.changes.outputs.any }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changes
+        id: changes
+        uses: dorny/paths-filter@v2
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - 'frontend/**/*'
+            gui:
+              - 'NewGmHack.GUI/**'
+              - 'NewGmHack.GUI/**/*'
+            stub:
+              - 'NewGMHack.Stub/**'
+              - 'NewGMHack.Stub/**/*'
+            any:
+              - 'frontend/**'
+              - 'NewGmHack.GUI/**'
+              - 'NewGMHack.Stub/**'
+
+  build:
+    name: Build Components
+    needs: detect-changes
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Build Frontend
+        if: needs.detect-changes.outputs.frontend-changed == 'true' || needs.detect-changes.outputs.any-changed == 'true'
+        run: |
+          cd frontend
+          pnpm install
+          pnpm build
+
+      - name: Copy Frontend to wwwroot
+        if: needs.detect-changes.outputs.frontend-changed == 'true' || needs.detect-changes.outputs.any-changed == 'true'
+        run: |
+          $guiWwwRoot = "NewGmHack.GUI/wwwroot"
+          if (Test-Path $guiWwwRoot) { Get-ChildItem $guiWwwRoot | Remove-Item -Recurse -Force }
+          else { New-Item -ItemType Directory -Path $guiWwwRoot | Out-Null }
+          Copy-Item -Path "frontend/dist/*" -Destination $guiWwwRoot -Recurse -Force
+
+      - name: Build GUI
+        if: needs.detect-changes.outputs.gui-changed == 'true' || needs.detect-changes.outputs.any-changed == 'true'
+        run: |
+          dotnet build "NewGmHack.GUI/NewGmHack.GUI.csproj" -c Release -p:Platform=x86
+
+      - name: Build Stub
+        if: needs.detect-changes.outputs.stub-changed == 'true' || needs.detect-changes.outputs.any-changed == 'true'
+        run: |
+          dotnet build "NewGMHack.Stub/NewGMHack.Stub.csproj" -c Release -p:Platform=x86
+
+      - name: Get Version from Stub
+        id: version
+        run: |
+          $stubDll = "bin/x86/Release/net10.0-windows7.0/NewGMHack.Stub.dll"
+          if (Test-Path $stubDll) {
+            $version = [Reflection.AssemblyName]::GetAssemblyName($stubDll).Version.ToString()
+            echo "version=$version" >> $env:GITHUB_OUTPUT
+            echo "Version: $version"
+          } else {
+            throw "Stub DLL not found at $stubDll"
+          }
+
+      - name: Create Release Directory
+        run: |
+          New-Item -ItemType Directory -Path "release" -Force
+
+      - name: Package GUI
+        if: needs.detect-changes.outputs.gui-changed == 'true' || needs.detect-changes.outputs.any-changed == 'true'
+        run: |
+          Copy-Item "bin/x86/Release/net10.0-windows7.0/NewGmHack.GUI.exe" "release/"
+
+      - name: Package Stub
+        if: needs.detect-changes.outputs.stub-changed == 'true' || needs.detect-changes.outputs.any-changed == 'true'
+        run: |
+          Copy-Item "bin/x86/Release/net10.0-windows7.0/NewGMHack.Stub.dll" "release/"
+
+      - name: Package Frontend (wwwroot.zip)
+        if: needs.detect-changes.outputs.frontend-changed == 'true' || needs.detect-changes.outputs.any-changed == 'true'
+        run: |
+          Compress-Archive -Path "NewGmHack.GUI/wwwroot/*" -DestinationPath "release/wwwroot.zip" -Force
+
+      - name: Generate SHA256 Checksums
+        run: |
+          Get-ChildItem -Path "release" -File | ForEach-Object {
+            $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash
+            Add-Content -Path "release/checksums.txt" -Value "$($hash.ToLower())  $($_.Name)"
+          }
+
+      - name: Generate update.xml for AutoUpdater.NET
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $releaseTag = "${{ github.ref_name }}"
+          $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/${releaseTag}"
+
+          $xmlContent = @"
+          <?xml version='1.0' encoding='UTF-8'?>
+          <item>
+            <version>$version</version>
+            <url>$downloadUrl/NewGMHack.GUI.exe</url>
+            <changelog>https://github.com/${{ github.repository }}/releases/tag/${releaseTag}</changelog>
+            <mandatory>true</mandatory>
+            <args>/S</args>
+          </item>
+          "@
+
+          # Save XML content
+          $xmlContent | Out-File -FilePath "release/update.xml" -Encoding UTF8
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-files
+          path: release/*
+
+  release:
+    name: Create GitHub Release
+    needs: [detect-changes, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-files
+          path: release
+
+      - name: Generate Release Notes
+        id: release_notes
+        run: |
+          echo "## 🚀 NewGMHack Release ${{ github.ref_name }}" > release_notes.md
+          echo "" >> release_notes.md
+          echo "### 📦 Components Updated:" >> release_notes.md
+          echo "${{ needs.detect-changes.outputs.frontend-changed == 'true' && '- ✅ Frontend' || '- ⏭️ Frontend (no changes)' }}" >> release_notes.md
+          echo "${{ needs.detect-changes.outputs.gui-changed == 'true' && '- ✅ GUI' || '- ⏭️ GUI (no changes)' }}" >> release_notes.md
+          echo "${{ needs.detect-changes.outputs.stub-changed == 'true' && '- ✅ Stub DLL' || '- ⏭️ Stub DLL (no changes)' }}" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### 🔐 SHA256 Checksums:" >> release_notes.md
+          echo '```' >> release_notes.md
+          cat release/checksums.txt >> release_notes.md
+          echo '```' >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### 📥 Installation:" >> release_notes.md
+          echo "1. Download all files from the Assets section below" >> release_notes.md
+          echo "2. Replace `NewGMHack.GUI.exe` and `NewGMHack.Stub.dll` in your installation directory" >> release_notes.md
+          echo "3. If `wwwroot.zip` is included, extract it to `NewGmHack.GUI/wwwroot/`" >> release_notes.md
+          echo "4. Restart the application" >> release_notes.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: NewGMHack ${{ github.ref_name }}
+          body_path: release_notes.md
+          files: |
+            release/NewGMHack.GUI.exe
+            release/NewGMHack.Stub.dll
+            release/wwwroot.zip
+            release/update.xml
+            release/checksums.txt
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

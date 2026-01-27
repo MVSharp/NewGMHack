@@ -1,0 +1,476 @@
+using System.Diagnostics;
+using System.IO;
+using System.Net.Http;
+using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using AutoUpdaterDotNET;
+using Microsoft.Extensions.Logging;
+
+namespace NewGmHack.GUI.Services;
+
+/// <summary>
+/// Auto-update service with force update, frontend hot-reload, and rollback support
+/// </summary>
+public class AutoUpdateService
+{
+    private const string GitHubOwner = "MVSharp";
+    private const string GitHubRepo = "NewGMHack";
+    private const string ReleasesUrl = $"https://api.github.com/repos/{GitHubOwner}/{GitHubRepo}/releases/latest";
+
+    private static readonly HttpClient _httpClient = new()
+    {
+        Timeout = TimeSpan.FromSeconds(30),
+        DefaultRequestHeaders = { { "User-Agent", "NewGMHack" } }
+    };
+
+    private readonly ILogger<AutoUpdateService> _logger;
+    private readonly string _appDirectory;
+    private readonly string _backupDirectory;
+    private readonly string _wwwrootPath;
+
+    public AutoUpdateService(ILogger<AutoUpdateService> logger)
+    {
+        _logger = logger;
+        _appDirectory = AppDomain.CurrentDomain.BaseDirectory;
+        _backupDirectory = Path.Combine(_appDirectory, ".backup");
+        _wwwrootPath = Path.Combine(_appDirectory, "wwwroot");
+    }
+
+    /// <summary>
+    /// Check for and apply updates synchronously (blocking call for startup)
+    /// </summary>
+    public async Task CheckForUpdatesAsync()
+    {
+#if DEBUG
+        _logger.LogInformation("Skipping update check in DEBUG mode");
+        return;
+#endif
+
+        try
+        {
+            _logger.LogInformation("Checking for updates...");
+
+            // Fetch latest release info from GitHub
+            var releaseInfo = await FetchLatestReleaseAsync();
+            if (releaseInfo == null)
+            {
+                _logger.LogWarning("Unable to fetch release info (offline mode)");
+                return;
+            }
+
+            // Compare versions
+            var currentVersion = GetCurrentVersion();
+            var latestVersion = ParseVersion(releaseInfo.TagName);
+
+            if (latestVersion <= currentVersion)
+            {
+                _logger.LogInformation("Already up to date: {Version}", currentVersion);
+                return;
+            }
+
+            _logger.LogInformation("Update available: {Current} -> {Latest}", currentVersion, latestVersion);
+
+            // Detect which components changed
+            var changeDetection = await DetectChangedComponentsAsync(releaseInfo);
+
+            // Scenario A: Only frontend changed - hot-reload WebView2
+            if (changeDetection.FrontendChanged && !changeDetection.GuiChanged && !changeDetection.StubChanged)
+            {
+                _logger.LogInformation("Only frontend changed - applying hot-reload");
+                await ApplyFrontendUpdateAsync(releaseInfo);
+                return;
+            }
+
+            // Scenario B: GUI or Stub changed - force update and restart
+            if (changeDetection.GuiChanged || changeDetection.StubChanged)
+            {
+                _logger.LogInformation("GUI or Stub changed - initiating force update");
+                ApplyForceUpdateAsync(releaseInfo);
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking for updates");
+            // Don't block startup on error
+        }
+    }
+
+    /// <summary>
+    /// Fetch latest release info from GitHub API
+    /// </summary>
+    private async Task<GitHubRelease?> FetchLatestReleaseAsync()
+    {
+        try
+        {
+            var response = await _httpClient.GetAsync(ReleasesUrl);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("GitHub API returned {StatusCode}", response.StatusCode);
+                return null;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            return JsonSerializer.Deserialize<GitHubRelease>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching release info");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Detect which components changed by checking assets
+    /// </summary>
+    private async Task<ComponentChangeDetection> DetectChangedComponentsAsync(GitHubRelease release)
+    {
+        var detection = new ComponentChangeDetection();
+
+        // Check for wwwroot.zip (frontend)
+        detection.FrontendChanged = release.Assets.Any(a => a.Name.Equals("wwwroot.zip", StringComparison.OrdinalIgnoreCase));
+
+        // Check for GUI executable
+        detection.GuiChanged = release.Assets.Any(a => a.Name.Equals("NewGMHack.GUI.exe", StringComparison.OrdinalIgnoreCase));
+
+        // Check for Stub DLL
+        detection.StubChanged = release.Assets.Any(a => a.Name.Equals("NewGMHack.Stub.dll", StringComparison.OrdinalIgnoreCase));
+
+        _logger.LogInformation("Component changes: Frontend={Frontend}, GUI={GUI}, Stub={Stub}",
+            detection.FrontendChanged, detection.GuiChanged, detection.StubChanged);
+
+        return detection;
+    }
+
+    /// <summary>
+    /// Apply frontend-only update with hot-reload
+    /// </summary>
+    private async Task ApplyFrontendUpdateAsync(GitHubRelease release)
+    {
+        try
+        {
+            // Create backup
+            CreateBackup(new[] { _wwwrootPath });
+
+            // Download wwwroot.zip
+            var wwwrootAsset = release.Assets.First(a => a.Name.Equals("wwwroot.zip", StringComparison.OrdinalIgnoreCase));
+            var tempZipPath = Path.Combine(Path.GetTempPath(), "wwwroot.zip");
+
+            _logger.LogInformation("Downloading wwwroot.zip...");
+            await DownloadFileAsync(wwwrootAsset.BrowserDownloadUrl, tempZipPath);
+
+            // Verify checksum if available
+            var checksumsAsset = release.Assets.FirstOrDefault(a => a.Name.Equals("checksums.txt", StringComparison.OrdinalIgnoreCase));
+            if (checksumsAsset != null)
+            {
+                _logger.LogInformation("Verifying checksums...");
+                await VerifyChecksumAsync(checksumsAsset.BrowserDownloadUrl, tempZipPath);
+            }
+
+            // Extract to temp directory
+            var tempExtractPath = Path.Combine(Path.GetTempPath(), "wwwroot_new");
+            if (Directory.Exists(tempExtractPath)) Directory.Delete(tempExtractPath, true);
+            System.IO.Compression.ZipFile.ExtractToDirectory(tempZipPath, tempExtractPath);
+
+            // Replace wwwroot contents
+            _logger.LogInformation("Updating wwwroot...");
+            if (Directory.Exists(_wwwrootPath))
+            {
+                Directory.Delete(_wwwrootPath, true);
+            }
+            Directory.Move(tempExtractPath, _wwwrootPath);
+
+            // Cleanup
+            File.Delete(tempZipPath);
+            if (Directory.Exists(tempExtractPath)) Directory.Delete(tempExtractPath, true);
+
+            _logger.LogInformation("Frontend update applied successfully");
+
+            // Hot-reload will be handled by WebView2 reload event
+            FrontendUpdateRequired?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error applying frontend update");
+            RestoreBackup();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Apply force update (GUI or Stub changed)
+    /// </summary>
+    private void ApplyForceUpdateAsync(GitHubRelease release)
+    {
+        try
+        {
+            // Create full backup
+            CreateBackup(new[]
+            {
+                "NewGMHack.GUI.exe",
+                "NewGMHack.Stub.dll",
+                _wwwrootPath
+            });
+
+            // Configure AutoUpdater.NET
+            var updateXmlUrl = $"{release.HtmlUrl}/download/update.xml";
+            AutoUpdater.Mandatory = true;
+            AutoUpdater.UpdateMode = Mode.ForcedDownload;
+            AutoUpdater.Synchronous = false;
+            AutoUpdater.ShowSkipButton = false;
+            AutoUpdater.ShowRemindLaterButton = false;
+
+            // Subscribe to update events
+            AutoUpdater.ApplicationExitEvent += OnApplicationExitForUpdate;
+
+            // Trigger AutoUpdater.NET
+            _logger.LogInformation("Starting AutoUpdater.NET with XML: {XmlUrl}", updateXmlUrl);
+            AutoUpdater.Start(updateXmlUrl);
+
+            // Note: AutoUpdater.NET will handle download and restart
+            // This method will not return (app will exit)
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error applying force update");
+            RestoreBackup();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Called when AutoUpdater.NET triggers application exit for update
+    /// </summary>
+    private void OnApplicationExitForUpdate()
+    {
+        _logger.LogInformation("Application exiting for update");
+        // Cleanup will be handled by AutoUpdater.NET
+    }
+
+    /// <summary>
+    /// Create backup of specified files/directories
+    /// </summary>
+    private void CreateBackup(string[] paths)
+    {
+        try
+        {
+            _logger.LogInformation("Creating backup...");
+
+            if (Directory.Exists(_backupDirectory))
+            {
+                Directory.Delete(_backupDirectory, true);
+            }
+            Directory.CreateDirectory(_backupDirectory);
+
+            foreach (var path in paths)
+            {
+                var fullPath = Path.IsPathRooted(path) ? path : Path.Combine(_appDirectory, path);
+
+                if (File.Exists(fullPath))
+                {
+                    var destPath = Path.Combine(_backupDirectory, Path.GetFileName(path));
+                    File.Copy(fullPath, destPath, true);
+                    _logger.LogDebug("Backed up: {Path}", path);
+                }
+                else if (Directory.Exists(fullPath))
+                {
+                    var destPath = Path.Combine(_backupDirectory, Path.GetFileName(path));
+                    CopyDirectory(fullPath, destPath);
+                    _logger.LogDebug("Backed up directory: {Path}", path);
+                }
+            }
+
+            _logger.LogInformation("Backup created successfully");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating backup");
+        }
+    }
+
+    /// <summary>
+    /// Restore from backup
+    /// </summary>
+    private void RestoreBackup()
+    {
+        try
+        {
+            if (!Directory.Exists(_backupDirectory))
+            {
+                _logger.LogWarning("No backup found to restore");
+                return;
+            }
+
+            _logger.LogWarning("Restoring from backup...");
+
+            foreach (var file in Directory.GetFiles(_backupDirectory))
+            {
+                var fileName = Path.GetFileName(file);
+                var destPath = Path.Combine(_appDirectory, fileName);
+
+                // Remove existing file/directory
+                if (File.Exists(destPath)) File.Delete(destPath);
+                if (Directory.Exists(destPath)) Directory.Delete(destPath, true);
+
+                // Restore from backup
+                if (File.GetAttributes(file).HasFlag(FileAttributes.Directory))
+                {
+                    CopyDirectory(file, destPath);
+                }
+                else
+                {
+                    File.Copy(file, destPath, true);
+                }
+
+                _logger.LogDebug("Restored: {FileName}", fileName);
+            }
+
+            _logger.LogInformation("Backup restored successfully");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error restoring backup");
+        }
+    }
+
+    /// <summary>
+    /// Download file from URL
+    /// </summary>
+    private async Task DownloadFileAsync(string url, string destinationPath)
+    {
+        var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+        response.EnsureSuccessStatusCode();
+
+        await using var fileStream = File.Create(destinationPath);
+        await using var contentStream = await response.Content.ReadAsStreamAsync();
+        await contentStream.CopyToAsync(fileStream);
+    }
+
+    /// <summary>
+    /// Verify SHA256 checksum
+    /// </summary>
+    private async Task VerifyChecksumAsync(string checksumsUrl, string filePath)
+    {
+        var response = await _httpClient.GetAsync(checksumsUrl);
+        response.EnsureSuccessStatusCode();
+
+        var checksumsContent = await response.Content.ReadAsStringAsync();
+        var fileName = Path.GetFileName(filePath);
+
+        // Parse checksums.txt (format: HASH  FILENAME)
+        var expectedHash = checksumsContent.Split('\n')
+            .FirstOrDefault(line => line.Contains(fileName))?
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
+
+        if (string.IsNullOrEmpty(expectedHash))
+        {
+            _logger.LogWarning("Checksum not found for {FileName}", fileName);
+            return;
+        }
+
+        // Calculate file hash
+        using var sha256 = SHA256.Create();
+        await using var fileStream = File.OpenRead(filePath);
+        var hashBytes = await sha256.ComputeHashAsync(fileStream);
+        var actualHash = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+
+        if (actualHash != expectedHash.ToLowerInvariant())
+        {
+            throw new InvalidOperationException($"Checksum mismatch for {fileName}: expected {expectedHash}, got {actualHash}");
+        }
+
+        _logger.LogInformation("Checksum verified for {FileName}", fileName);
+    }
+
+    /// <summary>
+    /// Get current application version
+    /// </summary>
+    private Version GetCurrentVersion()
+    {
+        try
+        {
+            // Try to get Stub DLL version first
+            var stubPath = Path.Combine(_appDirectory, "NewGMHack.Stub.dll");
+            if (File.Exists(stubPath))
+            {
+                var stubVersion = AssemblyName.GetAssemblyName(stubPath).Version;
+                if (stubVersion != null) return stubVersion;
+            }
+
+            // Fallback to GUI version
+            return Assembly.GetExecutingAssembly().GetName().Version ?? new Version("1.0.0.0");
+        }
+        catch
+        {
+            return new Version("1.0.0.0");
+        }
+    }
+
+    /// <summary>
+    /// Parse version from tag name (e.g., "v1.0.747.10419")
+    /// </summary>
+    private Version ParseVersion(string tagName)
+    {
+        var versionString = tagName.TrimStart('v');
+        Version.TryParse(versionString, out var version);
+        return version ?? new Version("1.0.0.0");
+    }
+
+    /// <summary>
+    /// Copy directory recursively
+    /// </summary>
+    private void CopyDirectory(string sourceDir, string targetDir)
+    {
+        Directory.CreateDirectory(targetDir);
+
+        foreach (var file in Directory.GetFiles(sourceDir))
+        {
+            var destFile = Path.Combine(targetDir, Path.GetFileName(file));
+            File.Copy(file, destFile, true);
+        }
+
+        foreach (var dir in Directory.GetDirectories(sourceDir))
+        {
+            var destDir = Path.Combine(targetDir, Path.GetFileName(dir));
+            CopyDirectory(dir, destDir);
+        }
+    }
+
+    /// <summary>
+    /// Event raised when frontend is updated (for WebView2 hot-reload)
+    /// </summary>
+    public event EventHandler? FrontendUpdateRequired;
+}
+
+/// <summary>
+/// GitHub Release API response
+/// </summary>
+internal record GitHubRelease(
+    string TagName,
+    string HtmlUrl,
+    GitHubAsset[] Assets
+);
+
+/// <summary>
+/// GitHub Release Asset
+/// </summary>
+internal record GitHubAsset(
+    string Name,
+    string BrowserDownloadUrl,
+    long Size
+);
+
+/// <summary>
+/// Component change detection result
+/// </summary>
+internal class ComponentChangeDetection
+{
+    public bool FrontendChanged { get; set; }
+    public bool GuiChanged { get; set; }
+    public bool StubChanged { get; set; }
+}

@@ -13,6 +13,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<PackageReference Include="Autoupdater.NET.Official" Version="1.9.2" />
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
 		<PackageReference Include="ConfigureAwait.Fody" Version="3.3.2" />
 		<PackageReference Include="MahApps.Metro" Version="2.4.11" />
