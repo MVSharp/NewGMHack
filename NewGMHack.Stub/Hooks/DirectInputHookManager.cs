@@ -179,7 +179,7 @@ public class DirectInputHookManager(
             }
 
             // Aimbot: inject mouse delta when aiming (using refined algorithm in logicProcessor)
-            if (isAutoAim && deviceType == DeviceType.Mouse && size == Marshal.SizeOf<DIMOUSESTATE>())
+            if (deviceType == DeviceType.Mouse && size == Marshal.SizeOf<DIMOUSESTATE>() && ShouldInjectAimbot())
             {
                 logicProcessor.InjectAimbot(dataPtr);
             }
@@ -198,8 +198,9 @@ public class DirectInputHookManager(
                 InjectAutoReadyInput(deviceType, size, dataPtr);
             }
 
-            // Aimbot also works in background
-            if (isAutoAim && deviceType == DeviceType.Mouse && size == Marshal.SizeOf<DIMOUSESTATE>())
+            // Aimbot: disabled when game is not focused
+            // (ShouldInjectAimbot() returns false, preventing background injection)
+            if (deviceType == DeviceType.Mouse && size == Marshal.SizeOf<DIMOUSESTATE>() && ShouldInjectAimbot())
             {
                 logicProcessor.InjectAimbot(dataPtr);
             }
