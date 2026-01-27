@@ -342,13 +342,18 @@ public class EntityScannerService : BackgroundService
     ///   <item><term>V</term><description>Down (world -Y axis)</description></item>
     /// </list>
     ///
-    /// <para><b>View Matrix Extraction (row-major layout):</b></para>
+    /// <para><b>View Matrix to Direction Vectors (matching DrawRadar):</b></para>
     /// <code>
-    /// // Row 0 (Right vector): M11, M12, M13
-    /// Vector3 cameraRight = new Vector3(viewMatrix.M11, viewMatrix.M12, viewMatrix.M13);
+    /// // Extract forward direction from View Matrix (OverlayManager.cs:772-776)
+    /// float camForwardX = -viewMatrix.M31;
+    /// float camForwardZ = -viewMatrix.M33;
+    /// float cameraYaw = (float)Math.Atan2(camForwardX, camForwardZ) + (float)Math.PI;
     ///
-    /// // Row 2 (Forward vector): M31, M32, M33 (NEGATED - View Matrix looks down -Z)
-    /// Vector3 cameraForward = new Vector3(-viewMatrix.M31, -viewMatrix.M32, -viewMatrix.M33);
+    /// // Calculate forward/right vectors using trigonometry
+    /// float cosYaw = (float)Math.Cos(-cameraYaw);
+    /// float sinYaw = (float)Math.Sin(-cameraYaw);
+    /// Vector3 cameraForward = new Vector3(cosYaw, 0f, sinYaw);
+    /// Vector3 cameraRight = new Vector3(sinYaw, 0f, -cosYaw);
     /// </code>
     ///
     /// <para><b>Movement Speed:</b></para>
@@ -357,9 +362,8 @@ public class EntityScannerService : BackgroundService
     ///
     /// <para><b>Edge Cases Handled:</b></para>
     /// <list type="bullet">
-    ///   <item>Degenerate matrices (zero-length vectors) → returns original position</item>
     ///   <item>No keys pressed → returns original position</item>
-    ///   <item>Normalizes direction vectors to ensure consistent speed</item>
+    ///   <item>Uses same trigonometric approach as DrawRadar for consistency</item>
     /// </list>
     ///
     /// <para><b>Usage:</b></para>
@@ -370,29 +374,23 @@ public class EntityScannerService : BackgroundService
     {
         Vector3 movement = Vector3.Zero;
 
-        // Extract camera direction vectors from View Matrix
-        // View Matrix layout (row-major, SharpDX/Direct3D):
-        // | Right.X   Right.Y   Right.Z   0 |
-        // | Up.X      Up.Y      Up.Z      0 |
-        // | Forward.X Forward.Y Forward.Z 0 |
-        // | Tx        Ty        Tz        1 |
+        // Match DrawRadar approach for camera direction calculation
+        // Extract forward vector components (negated, matching OverlayManager.cs:772-773)
+        float camForwardX = -viewMatrix.M31;
+        float camForwardZ = -viewMatrix.M33;
 
-        // Row 0 (Right vector): M11, M12, M13
-        Vector3 cameraRight = new Vector3(viewMatrix.M11, viewMatrix.M12, viewMatrix.M13);
+        // Calculate camera yaw angle (same as DrawRadar line 774)
+        float cameraYaw = (float)Math.Atan2(camForwardX, camForwardZ) + (float)Math.PI;
 
-        // Row 2 (Forward vector): M31, M32, M33 (negated because View Matrix looks down -Z)
-        Vector3 cameraForward = new Vector3(-viewMatrix.M31, -viewMatrix.M32, -viewMatrix.M33);
+        // Calculate direction vectors using trigonometry (matching DrawRadar lines 775-776)
+        float cosYaw = (float)Math.Cos(-cameraYaw);
+        float sinYaw = (float)Math.Sin(-cameraYaw);
 
-        // Validate for degenerate matrices (avoid NaN/zero vectors)
-        float rightLength = cameraRight.Length();
-        float forwardLength = cameraForward.Length();
+        // Forward direction: use cos/sin directly
+        Vector3 cameraForward = new Vector3(cosYaw, 0f, sinYaw);
 
-        if (rightLength < 0.001f || forwardLength < 0.001f)
-            return position; // Invalid matrix, no movement
-
-        // Normalize vectors
-        cameraRight /= rightLength;
-        cameraForward /= forwardLength;
+        // Right direction: perpendicular to forward (rotate 90 degrees clockwise)
+        Vector3 cameraRight = new Vector3(sinYaw, 0f, -cosYaw);
 
         // Calculate camera-relative movement
         if ((GetAsyncKeyState((int)Keys.W) & 0x8000) != 0)
@@ -400,7 +398,7 @@ public class EntityScannerService : BackgroundService
         if ((GetAsyncKeyState((int)Keys.S) & 0x8000) != 0)
             movement -= cameraForward * FreeMoveSpeed;  // Backward
         if ((GetAsyncKeyState((int)Keys.A) & 0x8000) != 0)
-            movement -= cameraRight * FreeMoveSpeed;   // Left (opposite of right)
+            movement -= cameraRight * FreeMoveSpeed;   // Left
         if ((GetAsyncKeyState((int)Keys.D) & 0x8000) != 0)
             movement += cameraRight * FreeMoveSpeed;   // Right
         if ((GetAsyncKeyState((int)Keys.Space) & 0x8000) != 0)
