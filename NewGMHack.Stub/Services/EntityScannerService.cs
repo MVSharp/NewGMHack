@@ -158,26 +158,7 @@ public class EntityScannerService : BackgroundService
                 if (foundSelf && _selfInfo.ClientConfig.Features.IsFeatureEnable(FeatureName.FreeMove))
                 {
                     Vector3 newPos = ApplyFreeMovement(playerPos, viewMatrix);
-
-                    // Write back to memory (reuse existing logic from old ScanMySelf)
-                    // Need to re-read entityStruct pointer to get position pointer
-                    var moduleBase = GetModuleBaseAddress();
-                    if (moduleBase != 0)
-                    {
-                        var pointerBase = moduleBase + BaseOffset;
-                        if (TryReadUInt(pointerBase, out var firstPtr) && firstPtr != 0)
-                        {
-                            if (TryReadUInt(firstPtr + MySelfOffset, out var entityStruct) && entityStruct != 0)
-                            {
-                                if (TryReadUInt(entityStruct + PosPtrOffset, out var posPtr) && posPtr != 0)
-                                {
-                                    WriteFloat(posPtr + XyzOffsets[0], newPos.X);
-                                    //WriteFloat(posPtr + XyzOffsets[1], newPos.Y); // Y commented out in original
-                                    WriteFloat(posPtr + XyzOffsets[2], newPos.Z);
-                                }
-                            }
-                        }
-                    }
+                    WritePlayerPosition(newPos);
                 }
             }
             catch (Exception ex)
@@ -350,6 +331,29 @@ public class EntityScannerService : BackgroundService
 
         // Apply movement to position
         return position + movement;
+    }
+
+    /// <summary>
+    /// Writes player position to memory at the entity position pointer.
+    /// Traverses the pointer chain: moduleBase + BaseOffset → firstPtr → entityStruct → posPtr.
+    /// Writes X and Z coordinates (Y is skipped per original behavior).
+    /// </summary>
+    /// <param name="newPos">New position to write</param>
+    private void WritePlayerPosition(Vector3 newPos)
+    {
+        var moduleBase = GetModuleBaseAddress();
+        if (moduleBase == 0) return;
+
+        var pointerBase = moduleBase + BaseOffset;
+        if (!TryReadUInt(pointerBase, out var firstPtr) || firstPtr == 0) return;
+
+        if (!TryReadUInt(firstPtr + MySelfOffset, out var entityStruct) || entityStruct == 0) return;
+
+        if (!TryReadUInt(entityStruct + PosPtrOffset, out var posPtr) || posPtr == 0) return;
+
+        WriteFloat(posPtr + XyzOffsets[0], newPos.X);
+        //WriteFloat(posPtr + XyzOffsets[1], newPos.Y); // Y is height, usually not modified
+        WriteFloat(posPtr + XyzOffsets[2], newPos.Z);
     }
 
     private (float x, float y, float z) GetRandomEntitesLoc()
