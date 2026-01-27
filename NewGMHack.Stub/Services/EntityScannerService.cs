@@ -342,24 +342,25 @@ public class EntityScannerService : BackgroundService
     ///   <item><term>V</term><description>Down (world -Y axis)</description></item>
     /// </list>
     ///
-    /// <para><b>View Matrix to Direction Vectors:</b></para>
+    /// <para><b>View Matrix to Direction Vectors (trigonometric approach):</b></para>
     /// <code>
-    /// // Extract forward direction from View Matrix row 2 (M31, M32, M33)
-    /// // Note: Don't negate - View Matrix already has correct direction
-    /// float forwardX = viewMatrix.M31;
-    /// float forwardZ = viewMatrix.M33;
-    /// float length = Math.Sqrt(forwardX * forwardX + forwardZ * forwardZ);
+    /// // Extract forward components (negated, matching DrawRadar)
+    /// float camForwardX = -viewMatrix.M31;
+    /// float camForwardZ = -viewMatrix.M33;
     ///
-    /// // Normalize to get unit direction vector
-    /// float dirX = forwardX / length;
-    /// float dirZ = forwardZ / length;
+    /// // Calculate yaw angle (same as DrawRadar)
+    /// float cameraYaw = (float)Math.Atan2(camForwardX, camForwardZ) + (float)Math.PI;
     ///
-    /// // Forward: direction camera is facing
-    /// Vector3 cameraForward = new Vector3(dirX, 0f, dirZ);
+    /// // Forward: (cos(cameraYaw), 0, sin(cameraYaw))
+    /// Vector3 cameraForward = new Vector3(cos(cameraYaw), 0f, sin(cameraYaw));
     ///
-    /// // Right: perpendicular to forward (rotate 90° clockwise in XZ plane)
-    /// Vector3 cameraRight = new Vector3(dirZ, 0f, -dirX);
+    /// // Right: perpendicular counter-clockwise = (-sin(cameraYaw), 0, cos(cameraYaw))
+    /// Vector3 cameraRight = new Vector3(-sin(cameraYaw), 0f, cos(cameraYaw));
     /// </code>
+    /// <para>
+    /// <b>Key Difference from DrawRadar:</b> DrawRadar rotates World→Camera (uses -cameraYaw),
+    /// FreeMove transforms Camera→World (uses +cameraYaw, the inverse rotation).
+    /// </para>
     ///
     /// <para><b>Movement Speed:</b></para>
     /// <para>Defined by <c>FreeMoveSpeed</c> constant (50 units per tick).</para>
@@ -380,25 +381,25 @@ public class EntityScannerService : BackgroundService
     {
         Vector3 movement = Vector3.Zero;
 
-        // Extract forward direction from View Matrix row 2 (M31, M33)
-        // Note: Don't negate - View Matrix already has correct direction
-        float forwardX = viewMatrix.M31;
-        float forwardZ = viewMatrix.M33;
-        float length = (float)Math.Sqrt(forwardX * forwardX + forwardZ * forwardZ);
+        // Match DrawRadar trigonometric approach exactly
+        // Extract forward components (negated, as DrawRadar does)
+        float camForwardX = -viewMatrix.M31;
+        float camForwardZ = -viewMatrix.M33;
 
-        if (length < 0.001f)
-            return position; // Invalid forward vector
+        // Calculate yaw angle (same as DrawRadar line 774)
+        float cameraYaw = (float)Math.Atan2(camForwardX, camForwardZ) + (float)Math.PI;
 
-        // Normalize to get direction
-        float dirX = forwardX / length;
-        float dirZ = forwardZ / length;
+        // Use POSITIVE cameraYaw for movement (DrawRadar uses -cameraYaw for rotation)
+        // DrawRadar rotates World→Camera, we need Camera→World (inverse = flip sign of sin)
+        float cosYaw = (float)Math.Cos(cameraYaw);
+        float sinYaw = (float)Math.Sin(cameraYaw);
 
-        // Forward vector: direction camera is facing
-        Vector3 cameraForward = new Vector3(dirX, 0f, dirZ);
+        // Forward direction
+        Vector3 cameraForward = new Vector3(cosYaw, 0f, sinYaw);
 
-        // Right vector: perpendicular to forward (rotate 90° clockwise in XZ plane)
-        // If forward is (dirX, dirZ), then right is (dirZ, -dirX)
-        Vector3 cameraRight = new Vector3(dirZ, 0f, -dirX);
+        // Right direction: perpendicular to forward (90° counter-clockwise)
+        // For (cos, sin), right is (-sin, cos)
+        Vector3 cameraRight = new Vector3(-sinYaw, 0f, cosYaw);
 
         // Calculate camera-relative movement
         if ((GetAsyncKeyState((int)Keys.W) & 0x8000) != 0)
