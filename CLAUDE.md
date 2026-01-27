@@ -168,6 +168,18 @@ Uses ZLogger for high-performance structured logging:
 - **.NET 10.0** - Latest framework for GUI and Stub
 - **Windows-only** - WPF, WebView2, SharpDX dependencies
 
+### Performance Optimizations
+
+The packet processing pipeline uses zero-allocation patterns for high-throughput operation (10k+ packets/sec):
+
+- **Ref struct enumerators** (PacketRefEnumerator, MethodPacketEnumerator) - zero alloc enumeration
+- **Direct MemoryMarshal reads** - no ByteReader wrapper overhead
+- **ArrayPool** - buffer reuse for accumulator growth
+- **Sync/Async split** - sync packets (~80% of traffic) processed with zero allocation
+- **ZLinq** - zero-allocation LINQ operations using AsValueEnumerable()
+
+See `docs/zero-allocation-packet-processing.md` for detailed architecture and performance improvements.
+
 ---
 
 ## Common Patterns
