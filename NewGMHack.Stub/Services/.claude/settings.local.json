@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build:*)",
+      "Bash(Select-String:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(GIT_SEQUENCE_EDITOR=\"sed -i ''2,6s/^pick /squash /; 7,15s/^pick /squash /''\" git rebase:*)",
+      "Bash(git stash:*)",
+      "Bash(git reset:*)"
+    ]
+  }
+}
