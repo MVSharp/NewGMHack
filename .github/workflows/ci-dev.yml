@@ -1,0 +1,81 @@
+name: CI - Dev Branch
+
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+    branches:
+      - dev
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  NODE_VERSION: '20'
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Build Frontend
+        run: |
+          cd frontend
+          pnpm install
+          pnpm build
+
+      - name: Copy Frontend to wwwroot
+        run: |
+          $guiWwwRoot = "NewGmHack.GUI/wwwroot"
+          if (Test-Path $guiWwwRoot) { Get-ChildItem $guiWwwRoot | Remove-Item -Recurse -Force }
+          else { New-Item -ItemType Directory -Path $guiWwwRoot | Out-Null }
+          Copy-Item -Path "frontend/dist/*" -Destination $guiWwwRoot -Recurse -Force
+
+      - name: Build GUI
+        run: |
+          dotnet build "NewGmHack.GUI/NewGmHack.GUI.csproj" -c Release -p:Platform=x86
+
+      - name: Build Stub
+        run: |
+          dotnet build "NewGMHack.Stub/NewGMHack.Stub.csproj" -c Release -p:Platform=x86
+
+      - name: Verify build outputs
+        run: |
+          $guiExe = "bin/x86/Release/net10.0-windows7.0/NewGMHack.GUI.exe"
+          $stubDll = "bin/x86/Release/NewGMHack.Stub.dll"
+
+          if (!(Test-Path $guiExe)) {
+            Write-Error "❌ GUI build failed"
+            exit 1
+          }
+
+          if (!(Test-Path $stubDll)) {
+            Write-Error "❌ Stub build failed"
+            exit 1
+          }
+
+          Write-Host "✅ All builds passed"
+          Write-Host "GUI: $guiExe"
+          Write-Host "Stub: $stubDll"
+
+      - name: Display version
+        run: |
+          $stubDll = "bin/x86/Release/NewGMHack.Stub.dll"
+          $version = [Reflection.AssemblyName]::GetAssemblyName($stubDll).Version.ToString()
+          Write-Host "📦 Current version: $version"

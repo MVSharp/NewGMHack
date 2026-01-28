@@ -1,0 +1,264 @@
+name: PR to Master (Release)
+
+on:
+  pull_request:
+    branches:
+      - master
+    types: [closed, opened, synchronize]
+
+jobs:
+  validate-branch:
+    name: Validate PR Source
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
+    steps:
+      - name: Validate source branch
+        run: |
+          SOURCE="${{ github.event.pull_request.head.ref }}"
+          if [ "$SOURCE" != "dev" ]; then
+            echo "❌ ERROR: PR to master must come from 'dev' branch"
+            echo "Current source branch: $SOURCE"
+            exit 1
+          fi
+          echo "✅ PR source validated: dev → master"
+
+  build-and-test:
+    name: Build and Test
+    needs: validate-branch
+    runs-on: windows-latest
+    env:
+      DOTNET_VERSION: '10.0.x'
+      NODE_VERSION: '20'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Build Frontend
+        run: |
+          cd frontend
+          pnpm install
+          pnpm build
+
+      - name: Copy Frontend to wwwroot
+        run: |
+          $guiWwwRoot = "NewGmHack.GUI/wwwroot"
+          if (Test-Path $guiWwwRoot) { Get-ChildItem $guiWwwRoot | Remove-Item -Recurse -Force }
+          else { New-Item -ItemType Directory -Path $guiWwwRoot | Out-Null }
+          Copy-Item -Path "frontend/dist/*" -Destination $guiWwwRoot -Recurse -Force
+
+      - name: Build GUI
+        run: |
+          dotnet build "NewGmHack.GUI/NewGmHack.GUI.csproj" -c Release -p:Platform=x86
+
+      - name: Build Stub
+        run: |
+          dotnet build "NewGMHack.Stub/NewGMHack.Stub.csproj" -c Release -p:Platform=x86
+
+      - name: Verify build outputs
+        run: |
+          $guiExe = "bin/x86/Release/net10.0-windows7.0/NewGMHack.GUI.exe"
+          $stubDll = "bin/x86/Release/NewGMHack.Stub.dll"
+
+          if (!(Test-Path $guiExe)) { throw "GUI build failed" }
+          if (!(Test-Path $stubDll)) { throw "Stub build failed" }
+
+          Write-Host "✅ Build verification passed"
+
+  get-version:
+    name: Get Version from Stub
+    needs: build-and-test
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Stub (if not cached)
+        run: |
+          dotnet build "NewGMHack.Stub/NewGMHack.Stub.csproj" -c Release -p:Platform=x86
+
+      - name: Extract version
+        id: version
+        run: |
+          $stubDll1 = "bin/x86/Release/NewGMHack.Stub.dll"
+          $stubDll2 = "bin/x86/Release/net10.0-windows7.0/NewGMHack.Stub.dll"
+
+          if (Test-Path $stubDll1) {
+            $stubDll = $stubDll1
+          } elseif (Test-Path $stubDll2) {
+            $stubDll = $stubDll2
+          } else {
+            throw "Stub DLL not found"
+          }
+
+          $version = [Reflection.AssemblyName]::GetAssemblyName($stubDll).Version.ToString()
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "📦 Version: $version"
+
+  create-release:
+    name: Create Release
+    needs: get-version
+    runs-on: windows-latest
+    if: github.event.pull_request.merged == true
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build all components
+        env:
+          DOTNET_VERSION: '10.0.x'
+          NODE_VERSION: '20'
+        run: |
+          # Setup
+          dotnet tool install --global dotnet-format
+          npm install -g pnpm
+
+          # Build frontend
+          cd frontend
+          pnpm install
+          pnpm build
+          cd ..
+
+          # Copy frontend
+          $guiWwwRoot = "NewGmHack.GUI/wwwroot"
+          if (Test-Path $guiWwwRoot) { Get-ChildItem $guiWwwRoot | Remove-Item -Recurse -Force }
+          else { New-Item -ItemType Directory -Path $guiWwwRoot | Out-Null }
+          Copy-Item -Path "frontend/dist/*" -Destination $guiWwwRoot -Recurse -Force
+
+          # Build projects
+          dotnet build "NewGmHack.GUI/NewGmHack.GUI.csproj" -c Release -p:Platform=x86
+          dotnet build "NewGMHack.Stub/NewGMHack.Stub.csproj" -c Release -p:Platform=x86
+
+      - name: Package release files
+        run: |
+          New-Item -ItemType Directory -Path "release" -Force
+
+          # Copy GUI
+          $guiExe = "bin/x86/Release/net10.0-windows7.0/NewGMHack.GUI.exe"
+          if (Test-Path $guiExe) {
+            Copy-Item $guiExe "release/"
+          }
+
+          # Copy Stub
+          $stubDll = "bin/x86/Release/NewGMHack.Stub.dll"
+          if (Test-Path $stubDll) {
+            Copy-Item $stubDll "release/"
+          }
+
+          # Package frontend
+          Compress-Archive -Path "NewGmHack.GUI/wwwroot/*" -DestinationPath "release/wwwroot.zip" -Force
+
+      - name: Generate SHA256 checksums
+        run: |
+          Get-ChildItem -Path "release" -File | ForEach-Object {
+            $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash
+            Add-Content -Path "release/checksums.txt" -Value "$($hash.ToLower())  $($_.Name)"
+          }
+
+      - name: Generate update.xml
+        run: |
+          $version = "${{ needs.get-version.outputs.version }}"
+          $tagName = "v$version"
+
+          $xmlContent = @"
+          <?xml version='1.0' encoding='UTF-8'?>
+          <item>
+            <version>$version</version>
+            <url>https://github.com/${{ github.repository }}/releases/download/$tagName/NewGMHack.GUI.exe</url>
+            <changelog>https://github.com/${{ github.repository }}/releases/tag/$tagName</changelog>
+            <mandatory>true</mandatory>
+            <args>/S</args>
+          </item>
+          "@
+
+          $xmlContent | Out-File -FilePath "release/update.xml" -Encoding UTF8
+
+      - name: Create and push tag
+        run: |
+          $version = "${{ needs.get-version.outputs.version }}"
+          $tagName = "v$version"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Check if tag exists
+          $tagExists = git tag -l "$tagName"
+          if ($tagExists) {
+            Write-Host "Tag $tagName already exists, skipping..."
+          } else {
+            git tag -a "$tagName" -m "Release $version"
+            git push origin "$tagName"
+            Write-Host "✅ Created and pushed tag: $tagName"
+          }
+
+      - name: Generate release notes
+        run: |
+          $version = "${{ needs.get-version.outputs.version }}"
+          $tagName = "v$version"
+
+          @"
+          ## 🚀 NewGMHack Release $tagName
+
+          ### 📦 Components:
+          - ✅ GUI (NewGMHack.GUI.exe)
+          - ✅ Stub DLL (NewGMHack.Stub.dll)
+          - ✅ Frontend (wwwroot.zip)
+
+          ### 🔐 SHA256 Checksums:
+          ```
+          "$@" | Out-File -FilePath release_notes.md
+          Get-Content release/checksums.txt | Add-Content release_notes.md
+          @"
+
+          ```
+          " | Add-Content release_notes.md
+
+          @"
+
+          ### 📥 Installation:
+          1. Download all files from the Assets section below
+          2. Replace `NewGMHack.GUI.exe` and `NewGMHack.Stub.dll` in your installation directory
+          3. Extract `wwwroot.zip` to `NewGmHack.GUI/wwwroot/`
+          4. Restart the application
+
+          ### 📝 Changes:
+          Merged from dev branch with all latest features and fixes.
+          "@ | Add-Content release_notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.get-version.outputs.version }}
+          name: NewGMHack v${{ needs.get-version.outputs.version }}
+          body_path: release_notes.md
+          files: |
+            release/NewGMHack.GUI.exe
+            release/NewGMHack.Stub.dll
+            release/wwwroot.zip
+            release/update.xml
+            release/checksums.txt
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

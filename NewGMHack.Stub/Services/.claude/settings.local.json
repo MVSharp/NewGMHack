@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build:*)",
+      "Bash(Select-String:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(GIT_SEQUENCE_EDITOR=\"sed -i ''2,6s/^pick /squash /; 7,15s/^pick /squash /''\" git rebase:*)",
+      "Bash(git stash:*)",
+      "Bash(git reset:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr create --base dev --title \"feat: camera-relative FreeMove implementation \\(WIP\\)\" --body \"$\\(cat <<''EOF''\n## Summary\nImplements WASD-based camera-relative movement system using View Matrix direction vectors.\n\n**Note: Work in Progress** - Feature not fully functional yet. See \"Known Issues\" below.\n\n## Changes\n- Modified `ScanMySelf\\(\\)` to return View Matrix along with player position\n- Extracted FreeMove logic into `ApplyFreeMovement\\(\\)` method  \n- Added `WritePlayerPosition\\(\\)` helper for memory writes\n- Comprehensive XML documentation for all methods\n- Added View Matrix debug display to overlay\n\n## Technical Details\n- View Matrix read via `device.GetTransform\\(TransformState.View\\)`\n- Movement speed: 50 units/tick\n- WASD: camera-relative movement, Space/V: world Y-axis \\(vertical\\)\n- Extracts forward \\(row 2: M31, M33\\) and right \\(row 0: M11, M13\\) from View Matrix\n- Applies quadrant detection: `\\(valX * valZ\\) < 0` triggers negation\n\n## Multiple Approaches Attempted\n1. Direct matrix vector extraction with negation\n2. Trigonometric approach using `cameraYaw`\n3. Cross product validation  \n4. Quadrant detection on both forward and right vectors\n\n## Known Issues\n**Coordinate transformation not working correctly across all camera directions:**\n- Direction 1 \\(0°\\): ✓ Works correctly\n- Direction 2 \\(90°\\): ✗ Incorrect movement\n- Direction 3 \\(180°\\): ✗ Reversed \\(W moves backward, S moves forward\\)\n- Direction 4 \\(270°\\): ✗ Same as direction 2\n\nThe quadrant detection pattern `\\(forwardX * forwardZ\\) < 0` is not sufficient to handle\nView Matrix sign behavior in all camera orientations.\n\n## Testing Recommendations\n- Test WASD in all 4 camera directions \\(N, E, S, W\\)\n- Test diagonal movement \\(W+A, W+D, S+A, S+D\\)\n- Verify Space/V for vertical movement\n- Use overlay debug display to monitor M31/M33 values\n\n## Next Steps\n- Investigate alternative coordinate transformation approaches\n- May need different quadrant detection pattern or angle-based correction\n- Consider debug logging to capture exact View Matrix values in each direction\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\nEOF\n\\)\")",
+      "Bash(git fetch:*)",
+      "Bash(git rev-list:*)",
+      "Bash(while read branch)",
+      "Bash(done:*)",
+      "Bash(git for-each-ref:*)",
+      "Bash(gh auth status:*)",
+      "Bash(git config:*)",
+      "Bash(gh pr:*)",
+      "Bash(powershell:*)",
+      "Bash(gh repo view:*)",
+      "Bash(gh api:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)"
+    ]
+  }
+}
