@@ -342,22 +342,25 @@ public class EntityScannerService : BackgroundService
     ///   <item><term>V</term><description>Down (world -Y axis)</description></item>
     /// </list>
     ///
-    /// <para><b>View Matrix to Direction Vectors (simplified):</b></para>
+    /// <para><b>View Matrix Direction Vector Extraction:</b></para>
     /// <code>
     /// // Extract forward from row 2 (M31, M33)
+    /// // Extract right from row 0 (M11, M13)
     /// float forwardX = viewMatrix.M31;
     /// float forwardZ = viewMatrix.M33;
+    /// float rightX = viewMatrix.M11;
+    /// float rightZ = viewMatrix.M13;
     ///
-    /// // Normalize
-    /// float dirX = forwardX / length;
-    /// float dirZ = forwardZ / length;
+    /// // Apply quadrant detection: negate when signs are opposite
+    /// if ((forwardX * forwardZ) < 0) { forwardX = -forwardX; forwardZ = -forwardZ; }
+    /// if ((rightX * rightZ) < 0) { rightX = -rightX; rightZ = -rightZ; }
     ///
-    /// // Forward: (dirX, 0, dirZ)
-    /// // Right: perpendicular clockwise = (dirZ, 0, -dirX)
+    /// // Normalize to unit vectors
     /// </code>
     /// <para>
-    /// <b>Note:</b> Right vector is calculated as perpendicular to forward, not extracted from matrix.
-    /// This avoids issues with alternating vector signs in View Matrix rows.
+    /// <b>Quadrant Detection Pattern:</b> View Matrix direction vectors alternate signs based on camera facing direction.
+    /// When the X and Z components have opposite signs (product &lt; 0), the vector must be negated
+    /// to maintain consistent orientation across all 4 quadrants.
     /// </para>
     ///
     /// <para><b>Movement Speed:</b></para>
@@ -367,67 +370,62 @@ public class EntityScannerService : BackgroundService
     /// <para><b>Edge Cases Handled:</b></para>
     /// <list type="bullet">
     ///   <item>No keys pressed → returns original position</item>
-    ///   <item>Invalid forward vector (length < 0.001) → returns original position</item>
-    ///   <item>Right vector calculated from forward (perpendicular, not from matrix)</item>
+    ///   <item>Invalid vectors (length &lt; 0.001) → returns original position</item>
+    ///   <item>Quadrant detection applied to both forward AND right vectors independently</item>
     /// </list>
     ///
     /// <para><b>Usage:</b></para>
     /// <para>Called by <see cref="ExecuteAsync"/> when FreeMove feature is enabled.</para>
     /// <para>Result is written to game memory via <see cref="WritePlayerPosition"/>.</para>
     /// </remarks>
-    private Vector3 ApplyFreeMovement(Vector3 position, Matrix viewMatrix)
-    {
-        Vector3 movement = Vector3.Zero;
+     private Vector3 ApplyFreeMovement(Vector3 position, Matrix viewMatrix)
+  {
+      Vector3 movement = Vector3.Zero;
 
-        // Extract forward direction from View Matrix row 2
-        float forwardX = viewMatrix.M31;
-        float forwardZ = viewMatrix.M33;
+      // Extract direction vectors directly from View Matrix
+      // Row 0 (M11, M13) = Right vector
+      // Row 2 (M31, M33) = Forward vector
+      float forwardX = viewMatrix.M31;
+      float forwardZ = viewMatrix.M33;
+      float rightX = viewMatrix.M11;
+      float rightZ = viewMatrix.M13;
 
-        // Detect if we need to negate based on sign pattern
-        // When M31 and M33 have opposite signs (quadrants 2 & 4), negate
-        bool needNegation = (forwardX * forwardZ) < 0;
+      // Apply quadrant detection to handle View Matrix sign alternation
+      // When X and Z have opposite signs (product < 0), negate the vector
+      if ((forwardX * forwardZ) < 0) { forwardX = -forwardX; forwardZ = -forwardZ; }
+      if ((rightX * rightZ) < 0) { rightX = -rightX; rightZ = -rightZ; }
 
-        if (needNegation)
-        {
-            forwardX = -forwardX;
-            forwardZ = -forwardZ;
-        }
+      // Normalize both vectors to unit length
+      float forwardLen = (float)Math.Sqrt(forwardX * forwardX + forwardZ * forwardZ);
+      float rightLen = (float)Math.Sqrt(rightX * rightX + rightZ * rightZ);
 
-        float forwardLength = (float)Math.Sqrt(forwardX * forwardX + forwardZ * forwardZ);
+      if (forwardLen < 0.001f || rightLen < 0.001f) return position;
 
-        if (forwardLength < 0.001f)
-            return position;
+      forwardX /= forwardLen;
+      forwardZ /= forwardLen;
+      rightX /= rightLen;
+      rightZ /= rightLen;
 
-        // Normalize forward
-        float dirX = forwardX / forwardLength;
-        float dirZ = forwardZ / forwardLength;
+      Vector3 cameraForward = new Vector3(forwardX, 0f, forwardZ);
+      Vector3 cameraRight = new Vector3(rightX, 0f, rightZ);
 
-        // Forward vector (camera facing direction)
-        Vector3 cameraForward = new Vector3(dirX, 0f, dirZ);
+      // Calculate camera-relative movement
+      if ((GetAsyncKeyState((int)Keys.W) & 0x8000) != 0)
+          movement += cameraForward * FreeMoveSpeed;
+      if ((GetAsyncKeyState((int)Keys.S) & 0x8000) != 0)
+          movement -= cameraForward * FreeMoveSpeed;
+      if ((GetAsyncKeyState((int)Keys.A) & 0x8000) != 0)
+          movement -= cameraRight * FreeMoveSpeed;
+      if ((GetAsyncKeyState((int)Keys.D) & 0x8000) != 0)
+          movement += cameraRight * FreeMoveSpeed;
+      if ((GetAsyncKeyState((int)Keys.Space) & 0x8000) != 0)
+          movement.Y += FreeMoveSpeed;
+      if ((GetAsyncKeyState((int)Keys.V) & 0x8000) != 0)
+          movement.Y -= FreeMoveSpeed;
 
-        // Calculate right vector as perpendicular to forward (90° clockwise)
-        // If forward is (dirX, dirZ), then right is (dirZ, -dirX)
-        Vector3 cameraRight = new Vector3(dirZ, 0f, -dirX);
-
-        // Calculate camera-relative movement
-        if ((GetAsyncKeyState((int)Keys.W) & 0x8000) != 0)
-            movement += cameraForward * FreeMoveSpeed;  // Forward
-        if ((GetAsyncKeyState((int)Keys.S) & 0x8000) != 0)
-            movement -= cameraForward * FreeMoveSpeed;  // Backward
-        if ((GetAsyncKeyState((int)Keys.A) & 0x8000) != 0)
-            movement -= cameraRight * FreeMoveSpeed;   // Left
-        if ((GetAsyncKeyState((int)Keys.D) & 0x8000) != 0)
-            movement += cameraRight * FreeMoveSpeed;   // Right
-        if ((GetAsyncKeyState((int)Keys.Space) & 0x8000) != 0)
-            movement.Y += FreeMoveSpeed;              // Up (world Y)
-        if ((GetAsyncKeyState((int)Keys.V) & 0x8000) != 0)
-            movement.Y -= FreeMoveSpeed;              // Down (world Y)
-
-        // Apply movement to position
-        return position + movement;
-    }
-
-    /// <summary>
+      // Apply movement to position
+      return position + movement;
+  }    /// <summary>
     /// Writes player position to game memory at the entity position pointer.
     /// Traverses the pointer chain to locate the position struct and writes X/Z coordinates.
     /// </summary>
