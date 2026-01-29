@@ -27,8 +27,8 @@ jobs:
     needs: validate-branch
     runs-on: windows-latest
     env:
-      DOTNET_VERSION: '10.0.x'
-      NODE_VERSION: '20'
+      DOTNET_VERSION: "10.0.x"
+      NODE_VERSION: "20"
 
     steps:
       - name: Checkout code
@@ -127,8 +127,8 @@ jobs:
 
       - name: Build all components
         env:
-          DOTNET_VERSION: '10.0.x'
-          NODE_VERSION: '20'
+          DOTNET_VERSION: "10.0.x"
+          NODE_VERSION: "20"
         run: |
           # Setup
           dotnet tool install --global dotnet-format
@@ -260,5 +260,4 @@ jobs:
             release/checksums.txt
           draft: false
           prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
