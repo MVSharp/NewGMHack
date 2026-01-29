@@ -3,12 +3,12 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*'
-  workflow_dispatch:  # Allow manual triggering
+      - "v*"
+  workflow_dispatch: # Allow manual triggering
 
 env:
-  DOTNET_VERSION: '10.0.x'
-  NODE_VERSION: '20'
+  DOTNET_VERSION: "10.0.x"
+  NODE_VERSION: "20"
 
 jobs:
   detect-changes:
@@ -48,6 +48,8 @@ jobs:
     name: Build Components
     needs: detect-changes
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -211,7 +213,8 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          name: NewGMHack ${{ github.ref_name }}
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', needs.build.outputs.version) }}
+          name: NewGMHack ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', needs.build.outputs.version) }}
           body_path: release_notes.md
           files: |
             release/NewGMHack.GUI.exe
