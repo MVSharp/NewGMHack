@@ -9,8 +9,8 @@ on:
       - dev
 
 env:
-  DOTNET_VERSION: '10.0.x'
-  NODE_VERSION: '20'
+  DOTNET_VERSION: "10.0.x"
+  NODE_VERSION: "20"
 
 jobs:
   build:
@@ -57,7 +57,7 @@ jobs:
 
       - name: Verify build outputs
         run: |
-          $guiExe = "bin/x86/Release/net10.0-windows7.0/NewGMHack.GUI.exe"
+          $guiExe = "bin/x86/Release/NewGmHack.GUI.exe"
           $stubDll = "bin/x86/Release/NewGMHack.Stub.dll"
 
           if (!(Test-Path $guiExe)) {
