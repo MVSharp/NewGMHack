@@ -98,6 +98,8 @@ namespace NewGMHack.Stub
         /// </summary>
         public ConcurrentDictionary<uint, string> WeaponNameCache { get; } = new();
         public ConcurrentBag<UInt32> Enmery =new ConcurrentBag<UInt32>();
+
+        public ConcurrentBag<UInt32> Teammales =new ConcurrentBag<UInt32>();
         public int ProcessId { get; set; }
         public SelfInformation()
         {

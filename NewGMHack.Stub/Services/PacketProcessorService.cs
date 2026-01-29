@@ -552,6 +552,7 @@ public partial class PacketProcessorService : BackgroundService
 
         _selfInformation.WeaponNameCache.Clear();
         _selfInformation.Enmery.Clear();
+        _selfInformation.Teammales.Clear();
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -719,10 +720,13 @@ public partial class PacketProcessorService : BackgroundService
                                 .FirstOrDefault(x => x.Player == _selfInformation.PersonInfo.PersonId);
             var myTeam = myself.TeamId1;
             _selfInformation.Enmery.Clear();
+            _selfInformation.Teammales.Clear();
             foreach (var p in players)
             {
                 if (p.TeamId1 != myTeam)
                     _selfInformation.Enmery.Add(p.Player);
+                else if(p.TeamId1 == myTeam)
+                    _selfInformation.Teammales.Add(p.Player);
             }
             // Send to battle logger for persistence
             _battleLogChannel.Writer.TryWrite(new BattleLogEvent
@@ -1039,6 +1043,8 @@ public partial class PacketProcessorService : BackgroundService
                 if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
                     _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
                 {
+                    if (_selfInformation.Teammales.Contains(toId))
+                        return;
                     reborns.Enqueue(new Reborn(hitResponse.MyPlayerId, toId, 0));
                 }
             }
@@ -1047,6 +1053,7 @@ public partial class PacketProcessorService : BackgroundService
             {
                 if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsRebound))
                 {
+
                     reborns.Enqueue(new Reborn(hitResponse.MyPlayerId, hitResponse.FromId, 0));
                 }
             }
@@ -1141,7 +1148,10 @@ public partial class PacketProcessorService : BackgroundService
                 if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
                     _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
                 {
-                    reborns.Enqueue(new Reborn(hitResponse.MyPlayerId, toId, 0));
+
+                     if (_selfInformation.Teammales.Contains(toId))
+                         return;
+                     reborns.Enqueue(new Reborn(hitResponse.MyPlayerId, toId, 0));
                 }
             }
 
