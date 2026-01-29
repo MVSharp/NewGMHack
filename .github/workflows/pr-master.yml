@@ -27,8 +27,8 @@ jobs:
     needs: validate-branch
     runs-on: windows-latest
     env:
-      DOTNET_VERSION: '10.0.x'
-      NODE_VERSION: '20'
+      DOTNET_VERSION: "10.0.x"
+      NODE_VERSION: "20"
 
     steps:
       - name: Checkout code
@@ -72,7 +72,7 @@ jobs:
 
       - name: Verify build outputs
         run: |
-          $guiExe = "bin/x86/Release/net10.0-windows7.0/NewGMHack.GUI.exe"
+          $guiExe = "bin/x86/Release/NewGmHack.GUI.exe"
           $stubDll = "bin/x86/Release/NewGMHack.Stub.dll"
 
           if (!(Test-Path $guiExe)) { throw "GUI build failed" }
@@ -99,7 +99,7 @@ jobs:
         id: version
         run: |
           $stubDll1 = "bin/x86/Release/NewGMHack.Stub.dll"
-          $stubDll2 = "bin/x86/Release/net10.0-windows7.0/NewGMHack.Stub.dll"
+          $stubDll2 = "bin/x86/Release/NewGMHack.Stub.dll"
 
           if (Test-Path $stubDll1) {
             $stubDll = $stubDll1
@@ -127,8 +127,8 @@ jobs:
 
       - name: Build all components
         env:
-          DOTNET_VERSION: '10.0.x'
-          NODE_VERSION: '20'
+          DOTNET_VERSION: "10.0.x"
+          NODE_VERSION: "20"
         run: |
           # Setup
           dotnet tool install --global dotnet-format
@@ -155,7 +155,7 @@ jobs:
           New-Item -ItemType Directory -Path "release" -Force
 
           # Copy GUI
-          $guiExe = "bin/x86/Release/net10.0-windows7.0/NewGMHack.GUI.exe"
+          $guiExe = "bin/x86/Release/NewGmHack.GUI.exe"
           if (Test-Path $guiExe) {
             Copy-Item $guiExe "release/"
           }
