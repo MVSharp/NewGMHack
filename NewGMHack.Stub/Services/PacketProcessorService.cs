@@ -158,6 +158,20 @@ public partial class PacketProcessorService : BackgroundService
 
         switch (method)
         {
+            case 2893:
+                var ready =methodPacket.MethodBody.CastTo<ReadyStruct>()[0];
+                _selfInformation.PersonInfo.PersonId = ready.MyPlayerId;
+                if (ready.IsReady == 0x01)
+                {
+                    _logger.ZLogInformation($"Slot:{ready.Slot}--ready");
+                    SendF5(socket);
+                }
+                else
+                {
+
+                    _logger.ZLogInformation($"Slot:{ready.Slot}--unready");
+                }
+                break;
             case 2604:
                 ReadSlotInfo(body);
                 break;
@@ -218,14 +232,32 @@ public partial class PacketProcessorService : BackgroundService
 
                 if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.AutoFive))
                 {
-                    SendFiveHits(_selfInformation.Enmery.ToList());
+                    if (_selfInformation.Enmery.Count > 0)
+                    {
+                        SendFiveHits(_selfInformation.Enmery.ToList());
+                    }
+                    else if (_selfInformation.Teammales.Count > 0)
+                    {
+
+                        SendFiveHits(_selfInformation.Teammales.ToList());
+                    }
                 }
                 if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
                     _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
                 {
-                    foreach (var VARIABLE in _selfInformation.Enmery)
+                    if (_selfInformation.Enmery.Count > 0)
                     {
-                        reborns.Enqueue(new Reborn(_selfInformation.PersonInfo.PersonId,VARIABLE,0));
+                        foreach (var VARIABLE in _selfInformation.Enmery)
+                        {
+                            reborns.Enqueue(new Reborn(_selfInformation.PersonInfo.PersonId,VARIABLE,0));
+                        }
+                    }
+                    else if (_selfInformation.Teammales.Count > 0)
+                    {
+                        foreach (var VARIABLE in _selfInformation.Teammales)
+                        {
+                            reborns.Enqueue(new Reborn(_selfInformation.PersonInfo.PersonId,VARIABLE,0));
+                        }
                     }
                     // ReadRebornsFast(body, reborns);
                 }
@@ -770,15 +802,19 @@ public partial class PacketProcessorService : BackgroundService
             var myself = players.AsValueEnumerable()
                                 .FirstOrDefault(x => x.Player == _selfInformation.PersonInfo.PersonId);
             var myTeam = myself.TeamId1;
+            var myTeam2 = myself.TeamId2;
             _selfInformation.Enmery.Clear();
             _selfInformation.Teammales.Clear();
             foreach (var p in players)
             {
-                if (p.TeamId1 != myTeam)
+                if (myself.Player == p.Player) continue;
+                if (p.TeamId1 != myTeam && p.TeamId2 !=  myTeam2)
                     _selfInformation.Enmery.Add(p.Player);
-                else if(p.TeamId1 == myTeam)
+                else if(p.TeamId1 == myTeam && p.TeamId2 == myTeam2)
                     _selfInformation.Teammales.Add(p.Player);
             }
+            _logger.ZLogInformation($"Teamamles : {string.Join(",", _selfInformation.Teammales)}");
+            _logger.ZLogInformation($"enmery : {string.Join("," , _selfInformation.Enmery)}");
             // Send to battle logger for persistence
             _battleLogChannel.Writer.TryWrite(new BattleLogEvent
             {
@@ -897,11 +933,26 @@ public partial class PacketProcessorService : BackgroundService
             0x00, 0x00, 0x00, 0x00, 0x00,
             0x03, 0x05
         ];
-        #endregion
+       ReadOnlySpan<byte> msg8 =
+        [
+            0x09, 0x00, 0xF0, 0x03, 0x4B, 0x08,
+            0x00, 0x00, 0x00, 0x00, 0x00,
+            0x01, 0x01
+        ];
+
+               #endregion
         _winsockHookManager.SendPacket(socket, msg5);
         _winsockHookManager.SendPacket(socket, msg6);
 
         _winsockHookManager.SendPacket(socket, msg7);
+       //_winsockHookManager.SendPacket(socket,msg8); 
+        // Send packets for i = 0 to 11: 08-00-F0-03-4B-09-00-00-00-00-{i}-01
+        //for (int i = 0; i < 12; i++)
+        //{
+        //    ReadOnlySpan<byte> loopPacket = [0x08, 0x00, 0xF0, 0x03, 0x4B, 0x09, 0x00, 0x00, 0x00, 0x00, (byte)i, 0x01]; 
+     
+        //    _winsockHookManager.SendPacket(socket, loopPacket);
+        //}
     }
 
     public void ReadGifts(IntPtr socket, ReadOnlySpan<byte> buffer)
@@ -1388,9 +1439,9 @@ public partial class PacketProcessorService : BackgroundService
                                           //.Distinct()
                                          .ToList();
             int targetCount = distinctTargets.Count;
-            _logger.LogTargetCounts(targetCount, string.Join(",", distinctTargets.Select(c => c.TargetId)));
             if (targetCount > 0)
             {
+                _logger.LogTargetCounts(targetCount, string.Join(",", distinctTargets.Select(c => c.TargetId)));
                 await _bombChannel.Writer.WriteAsync((packet.Socket, distinctTargets), token);
             }
         }
