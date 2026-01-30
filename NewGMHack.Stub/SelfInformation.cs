@@ -100,6 +100,7 @@ namespace NewGMHack.Stub
         public ConcurrentBag<UInt32> Enmery =new ConcurrentBag<UInt32>();
 
         public ConcurrentBag<UInt32> Teammales =new ConcurrentBag<UInt32>();
+        public ConcurrentDictionary<uint, int> EnmeryHitCount { get; } = new();
         public int ProcessId { get; set; }
         public SelfInformation()
         {
