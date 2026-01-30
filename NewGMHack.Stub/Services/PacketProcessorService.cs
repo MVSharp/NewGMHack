@@ -171,8 +171,8 @@ public partial class PacketProcessorService : BackgroundService
             case 2685:
                 SendZoneActiviate(socket);
                 break;
-            case 1473 or 1663://battle begin time start , 1443 follow to 1557
-                break;
+            //case 1473 or 1663://battle begin time start , 1443 follow to 1557
+            //    break;
             case 2567: // get page - handled by DoParseWorkAsync
                 break;
             // case 1992 or 1338 or 2312 or 1525 or 1521 or 2103:
@@ -198,10 +198,8 @@ public partial class PacketProcessorService : BackgroundService
 
                 // _logger.ZLogInformation($"found reborn  : {reborn.TargetId}");
                 break;
-            case 1557 or 2253 or 1933 :
-                 _selfInformation.BombHistory.Clear();
+            case  1557:
                  _selfInformation.ClientConfig.IsInGame = true;
-                 SendSkipScreen(socket);
                 if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.AutoFive))
                 {
                     var born = ReadRebornFast(body, readLocation: false);
@@ -211,6 +209,25 @@ public partial class PacketProcessorService : BackgroundService
                     _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
                 {
                     ReadRebornsFast(body, reborns);
+                }
+                break;
+            case 1443 or 2253 or 1633 or 1933:
+                _logger.ZLogInformation($"trigger bomb because of {method}");
+                 _selfInformation.BombHistory.Clear();
+                 SendSkipScreen(socket);
+
+                if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.AutoFive))
+                {
+                    SendFiveHits(_selfInformation.Enmery.ToList());
+                }
+                if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsMissionBomb) ||
+                    _selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.IsPlayerBomb))
+                {
+                    foreach (var VARIABLE in _selfInformation.Enmery)
+                    {
+                        reborns.Enqueue(new Reborn(_selfInformation.PersonInfo.PersonId,VARIABLE,0));
+                    }
+                    // ReadRebornsFast(body, reborns);
                 }
                 break;
             case 2722 or 2670 or 2361:
@@ -1037,6 +1054,7 @@ public partial class PacketProcessorService : BackgroundService
                         X         = _selfInformation.CrossHairX, // Start at crosshair, will update in overlay
                         Y         = _selfInformation.CrossHairY
                     });
+                    _selfInformation.EnmeryHitCount.AddOrUpdate(victim.VictimId, 1, (key, old) => old + 1);
                 }
 
                 // Send damage received message (only when I am the victim and attacker is someone else)
@@ -1141,6 +1159,7 @@ public partial class PacketProcessorService : BackgroundService
                         X         = _selfInformation.CrossHairX,
                         Y         = _selfInformation.CrossHairY
                     });
+                    _selfInformation.EnmeryHitCount.AddOrUpdate(victim.VictimId, 1, (key, old) => old + 1);
                 }
 
                 // Send damage received message (only when I am the victim and attacker is someone else)
