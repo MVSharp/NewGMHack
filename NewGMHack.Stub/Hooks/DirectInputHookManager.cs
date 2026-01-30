@@ -334,10 +334,10 @@ public class DirectInputHookManager(
             Marshal.Copy(dataPtr, keys, 0, 256);
 
             // Toggle both F5 and ESC keys
-            //_f5Down = !_f5Down;
+            _f5Down = !_f5Down;
             _escDown = !_escDown;
 
-            //if (_f5Down) keys[63] |= 0x80;   // F5 key
+            if (_f5Down) keys[63] |= 0x80;   // F5 key
             if (_escDown) keys[1] |= 0x80;   // ESC key
 
             Marshal.Copy(keys, 0, dataPtr, 256);
