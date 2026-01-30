@@ -373,7 +373,7 @@ for (int i = DIK_1; i <= DIK_3; i++)
     private void HandleAutoReady()
     {
         _logger.LogHandleAutoReady();
-        ScheduleKey(DIK_F5, 0, 50);
+        //ScheduleKey(DIK_F5, 0, 50);
         ScheduleKey(DIK_ESCAPE, 100, 50);
         ScheduleMouse(1, true, 200);
         ScheduleMouse(1, false, 250);
