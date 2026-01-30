@@ -25,12 +25,14 @@ public class UpdateEngine
             await WaitForProcessExitAsync(targetPid);
             Console.WriteLine("[Updater] Process exited - proceeding with file replacement");
 
+            // Declare paths at method scope for use in later steps
+            var newGuiPath = Path.Combine(tempDir, GuiExeName);
+            var oldGuiPath = Path.Combine(appDir, GuiExeName);
+
             // Steps 2-4: Replace files (with rollback on error)
             try
             {
                 // Step 2: Replace GUI executable
-                var newGuiPath = Path.Combine(tempDir, GuiExeName);
-                var oldGuiPath = Path.Combine(appDir, GuiExeName);
 
                 if (File.Exists(newGuiPath))
                 {
@@ -77,7 +79,6 @@ public class UpdateEngine
             }
 
             // Step 5: Verify new version
-            var oldGuiPath = Path.Combine(appDir, GuiExeName);
             if (File.Exists(oldGuiPath))
             {
                 var versionInfo = AssemblyName.GetAssemblyName(oldGuiPath).Version?.ToString() ?? "unknown";
