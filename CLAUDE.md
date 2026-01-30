@@ -221,11 +221,28 @@ See `docs/zero-allocation-packet-processing.md` for detailed architecture and pe
 
 ---
 
-## Planned Features
+### Auto-Update System
 
-See `AUTO_UPDATE_PLAN.md` for comprehensive auto-update system architecture (GitHub Releases-based, auto-updates GUI/Stub/Frontend).
+The application uses a custom updater stub pattern for reliable updates:
 
-See `TODO_AUTO_UPDATE.md` for implementation session context when ready to proceed with auto-update.
+- **Custom Updater Stub** - Separate process handles file replacement
+- **Checksum Verification** - SHA256 verification for all downloads
+- **Rollback Support** - Automatic restoration on failure
+- **Frontend Hot-Reload** - No restart required for frontend-only updates
+
+See `docs/update-architecture.md` for detailed architecture.
+
+Update flow:
+1. Main app downloads update to temp directory
+2. Main app launches embedded updater stub
+3. Main app exits (releasing file lock)
+4. Updater replaces files
+5. Updater launches new version
+
+**Key Files:**
+- `Updater/` - Updater stub project
+- `NewGmHack.GUI/Services/AutoUpdateService.cs` - Update orchestration
+- `docs/update-architecture.md` - Architecture documentation
 
 ---
 
