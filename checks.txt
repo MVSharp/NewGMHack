@@ -1,0 +1,5 @@
+Build and Test	fail	2m18s	https://github.com/MVSharp/NewGMHack/actions/runs/21488477369/job/61904238525	
+Create Release	skipping	0	https://github.com/MVSharp/NewGMHack/actions/runs/21488477369/job/61904503624	
+Get Version from Stub	skipping	0	https://github.com/MVSharp/NewGMHack/actions/runs/21488477369/job/61904503271	
+Build and Test	pass	2m6s	https://github.com/MVSharp/NewGMHack/actions/runs/21488320993/job/61903665505	
+Validate PR Source	pass	2s	https://github.com/MVSharp/NewGMHack/actions/runs/21488477369/job/61904228666	

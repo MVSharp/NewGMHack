@@ -198,8 +198,10 @@ public partial class PacketProcessorService : BackgroundService
 
                 // _logger.ZLogInformation($"found reborn  : {reborn.TargetId}");
                 break;
-            case 1557:
-                _selfInformation.ClientConfig.IsInGame = true;
+            case 1557 or 2253 or 1933 :
+                 _selfInformation.BombHistory.Clear();
+                 _selfInformation.ClientConfig.IsInGame = true;
+                 SendSkipScreen(socket);
                 if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.AutoFive))
                 {
                     var born = ReadRebornFast(body, readLocation: false);
@@ -248,7 +250,7 @@ public partial class PacketProcessorService : BackgroundService
 
                 _selfInformation.ClientConfig.IsInGame = false;
                 break;
-            case 1550 or 1282 or 1490 or 2253 or 1933 or 2326: // 1691 or 2337 or 1550:
+            case 1550 or 1282 or 1490 or 2326: // 1691 or 2337 or 1550:
                 _selfInformation.BombHistory.Clear();
                 _selfInformation.ClientConfig.IsInGame = true;
                 SendSkipScreen(socket);
@@ -432,7 +434,16 @@ public partial class PacketProcessorService : BackgroundService
 
     private void SendFiveHits(List<UInt32> ids)
     {
-        var idChunks = ids.Where(x => x != _selfInformation.PersonInfo.PersonId).Chunk(12);
+        // Filter targets that haven't reached 5 hits yet
+        var validTargets = ids.Where(id => 
+            id != _selfInformation.PersonInfo.PersonId && 
+            !_selfInformation.Teammales.Contains(id) &&
+            (!_selfInformation.EnmeryHitCount.TryGetValue(id, out var count) || count < 5)
+        ).ToList();
+
+        if (validTargets.Count == 0) return;
+
+        var idChunks = validTargets.Chunk(12);
 
         // Move stackalloc outside the loop to avoid CA2014 warning
         Span<TargetData> targets = stackalloc TargetData[12];
@@ -450,11 +461,14 @@ public partial class PacketProcessorService : BackgroundService
                 WeaponId   = _selfInformation.PersonInfo.Weapon2,
                 WeaponSlot = 65281,
             };
-            attack.TargetCount = BitConverter.GetBytes(idChunk.Count())[0];
+            attack.TargetCount = (byte)idChunk.Length;
 
             var i = 0;
             foreach (var reborn in idChunk)
             {
+                // Increment hit count
+                _selfInformation.EnmeryHitCount.AddOrUpdate(reborn, 1, (key, old) => old + 1);
+
                 targets[i].TargetId = reborn;
                 targets[i].Damage   = 1;
                 i++;
@@ -553,6 +567,7 @@ public partial class PacketProcessorService : BackgroundService
         _selfInformation.WeaponNameCache.Clear();
         _selfInformation.Enmery.Clear();
         _selfInformation.Teammales.Clear();
+        _selfInformation.EnmeryHitCount.Clear();
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
