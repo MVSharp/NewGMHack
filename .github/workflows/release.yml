@@ -95,16 +95,10 @@ jobs:
       - name: Get Version from Stub
         id: version
         run: |
-          # Try both possible locations for Stub DLL
-          $stubDll1 = "bin/x86/Release/NewGMHack.Stub.dll"
-          $stubDll2 = "bin/x86/Release/net10.0-windows7.0/NewGMHack.Stub.dll"
+          $stubDll = "bin/x86/Release/NewGMHack.Stub.dll"
 
-          if (Test-Path $stubDll1) {
-            $stubDll = $stubDll1
-          } elseif (Test-Path $stubDll2) {
-            $stubDll = $stubDll2
-          } else {
-            throw "Stub DLL not found at either $stubDll1 or $stubDll2"
+          if (!(Test-Path $stubDll)) {
+            throw "Stub DLL not found at $stubDll"
           }
 
           $version = [Reflection.AssemblyName]::GetAssemblyName($stubDll).Version.ToString()
@@ -118,8 +112,7 @@ jobs:
       - name: Package GUI
         if: needs.detect-changes.outputs.gui-changed == 'true' || needs.detect-changes.outputs.any-changed == 'true'
         run: |
-          # GUI outputs to framework-specific folder
-          $guiExe = "bin/x86/Release/net10.0-windows7.0/NewGMHack.GUI.exe"
+          $guiExe = "bin/x86/Release/NewGmHack.GUI.exe"
           if (Test-Path $guiExe) {
             Copy-Item $guiExe "release/"
           } else {
@@ -160,7 +153,7 @@ jobs:
           <?xml version='1.0' encoding='UTF-8'?>
           <item>
             <version>$version</version>
-            <url>$downloadUrl/NewGMHack.GUI.exe</url>
+            <url>$downloadUrl/NewGmHack.GUI.exe</url>
             <changelog>https://github.com/${{ github.repository }}/releases/tag/${releaseTag}</changelog>
             <mandatory>true</mandatory>
             <args>/S</args>
@@ -217,7 +210,7 @@ jobs:
           name: NewGMHack ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', needs.build.outputs.version) }}
           body_path: release_notes.md
           files: |
-            release/NewGMHack.GUI.exe
+            release/NewGmHack.GUI.exe
             release/NewGMHack.Stub.dll
             release/wwwroot.zip
             release/update.xml
