@@ -212,8 +212,10 @@ public partial class PacketProcessorService : BackgroundService
 
                 // _logger.ZLogInformation($"found reborn  : {reborn.TargetId}");
                 break;
-            case  1557:
+            case 1557 or 2253 or 1933 :
+                 _selfInformation.BombHistory.Clear();
                  _selfInformation.ClientConfig.IsInGame = true;
+                 SendSkipScreen(socket);
                 if (_selfInformation.ClientConfig.Features.IsFeatureEnable(FeatureName.AutoFive))
                 {
                     var born = ReadRebornFast(body, readLocation: false);
