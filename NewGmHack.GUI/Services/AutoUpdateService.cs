@@ -41,12 +41,13 @@ public class AutoUpdateService
 
     /// <summary>
     /// Check for and apply updates synchronously (blocking call for startup)
+    /// Returns true if a force update was triggered (app should exit)
     /// </summary>
-    public async Task CheckForUpdatesAsync()
+    public async Task<bool> CheckForUpdatesAsync()
     {
 #if DEBUG
         _logger.LogInformation("Skipping update check in DEBUG mode");
-        return;
+        return false;
 #endif
 
         try
@@ -58,7 +59,7 @@ public class AutoUpdateService
             if (releaseInfo == null)
             {
                 _logger.LogWarning("Unable to fetch release info (offline mode)");
-                return;
+                return false;
             }
 
             // Compare versions
@@ -68,7 +69,7 @@ public class AutoUpdateService
             if (latestVersion <= currentVersion)
             {
                 _logger.LogInformation("Already up to date: {Version}", currentVersion);
-                return;
+                return false;
             }
 
             _logger.LogInformation("Update available: {Current} -> {Latest}", currentVersion, latestVersion);
@@ -81,7 +82,7 @@ public class AutoUpdateService
             {
                 _logger.LogInformation("Only frontend changed - applying hot-reload");
                 await ApplyFrontendUpdateAsync(releaseInfo);
-                return;
+                return false;
             }
 
             // Scenario B: GUI or Stub changed - force update and restart
@@ -89,13 +90,16 @@ public class AutoUpdateService
             {
                 _logger.LogInformation("GUI or Stub changed - initiating force update");
                 ApplyForceUpdateAsync(releaseInfo);
-                return;
+                return true; // Signal caller to exit - don't continue with old DLL
             }
+            
+            return false;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error checking for updates");
             // Don't block startup on error
+            return false;
         }
     }
 

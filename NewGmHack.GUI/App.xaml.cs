@@ -120,9 +120,17 @@ namespace NewGmHack.GUI
                 };
 
                 // Check for updates (blocking call - will force update if needed)
-                await updateService.CheckForUpdatesAsync();
+                var forceUpdateTriggered = await updateService.CheckForUpdatesAsync();
+                if (forceUpdateTriggered)
+                {
+                    // Force update triggered - don't show main window or allow injection
+                    // AutoUpdater.NET will handle download and restart
+                    _host.Services.GetRequiredService<ILogger<App>>()
+                        .LogInformation("Force update triggered - waiting for AutoUpdater.NET to complete");
+                    return;
+                }
 
-                // Show main window
+                // Show main window only if no force update
                 var main = _host.Services.GetRequiredService<NewMainWindow>();
                 main.Show();
             }

@@ -449,7 +449,7 @@ public partial class PacketProcessorService : BackgroundService
         await gm.ScanMachinesWithDetails(machines.Select(c=>c.MachineId), token);
     }
 
-    private void SendFiveHits(List<UInt32> ids)
+    private unsafe void SendFiveHits(List<UInt32> ids)
     {
         // Filter targets that haven't reached 5 hits yet
         var validTargets = ids.Where(id => 
@@ -460,12 +460,20 @@ public partial class PacketProcessorService : BackgroundService
 
         if (validTargets.Count == 0) return;
 
-        var idChunks = validTargets.Chunk(12);
+        // Calculate how many times to send based on target count
+        // 1 id = 5 sends, 2 ids = 3 sends, 3-4 ids = 2 sends, 5+ ids = 1 send
+        var sendCount = (int)Math.Ceiling(5.0 / validTargets.Count);
 
-        // Move stackalloc outside the loop to avoid CA2014 warning
+        // Calculate packet size: Attack1335 + 12 * TargetData + null terminator
+        int attackHeaderSize = sizeof(Attack1335);
+        int targetsDataSize = 12 * sizeof(TargetData);
+        int packetSize = attackHeaderSize + targetsDataSize + 1;
+
+        // OPTIMIZATION: Stack allocate the entire packet buffer - ZERO HEAP ALLOCATIONS
+        Span<byte> packetBuffer = stackalloc byte[packetSize];
         Span<TargetData> targets = stackalloc TargetData[12];
 
-        foreach (var idChunk in idChunks)
+        foreach (var idChunk in validTargets.Chunk(12))
         {
             targets.Clear();
 
@@ -483,18 +491,29 @@ public partial class PacketProcessorService : BackgroundService
             var i = 0;
             foreach (var reborn in idChunk)
             {
-                // Increment hit count
-                _selfInformation.EnmeryHitCount.AddOrUpdate(reborn, 1, (key, old) => old + 1);
+                // Increment hit count by sendCount
+                _selfInformation.EnmeryHitCount.AddOrUpdate(reborn, sendCount, (key, old) => old + sendCount);
 
                 targets[i].TargetId = reborn;
                 targets[i].Damage   = 1;
                 i++;
             }
 
-            var attackBytes  = attack.ToByteArray().AsSpan();
-            var targetBytes  = targets.AsByteSpan();
-            var attackPacket = attackBytes.CombineWith(targetBytes).CombineWith((ReadOnlySpan<byte>)[0x00]).ToArray();
-            _winsockHookManager.SendPacket(_selfInformation.LastSocket, attackPacket);
+            // OPTIMIZATION: Use MemoryMarshal.Write for fastest serialization - direct memcpy
+            MemoryMarshal.Write(packetBuffer, in attack);
+
+            // Get byte view of targets array - ZERO ALLOCATION, just a cast
+            var targetsBytes = MemoryMarshal.AsBytes(targets);
+            targetsBytes.CopyTo(packetBuffer.Slice(attackHeaderSize));
+
+            // Null terminator at the end
+            packetBuffer[packetSize - 1] = 0x00;
+
+            // Send packet multiple times based on target count
+            for (int s = 0; s < sendCount; s++)
+            {
+                _winsockHookManager.SendPacket(_selfInformation.LastSocket, packetBuffer);
+            }
         }
     }
     private async Task ReadPageCondomAsync(byte[] methodPacketMethodBody, CancellationToken token = default)
