@@ -28,6 +28,7 @@ public class DirectInputHookManager(
 
     private bool _f5Down = false;
     private bool _escDown = false;
+    private bool _leftMouseDown = false;
     private bool _rightMouseDown = false;
 
     public void HookAll()
@@ -112,6 +113,27 @@ public class DirectInputHookManager(
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("user32.dll")]
+    private static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    private const uint WM_LBUTTONDOWN = 0x0201;
+    private const uint WM_LBUTTONUP = 0x0202;
+    private const uint WM_RBUTTONDOWN = 0x0204;
+    private const uint WM_RBUTTONUP = 0x0205;
+    private const int MK_LBUTTON = 0x0001;
+    private const int MK_RBUTTON = 0x0002;
 
     private bool IsGameFocused()
     {
@@ -215,7 +237,20 @@ public class DirectInputHookManager(
             
             if (isAutoReady)
             {
-                InjectAutoReadyInput(deviceType, size, dataPtr);
+                // For keyboard: inject via DirectInput (still works in background)
+                if (deviceType == DeviceType.Keyboard)
+                {
+                    InjectAutoReadyInput(deviceType, size, dataPtr);
+                    
+                    // Also inject mouse clicks via PostMessage since DirectInput mouse 
+                    // hook won't be called when game is backgrounded (game stops polling mouse)
+                    InjectBackgroundMouseClicks();
+                }
+                // Direct mouse hook injection (may not be called when backgrounded)
+                else if (deviceType == DeviceType.Mouse)
+                {
+                    InjectAutoReadyInput(deviceType, size, dataPtr);
+                }
             }
 
             // Aimbot: disabled when game is not focused
@@ -229,6 +264,66 @@ public class DirectInputHookManager(
         }
     }
 
+    /// <summary>
+    /// Gets the main window handle of the current process (the game window)
+    /// </summary>
+    private IntPtr GetGameWindowHandle()
+    {
+        IntPtr result = IntPtr.Zero;
+        uint currentPid = (uint)Environment.ProcessId;
+        
+        EnumWindows((hWnd, lParam) =>
+        {
+            GetWindowThreadProcessId(hWnd, out uint windowPid);
+            if (windowPid == currentPid && IsWindowVisible(hWnd))
+            {
+                result = hWnd;
+                return false; // Stop enumerating
+            }
+            return true; // Continue enumerating
+        }, IntPtr.Zero);
+        
+        return result;
+    }
+
+    /// <summary>
+    /// Inject mouse clicks via PostMessage for background operation.
+    /// DirectInput mouse hooks don't work when game is backgrounded because
+    /// games typically stop polling mouse input when not focused.
+    /// PostMessage sends clicks directly to the window message queue.
+    /// </summary>
+    private void InjectBackgroundMouseClicks()
+    {
+        try
+        {
+            IntPtr hWnd = GetGameWindowHandle();
+            if (hWnd == IntPtr.Zero) return;
+
+            // Toggle mouse buttons
+            _leftMouseDown = !_leftMouseDown;
+            _rightMouseDown = !_rightMouseDown;
+
+            // Center of window as click position (lParam encodes x,y)
+            IntPtr lParam = IntPtr.Zero; // (0, 0) - can be changed if needed
+
+            // Left mouse button
+            if (_leftMouseDown)
+                PostMessage(hWnd, WM_LBUTTONDOWN, (IntPtr)MK_LBUTTON, lParam);
+            else
+                PostMessage(hWnd, WM_LBUTTONUP, IntPtr.Zero, lParam);
+
+            // Right mouse button
+            if (_rightMouseDown)
+                PostMessage(hWnd, WM_RBUTTONDOWN, (IntPtr)MK_RBUTTON, lParam);
+            else
+                PostMessage(hWnd, WM_RBUTTONUP, IntPtr.Zero, lParam);
+        }
+        catch
+        {
+            // Swallow errors
+        }
+    }
+
     // InjectAimbotInput removed - now using logicProcessor.InjectAimbot() for better algorithm
 
     private void InjectAutoReadyInput(DeviceType deviceType, int size, IntPtr dataPtr)
@@ -238,19 +333,26 @@ public class DirectInputHookManager(
             byte[] keys = new byte[256];
             Marshal.Copy(dataPtr, keys, 0, 256);
 
+            // Toggle both F5 and ESC keys
             _f5Down = !_f5Down;
             _escDown = !_escDown;
 
-            if (_f5Down) keys[63] |= 0x80;
-            if (_escDown) keys[1] |= 0x80;
+            if (_f5Down) keys[63] |= 0x80;   // F5 key
+            if (_escDown) keys[1] |= 0x80;   // ESC key
 
             Marshal.Copy(keys, 0, dataPtr, 256);
         }
         else if (deviceType == DeviceType.Mouse && size == Marshal.SizeOf<DIMOUSESTATE>())
         {
             DIMOUSESTATE state = Marshal.PtrToStructure<DIMOUSESTATE>(dataPtr);
+            
+            // Toggle both left and right mouse buttons for AutoReady
+            _leftMouseDown = !_leftMouseDown;
             _rightMouseDown = !_rightMouseDown;
-            state.rgbButtons1 = _rightMouseDown ? (byte)0x80 : (byte)0x00;
+            
+            state.rgbButtons0 = _leftMouseDown ? (byte)0x80 : (byte)0x00;  // Left button
+            state.rgbButtons1 = _rightMouseDown ? (byte)0x80 : (byte)0x00; // Right button
+            
             Marshal.StructureToPtr(state, dataPtr, false);
         }
     }
