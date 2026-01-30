@@ -808,11 +808,18 @@ public partial class PacketProcessorService : BackgroundService
             foreach (var p in players)
             {
                 if (myself.Player == p.Player) continue;
+                if (header.GameType == 0x01)
+                {
+                    _selfInformation.Enmery.Add(p.Player);
+                    continue;
+                }
                 if (p.TeamId1 != myTeam && p.TeamId2 !=  myTeam2)
                     _selfInformation.Enmery.Add(p.Player);
                 else if(p.TeamId1 == myTeam && p.TeamId2 == myTeam2)
                     _selfInformation.Teammales.Add(p.Player);
+                
             }
+
             _logger.ZLogInformation($"Teamamles : {string.Join(",", _selfInformation.Teammales)}");
             _logger.ZLogInformation($"enmery : {string.Join("," , _selfInformation.Enmery)}");
             // Send to battle logger for persistence
