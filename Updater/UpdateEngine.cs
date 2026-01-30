@@ -25,48 +25,59 @@ public class UpdateEngine
             await WaitForProcessExitAsync(targetPid);
             Console.WriteLine("[Updater] Process exited - proceeding with file replacement");
 
-            // Step 2: Replace GUI executable
-            var newGuiPath = Path.Combine(tempDir, GuiExeName);
-            var oldGuiPath = Path.Combine(appDir, GuiExeName);
+            // Steps 2-4: Replace files (with rollback on error)
+            try
+            {
+                // Step 2: Replace GUI executable
+                var newGuiPath = Path.Combine(tempDir, GuiExeName);
+                var oldGuiPath = Path.Combine(appDir, GuiExeName);
 
-            if (File.Exists(newGuiPath))
-            {
-                Console.WriteLine("[Updater] Replacing NewGMHack.GUI.exe...");
-                ReplaceFile(newGuiPath, oldGuiPath);
-            }
-            else
-            {
-                Console.WriteLine($"[Updater] Warning: {GuiExeName} not found in temp directory");
-            }
+                if (File.Exists(newGuiPath))
+                {
+                    Console.WriteLine("[Updater] Replacing NewGMHack.GUI.exe...");
+                    ReplaceFile(newGuiPath, oldGuiPath);
+                }
+                else
+                {
+                    Console.WriteLine($"[Updater] Warning: {GuiExeName} not found in temp directory");
+                }
 
-            // Step 3: Replace Stub DLL
-            var newStubPath = Path.Combine(tempDir, StubDllName);
-            var oldStubPath = Path.Combine(appDir, StubDllName);
+                // Step 3: Replace Stub DLL
+                var newStubPath = Path.Combine(tempDir, StubDllName);
+                var oldStubPath = Path.Combine(appDir, StubDllName);
 
-            if (File.Exists(newStubPath))
-            {
-                Console.WriteLine("[Updater] Replacing NewGMHack.Stub.dll...");
-                ReplaceFile(newStubPath, oldStubPath);
-            }
-            else
-            {
-                Console.WriteLine($"[Updater] Warning: {StubDllName} not found in temp directory");
-            }
+                if (File.Exists(newStubPath))
+                {
+                    Console.WriteLine("[Updater] Replacing NewGMHack.Stub.dll...");
+                    ReplaceFile(newStubPath, oldStubPath);
+                }
+                else
+                {
+                    Console.WriteLine($"[Updater] Warning: {StubDllName} not found in temp directory");
+                }
 
-            // Step 4: Extract wwwroot.zip
-            var wwwrootZipPath = Path.Combine(tempDir, WwwrootZipName);
-            if (File.Exists(wwwrootZipPath))
-            {
-                Console.WriteLine("[Updater] Extracting wwwroot.zip...");
-                var wwwrootDest = Path.Combine(appDir, "wwwroot");
-                ExtractWwwroot(wwwrootZipPath, wwwrootDest);
+                // Step 4: Extract wwwroot.zip
+                var wwwrootZipPath = Path.Combine(tempDir, WwwrootZipName);
+                if (File.Exists(wwwrootZipPath))
+                {
+                    Console.WriteLine("[Updater] Extracting wwwroot.zip...");
+                    var wwwrootDest = Path.Combine(appDir, "wwwroot");
+                    ExtractWwwroot(wwwrootZipPath, wwwrootDest);
+                }
+                else
+                {
+                    Console.WriteLine($"[Updater] Info: {WwwrootZipName} not found (frontend-only update?)");
+                }
             }
-            else
+            catch (Exception ex)
             {
-                Console.WriteLine($"[Updater] Info: {WwwrootZipName} not found (frontend-only update?)");
+                Console.WriteLine($"[Updater] ERROR during update: {ex.Message}");
+                RollbackUpdate(appDir, $"Update failed: {ex.Message}");
+                return 1;
             }
 
             // Step 5: Verify new version
+            var oldGuiPath = Path.Combine(appDir, GuiExeName);
             if (File.Exists(oldGuiPath))
             {
                 var versionInfo = AssemblyName.GetAssemblyName(oldGuiPath).Version?.ToString() ?? "unknown";
@@ -187,5 +198,86 @@ public class UpdateEngine
         // Verify
         var fileCount = Directory.GetFiles(destinationPath, "*", SearchOption.AllDirectories).Length;
         Console.WriteLine($"[Updater] Extracted {fileCount} files to wwwroot");
+    }
+
+    private void RollbackUpdate(string appDir, string reason)
+    {
+        Console.WriteLine($"[Updater] ROLLBACK INITIATED: {reason}");
+        var backupDir = Path.Combine(appDir, ".backup");
+
+        if (!Directory.Exists(backupDir))
+        {
+            Console.WriteLine("[Updater] No backup directory found - cannot rollback");
+            return;
+        }
+
+        try
+        {
+            // Restore GUI exe
+            var backupGui = Path.Combine(backupDir, GuiExeName);
+            var appGui = Path.Combine(appDir, GuiExeName);
+            if (File.Exists(backupGui) && File.Exists(appGui))
+            {
+                Console.WriteLine("[Updater] Restoring NewGMHack.GUI.exe from backup...");
+                File.Delete(appGui);
+                File.Copy(backupGui, appGui, true);
+            }
+
+            // Restore Stub DLL
+            var backupStub = Path.Combine(backupDir, StubDllName);
+            var appStub = Path.Combine(appDir, StubDllName);
+            if (File.Exists(backupStub) && File.Exists(appStub))
+            {
+                Console.WriteLine("[Updater] Restoring NewGMHack.Stub.dll from backup...");
+                File.Delete(appStub);
+                File.Copy(backupStub, appStub, true);
+            }
+
+            // Restore wwwroot
+            var backupWwwroot = Path.Combine(backupDir, "wwwroot");
+            var appWwwroot = Path.Combine(appDir, "wwwroot");
+            if (Directory.Exists(backupWwwroot) && Directory.Exists(appWwwroot))
+            {
+                Console.WriteLine("[Updater] Restoring wwwroot from backup...");
+                Directory.Delete(appWwwroot, true);
+                CopyDirectory(backupWwwroot, appWwwroot);
+            }
+
+            Console.WriteLine("[Updater] Rollback completed");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Updater] ROLLBACK FAILED: {ex.Message}");
+        }
+
+        // Launch old version
+        var oldGuiPath = Path.Combine(appDir, GuiExeName);
+        if (File.Exists(oldGuiPath))
+        {
+            Console.WriteLine("[Updater] Launching restored version...");
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = oldGuiPath,
+                UseShellExecute = true,
+                WorkingDirectory = appDir
+            });
+        }
+    }
+
+    private void CopyDirectory(string sourceDir, string targetDir)
+    {
+        Directory.CreateDirectory(targetDir);
+
+        foreach (var file in Directory.GetFiles(sourceDir))
+        {
+            var destFile = Path.Combine(targetDir, Path.GetFileName(file));
+            File.Copy(file, destFile, true);
+        }
+
+        foreach (var dir in Directory.GetDirectories(sourceDir))
+        {
+            var destDir = Path.Combine(targetDir, Path.GetFileName(dir));
+            CopyDirectory(dir, destDir);
+        }
     }
 }
