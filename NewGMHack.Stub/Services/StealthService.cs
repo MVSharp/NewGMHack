@@ -10,6 +10,7 @@ namespace NewGMHack.Stub.Services
 {
     public class StealthService : BackgroundService
     {
+        private readonly SelfInformation         _self;
         private readonly ILogger<StealthService> _logger;
 
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
@@ -23,9 +24,10 @@ namespace NewGMHack.Stub.Services
 
         private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
-        public StealthService(ILogger<StealthService> logger)
+        public StealthService(ILogger<StealthService> logger , SelfInformation self)
         {
             _logger = logger;
+            _self   = self;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -55,7 +57,7 @@ namespace NewGMHack.Stub.Services
             uint currentPid = (uint)Process.GetCurrentProcess().Id;
             // Generate a random convincing looking title or just a random hash
             // Using a unique ID ensures no two instances have the same name
-            string newTitle = $"GM_HACK_Client_BY_MICHAEL_VAN_{Guid.NewGuid().ToString("N").Substring(0, 8)}";
+            string newTitle = $"GM_HACK_Client_BY_MICHAEL_VAN_{_self.PersonInfo.PlayerName}_{_self.PersonInfo.CondomName}_{Guid.NewGuid().ToString("N").Substring(0, 8)}";
 
             EnumWindows((hwnd, lParam) =>
             {

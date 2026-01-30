@@ -56,7 +56,7 @@ public class EntityScannerService : BackgroundService
 
     // Offsets from Lua (all uint for x86)
     //private const uint BaseOffset = 0x013100EC;
-    private const           uint   BaseOffset     =  0x012E606C;
+    private const           uint   BaseOffset     =  0x012E806C;
     private static readonly uint[] Offsets        = { 0x40, 0x0, 0x8 };
     private const           uint   HpOffset       = 0x34;
     private const           uint   MaxHpOffset    = 0x38;
@@ -229,19 +229,7 @@ public class EntityScannerService : BackgroundService
 
             // Read View Matrix for camera-relative movement calculation
             Matrix viewMatrix = Matrix.Identity;
-            if (_selfInfo.DevicePtr != IntPtr.Zero)
-            {
-                try
-                {
-                    var device = new SharpDX.Direct3D9.Device(_selfInfo.DevicePtr);
-                    viewMatrix = device.GetTransform(SharpDX.Direct3D9.TransformState.View);
-                }
-                catch
-                {
-                    // Fallback to identity if Device read fails
-                    viewMatrix = Matrix.Identity;
-                }
-            }
+            viewMatrix = GetViewMatrix(viewMatrix);
 
             var pointerBase = moduleBase + BaseOffset;
             if (!TryReadUInt(pointerBase,                      out var firstPtr)     || firstPtr     == 0) return (Vector3.Zero, Matrix.Identity, false);
@@ -256,62 +244,95 @@ public class EntityScannerService : BackgroundService
             _selfInfo.PersonInfo.Y         = entity.Position.Y;
             _selfInfo.PersonInfo.Z         = entity.Position.Z;
 
-            if (_selfInfo.ClientConfig.Features.IsFeatureEnable(FeatureName.IsIllusion))
-            {
-                var loc = GetRandomEntitesLoc();
-                if (TryReadUInt(entityStruct + PosPtrOffset, out var posPtr) && posPtr != 0)
-                {
-                    WriteFloat(posPtr + XyzOffsets[0], loc.x);
-                    WriteFloat(posPtr + XyzOffsets[1], loc.y);
-                    WriteFloat(posPtr + XyzOffsets[2], loc.z);
-                }
-            }
-
-            if (_selfInfo.ClientConfig.Features.IsFeatureEnable(FeatureName.FreezeEnemy))
-            {
-
-                var targets = _selfInfo.Targets.Where(x => x.EntityPtrAddress != 0 && x.EntityPosPtrAddress != 0)
-                                       .ToList();
-                int   count  = targets.Count;
-
-                for (int i = 0; i < count; i++)
-                {
-                    var e = targets[i];
-                    WriteFloat(e.EntityPosPtrAddress + XyzOffsets[0],  0 );
-                    WriteFloat(e.EntityPosPtrAddress + XyzOffsets[1], 200 + i * 50);
-                    WriteFloat(e.EntityPosPtrAddress + XyzOffsets[2], 0);
-                }
-            }
-            if (_selfInfo.ClientConfig.Features.IsFeatureEnable(FeatureName.SuckStarOverChina))
-            {
-                var targets = _selfInfo.Targets.Where(x => x.EntityPtrAddress != 0 && x.EntityPosPtrAddress != 0)
-                                       .ToList();
-                int   count  = targets.Count;
-                float radius = 100.0f;
-
-                for (int i = 0; i < count; i++)
-                {
-                    var e = targets[i];
-
-                    // distribute using spherical coordinates
-                    double theta = 2 * Math.PI * i / count;        // azimuth angle
-                    double phi   = Math.Acos(2.0 * i / count - 1); // polar angle
-
-                    float offsetX = (float)(radius * Math.Sin(phi) * Math.Cos(theta));
-                    float offsetY = (float)(radius * Math.Sin(phi) * Math.Sin(theta));
-                    float offsetZ = (float)(radius * Math.Cos(phi));
-
-                    WriteFloat(e.EntityPosPtrAddress + XyzOffsets[0], _selfInfo.PersonInfo.X + offsetX);
-                    WriteFloat(e.EntityPosPtrAddress + XyzOffsets[1], _selfInfo.PersonInfo.Y + offsetY);
-                    WriteFloat(e.EntityPosPtrAddress + XyzOffsets[2], _selfInfo.PersonInfo.Z + offsetZ);
-                }
-            }
+            IllusionApply(entityStruct);
+            FreezeEnemyApply();
+            SuckStarOverChinaApply();
 
             return (entity.Position, viewMatrix, true);
         }
         catch
         {
             return (Vector3.Zero, Matrix.Identity, false);
+        }
+    }
+
+    private Matrix GetViewMatrix(Matrix viewMatrix)
+    {
+        if (_selfInfo.DevicePtr != IntPtr.Zero)
+        {
+            try
+            {
+                var device = new SharpDX.Direct3D9.Device(_selfInfo.DevicePtr);
+                viewMatrix = device.GetTransform(SharpDX.Direct3D9.TransformState.View);
+            }
+            catch
+            {
+                // Fallback to identity if Device read fails
+                viewMatrix = Matrix.Identity;
+            }
+        }
+
+        return viewMatrix;
+    }
+
+    private void SuckStarOverChinaApply()
+    {
+        if (_selfInfo.ClientConfig.Features.IsFeatureEnable(FeatureName.SuckStarOverChina))
+        {
+            var targets = _selfInfo.Targets.Where(x => x.EntityPtrAddress != 0 && x.EntityPosPtrAddress != 0)
+                                   .ToList();
+            int   count  = targets.Count;
+            float radius = 100.0f;
+
+            for (int i = 0; i < count; i++)
+            {
+                var e = targets[i];
+
+                // distribute using spherical coordinates
+                double theta = 2 * Math.PI * i / count;        // azimuth angle
+                double phi   = Math.Acos(2.0 * i / count - 1); // polar angle
+
+                float offsetX = (float)(radius * Math.Sin(phi) * Math.Cos(theta));
+                float offsetY = (float)(radius * Math.Sin(phi) * Math.Sin(theta));
+                float offsetZ = (float)(radius * Math.Cos(phi));
+
+                WriteFloat(e.EntityPosPtrAddress + XyzOffsets[0], _selfInfo.PersonInfo.X + offsetX);
+                WriteFloat(e.EntityPosPtrAddress + XyzOffsets[1], _selfInfo.PersonInfo.Y + offsetY);
+                WriteFloat(e.EntityPosPtrAddress + XyzOffsets[2], _selfInfo.PersonInfo.Z + offsetZ);
+            }
+        }
+    }
+
+    private void FreezeEnemyApply()
+    {
+        if (_selfInfo.ClientConfig.Features.IsFeatureEnable(FeatureName.FreezeEnemy))
+        {
+
+            var targets = _selfInfo.Targets.Where(x => x.EntityPtrAddress != 0 && x.EntityPosPtrAddress != 0)
+                                   .ToList();
+            int   count  = targets.Count;
+
+            for (int i = 0; i < count; i++)
+            {
+                var e = targets[i];
+                WriteFloat(e.EntityPosPtrAddress + XyzOffsets[0], 0 );
+                WriteFloat(e.EntityPosPtrAddress + XyzOffsets[1], 200 + i * 50);
+                WriteFloat(e.EntityPosPtrAddress + XyzOffsets[2], 0);
+            }
+        }
+    }
+
+    private void IllusionApply(uint entityStruct)
+    {
+        if (_selfInfo.ClientConfig.Features.IsFeatureEnable(FeatureName.IsIllusion))
+        {
+            var loc = GetRandomEntitesLoc();
+            if (TryReadUInt(entityStruct + PosPtrOffset, out var posPtr) && posPtr != 0)
+            {
+                WriteFloat(posPtr + XyzOffsets[0], loc.x);
+                WriteFloat(posPtr + XyzOffsets[1], loc.y);
+                WriteFloat(posPtr + XyzOffsets[2], loc.z);
+            }
         }
     }
 
@@ -468,7 +489,7 @@ public class EntityScannerService : BackgroundService
         if (!TryReadUInt(entityStruct + PosPtrOffset, out var posPtr) || posPtr == 0) return;
 
         WriteFloat(posPtr + XyzOffsets[0], newPos.X);
-        //WriteFloat(posPtr + XyzOffsets[1], newPos.Y); // Y is height, usually not modified
+        WriteFloat(posPtr + XyzOffsets[1], newPos.Y); // Y is height, usually not modified
         WriteFloat(posPtr + XyzOffsets[2], newPos.Z);
     }
 
