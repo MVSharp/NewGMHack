@@ -110,8 +110,11 @@ public static float DecodePosition(byte high, byte low)
         // Modify in-place using spans
         ref var modAttack = ref MemoryMarshal.AsRef<Attack1335>(modified.AsSpan());
         var modTargets = MemoryMarshal.Cast<byte, TargetData>(modified.AsSpan(headerSize, targetDataSize));
+        if (_self.Teammales.Contains(modAttack.PlayerId))
+        {
 
-        if (modAttack.PlayerId != _self.PersonInfo.PersonId)
+        }
+        else if (modAttack.PlayerId != _self.PersonInfo.PersonId)
         {
              var tmpId = modAttack.PlayerId;
              modAttack.PlayerId = _self.PersonInfo.PersonId;
