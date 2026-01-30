@@ -124,9 +124,9 @@ namespace NewGmHack.GUI
                 if (forceUpdateTriggered)
                 {
                     // Force update triggered - don't show main window or allow injection
-                    // AutoUpdater.NET will handle download and restart
+                    // UpdateService will launch updater stub and exit
                     _host.Services.GetRequiredService<ILogger<App>>()
-                        .LogInformation("Force update triggered - waiting for AutoUpdater.NET to complete");
+                        .LogInformation("Force update triggered - launching updater stub");
                     return;
                 }
 
