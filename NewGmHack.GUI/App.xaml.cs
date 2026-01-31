@@ -32,6 +32,23 @@ namespace NewGmHack.GUI
                                                               $"logs/{timestamp.ToLocalTime():yyyy-MM-dd}_{sequenceNumber:000}.log";
                                                           options.RollingInterval = RollingInterval.Day;
                                                           options.RollingSizeKB = 10240; // 10MB per file
+
+ options.UsePlainTextFormatter(formatter =>
+ {
+     formatter.SetPrefixFormatter($"{0}|{1}|",
+                                  (in MessageTemplate template,
+                                   in LogInfo info) =>
+                                      template.Format(info.Timestamp,
+                                          info.LogLevel));
+     formatter.SetSuffixFormatter($" ({0})",
+                                  (in MessageTemplate template,
+                                   in LogInfo info) =>
+                                      template.Format(info.Category));
+     formatter.SetExceptionFormatter((writer, ex) =>
+                                         Utf8StringInterpolation.Utf8String
+                                            .Format(writer, $"{ex.Message}"));
+ });
+
                                                       });
                                                   })
                                                   .ConfigureServices(services =>
