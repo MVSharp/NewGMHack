@@ -11,29 +11,6 @@ using Microsoft.Extensions.Logging;
 namespace NewGmHack.GUI.Services;
 
 /// <summary>
-/// Helper for escaping command-line arguments
-/// </summary>
-internal static class ArgumentHelper
-{
-    /// <summary>
-    /// Escape a command-line argument according to Windows rules
-    /// </summary>
-    public static string EscapeArgument(string arg)
-    {
-        if (string.IsNullOrEmpty(arg))
-            return "\"\"";
-
-        // No escaping needed if no special characters
-        if (!arg.Any(c => c == ' ' || c == '\t' || c == '"' || c == '\\'))
-            return arg;
-
-        // Escape backslashes and quotes, then wrap in quotes
-        var escaped = arg.Replace("\\", "\\\\").Replace("\"", "\\\"");
-        return $"\"{escaped}\"";
-    }
-}
-
-/// <summary>
 /// Auto-update service with force update, frontend hot-reload, and rollback support
 /// </summary>
 public class AutoUpdateService
@@ -300,7 +277,12 @@ public class AutoUpdateService
             var updaterStartInfo = new ProcessStartInfo
             {
                 FileName = updaterPath,
-                Arguments = $"--pid {currentPid} --temp {ArgumentHelper.EscapeArgument(tempDir)} --app-dir {ArgumentHelper.EscapeArgument(appDir)}",
+                ArgumentList =
+                {
+                    "--pid", currentPid.ToString(),
+                    "--temp", tempDir,
+                    "--app-dir", appDir
+                },
                 UseShellExecute = true
             };
 
