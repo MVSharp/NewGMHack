@@ -155,6 +155,26 @@ jobs:
             Add-Content -Path "release/checksums.txt" -Value "$($hash.ToLower())  $($_.Name)"
           }
 
+      - name: Generate update.xml for AutoUpdater.NET
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $releaseTag = "${{ github.ref_name }}"
+          $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/${releaseTag}"
+
+          $xmlContent = @"
+          <?xml version='1.0' encoding='UTF-8'?>
+          <item>
+            <version>$version</version>
+            <url>$downloadUrl/NewGmHack.GUI.exe</url>
+            <changelog>https://github.com/${{ github.repository }}/releases/tag/${releaseTag}</changelog>
+            <mandatory>true</mandatory>
+            <args>/S</args>
+          </item>
+          "@
+
+          # Save XML content
+          $xmlContent | Out-File -FilePath "release/update.xml" -Encoding UTF8
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
