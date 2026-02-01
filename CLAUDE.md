@@ -2,6 +2,125 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## AI Configuration & Workflow
+
+### Branch Strategy
+
+This project follows a strict **three-branch workflow**:
+
+```
+feat/fix-* (feature branches)
+    ↓
+dev (development)
+    ↓
+master (production)
+```
+
+**Rules:**
+1. **Feature branches** (`feat/*`, `fix/*`) - Created from `dev`, merged back to `dev`
+2. **dev** - Integration branch, receives all feature branches
+3. **master** - Production branch, only receives merges from `dev`
+
+**Merging Policy:**
+- ✅ **ALLOWED**: `feat/*` or `fix/*` → `dev` (via PR)
+- ✅ **ALLOWED**: `dev` → `master` (via PR)
+- ❌ **FORBIDDEN**: Direct `feat/*` or `fix/*` → `master` PRs
+- ❌ **FORBIDDEN**: Direct pushes to `dev` or `master` (must use PRs)
+
+**GitHub CLI Workflow:**
+```bash
+# 1. Create feature branch from dev
+git checkout dev
+git checkout -b feat/your-feature-name
+
+# 2. Work and commit to feature branch
+git add .
+git commit -m "feat(scope): description"
+
+# 3. Push feature branch
+git push origin feat/your-feature-name
+
+# 4. Create PR: feat → dev
+gh pr create --base dev --head feat/your-feature-name --title "feat(scope): description"
+
+# 5. Squash and merge to dev (keeps history clean)
+gh pr merge PR_NUMBER --squash --delete-branch
+
+# 6. Update local dev
+git checkout dev
+git pull origin dev
+
+# 7. Create PR: dev → master
+gh pr create --base master --head dev --title "Release: Description"
+
+# 8. Merge to master (use --merge to preserve release)
+gh pr merge PR_NUMBER --merge
+```
+
+### Allowed Commands for AI
+
+**Git Operations:**
+- ✅ `git checkout` - Switch branches
+- ✅ `git checkout -b` - Create new branches
+- ✅ `git add` - Stage changes
+- ✅ `git commit` - Commit changes
+- ✅ `git status` - Check repository state
+- ✅ `git log` - View commit history
+- ✅ `git diff` - View changes
+- ✅ `git pull` - Pull from remote
+- ✅ `git push` - Push to remote
+- ✅ `git merge` - Merge branches locally
+- ✅ `gh pr` - GitHub CLI for PR operations
+
+**Build Commands:**
+- ✅ `dotnet build` - Build .NET projects
+- ✅ `dotnet test` - Run tests (if available)
+- ✅ `pnpm install` - Install frontend dependencies
+- ✅ `pnpm build` - Build frontend
+- ✅ `./build-release.ps1` - Full release build
+
+**File Operations:**
+- ✅ `Read` tool - Read files to understand codebase
+- ✅ `Edit` tool - Make targeted edits
+- ✅ `Write` tool - Create new files
+- ✅ `Glob` tool - Find files by pattern
+- ✅ `Grep` tool - Search code
+
+**Prohibited Actions:**
+- ❌ Do NOT create direct PRs from `feat/*` or `fix/*` to `master`
+- ❌ Do NOT push directly to `dev` or `master` (branch protection rules)
+- ❌ Do NOT modify build configurations without asking
+- ❌ Do NOT change the branch workflow
+
+### Commit Message Conventions
+
+Follow conventional commits format:
+- `feat:` - New features
+- `fix:` - Bug fixes
+- `docs:` - Documentation changes
+- `test:` - Adding or updating tests
+- `refactor:` - Code refactoring
+- `perf:` - Performance improvements
+- `chore:` - Maintenance tasks
+
+Examples:
+```
+feat(updater): add Spectre.Console progress visualization
+fix(updater): properly escape command-line arguments
+docs: update architecture documentation for v2.0
+```
+
+### Code Review Process
+
+All changes go through PR review:
+1. Create PR following branch strategy
+2. Automated checks (build, tests) must pass
+3. Code review by maintainers
+4. Squash merge to `dev` (for features)
+5. Merge commit to `master` (for releases)
+
+---
+
 ## Build Commands
 
 ### Full Release Build
