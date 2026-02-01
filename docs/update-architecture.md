@@ -386,6 +386,242 @@ public async Task VerifySignature(string assetPath)
 }
 ```
 
+## User Experience Enhancements (v2.0)
+
+### Spectre.Console Integration
+
+The updater uses [Spectre.Console](https://spectreconsole.net/) for rich terminal output with progress bars, colors, and styled messages.
+
+#### Progress Bars
+
+```csharp
+// Download progress with live updates
+await AnsiConsole.Progress()
+    .StartAsync(async ctx =>
+    {
+        var task = ctx.AddTask("[green]Downloading GUI[/]");
+        var downloadSize = update.Assets.First(a => a.Name.Contains("GUI")).Size;
+
+        while (!ctx.IsFinished)
+        {
+            var progress = await GetDownloadProgress();
+            task.Value(progress.PercentComplete);
+            task.MaxValue = 100;
+        }
+    });
+
+// Output example:
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ [---------------] 45%
+```
+
+#### Styled Messages
+
+```csharp
+// Success messages
+AnsiConsole.MarkupLine("[green bold]✔[/] Update downloaded successfully");
+AnsiConsole.MarkupLine("[dim]→[/] Verified checksums for 3 assets");
+
+// Error messages
+AnsiConsole.MarkupLine("[red bold]✗[/] Checksum verification failed");
+AnsiConsole.MarkupLine("[yellow]⚠[/] Update will be rolled back[/]");
+
+// Info messages
+AnsiConsole.MarkupLine("[cyan]ℹ[/] Checking for updates...");
+AnsiConsole.MarkupLine("[blue]→[/] Current version: [bold]{0}[/]", currentVersion);
+```
+
+#### Table Display
+
+```csharp
+// Display update info
+var table = new Table();
+table.AddColumn("[yellow]Asset[/]");
+table.AddColumn("[yellow]Size[/]");
+table.AddColumn("[yellow]Status[/]");
+
+table.AddRow(
+    "NewGMHack.GUI.1.0.750.0.zip",
+    "15.2 MB",
+    "[green]Ready[/]"
+);
+table.AddRow(
+    "NewGMHack.Stub.1.0.750.0.zip",
+    "2.8 MB",
+    "[green]Ready[/]"
+);
+
+AnsiConsole.Write(table);
+```
+
+### ZLogger Structured Logging
+
+The updater uses ZLogger for high-performance structured logging with file rolling.
+
+#### Log Format
+
+```csharp
+// Structured logging with ZLogger
+_logger.UpdateInfo(
+    "UpdateAvailable",
+    currentVersion,
+    latestVersion,
+    downloadSize
+);
+
+// Output:
+// [2025-02-02 14:30:15] [INFO] UpdateAvailable CurrentVersion=1.0.747.10419 LatestVersion=1.0.750.0 DownloadSize=18200432
+```
+
+#### Log Paths
+
+```
+logs/updater-{date}-{sequence}.log
+Example: logs/updater-20250202-1.log
+```
+
+#### Rolling Configuration
+
+- **Daily rotation** - New log file each day
+- **10MB per file** - Automatic rollover when size exceeded
+- **30-day retention** - Old logs automatically cleaned up
+- **Structured format** - Key-value pairs for easy parsing
+
+#### Log Examples
+
+```csharp
+// Download start
+_logger.DownloadStart(assetName, assetSize, downloadUrl);
+// [2025-02-02 14:30:16] [INFO] DownloadStart Asset=NewGMHack.GUI.zip Size=18200432 Url=https://github.com/...
+
+// Download progress (every 10%)
+_logger.DownloadProgress(assetName, 30, totalBytes, speed);
+// [2025-02-02 14:30:20] [INFO] DownloadProgress Asset=NewGMHack.GUI.zip Percent=30 Bytes=5460129 Speed=2.5MB/s
+
+// Download complete
+_logger.DownloadComplete(assetName, elapsed, avgSpeed);
+// [2025-02-02 14:30:25] [INFO] DownloadComplete Asset=NewGMHack.GUI.zip Elapsed=00:00:09 Speed=2.0MB/s
+
+// Checksum verification
+_logger.ChecksumVerify(assetName, expectedChecksum, actualChecksum, isValid);
+// [2025-02-02 14:30:26] [INFO] ChecksumVerify Asset=NewGMHack.GUI.zip Expected=abc123... Actual=abc123... Valid=True
+```
+
+### Changelog Display
+
+The updater displays release notes during and after the update process.
+
+#### During Update (Brief)
+
+```csharp
+// Show first 5 lines of changelog while downloading
+var briefNotes = update.ReleaseNotes
+    .Split('\n')
+    .Take(5)
+    .ToArray();
+
+AnsiConsole.MarkupLine("[bold cyan]What's New in v{0}:[/]", update.Version);
+foreach (var line in briefNotes)
+{
+    AnsiConsole.MarkupLine("  {0}", line);
+}
+```
+
+**Example Output:**
+```
+What's New in v1.0.750.0:
+  - Added Spectre.Console for enhanced console output
+  - Improved download progress with 10% increments
+  - Added structured logging with ZLogger
+  - Enhanced changelog display during updates
+  - Fixed rollback timeout issues
+```
+
+#### After Update (Full)
+
+```csharp
+// Display full changelog in web UI after restart
+public class ChangelogViewModel
+{
+    public string Version { get; set; }
+    public string[] ReleaseNotes { get; set; }
+    public DateTime ReleaseDate { get; set; }
+}
+
+// Auto-show on first launch after update
+if (_wasJustUpdated)
+{
+    var changelog = await GetChangelog(latestVersion);
+    _windowService.ShowDialog<ChangelogWindow>(changelog);
+}
+```
+
+### Download Progress Tracking
+
+Downloads report progress at 10% increments to balance feedback and performance.
+
+```csharp
+public async Task DownloadWithProgress(string url, string outputPath)
+{
+    var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+    var totalBytes = response.Content.Headers.ContentLength ?? 0;
+    var totalBytesRead = 0L;
+    var lastReportedProgress = 0;
+
+    using var stream = await response.Content.ReadAsStreamAsync();
+    using var fileStream = File.Create(outputPath);
+
+    var buffer = new byte[81920];
+    int bytesRead;
+
+    while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+    {
+        await fileStream.WriteAsync(buffer, 0, bytesRead);
+        totalBytesRead += bytesRead;
+
+        // Report progress every 10%
+        var progress = (int)((totalBytesRead * 100) / totalBytes);
+        if (progress >= lastReportedProgress + 10)
+        {
+            _logger.DownloadProgress(Path.GetFileName(outputPath), progress, totalBytesRead);
+            lastReportedProgress = progress;
+        }
+    }
+}
+```
+
+**Example Log Output:**
+```
+[2025-02-02 14:30:16] [INFO] DownloadProgress Asset=NewGMHack.GUI.zip Percent=10 Bytes=1820043
+[2025-02-02 14:30:18] [INFO] DownloadProgress Asset=NewGMHack.GUI.zip Percent=20 Bytes=3640086
+[2025-02-02 14:30:20] [INFO] DownloadProgress Asset=NewGMHack.GUI.zip Percent=30 Bytes=5460129
+...
+[2025-02-02 14:30:44] [INFO] DownloadProgress Asset=NewGMHack.GUI.zip Percent=100 Bytes=18200432
+```
+
+### Combined Console Output Example
+
+```
+[14:30:15 INF] CheckForUpdates Current=1.0.747.10419
+[cyan]ℹ[/] Checking for updates...
+[cyan]ℹ[/] Found new version: [bold green]v1.0.750.0[/]
+
+┌────────────────────────────────────┬──────────┬──────────┐
+│ Asset                              │ Size     │ Status   │
+├────────────────────────────────────┼──────────┼──────────┤
+│ NewGMHack.GUI.1.0.750.0.zip       │ 15.2 MB  │ Ready    │
+│ NewGMHack.Stub.1.0.750.0.zip      │ 2.8 MB   │ Ready    │
+│ frontend.1.0.750.0.zip            │ 1.1 MB   │ Ready    │
+└────────────────────────────────────┴──────────┴──────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ [---------------] 30%
+[green]✔[/] Downloaded NewGMHack.GUI.zip (15.2 MB in 9s)
+[green]✔[/] Verified checksum: abc123def456...
+[green]✔[/] Extracted to temp/update/1.0.750.0/
+
+[yellow]⚠[/] Restart required to complete update
+[dim]Press any key to restart...[/]
+```
+
 ## Rollback Scenarios
 
 ### Automatic Rollback
