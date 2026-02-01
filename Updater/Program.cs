@@ -34,6 +34,26 @@ class Program
 
         rootCommand.SetHandler(async (pid, tempDir, appDir) =>
         {
+            // Display brief changelog if available
+            var changelogPath = Path.Combine(tempDir, "CHANGELOG.md");
+            if (File.Exists(changelogPath))
+            {
+                try
+                {
+                    var changelogContent = await File.ReadAllTextAsync(changelogPath);
+                    var lines = changelogContent.Split('\n', 2);
+                    var version = lines.Length > 0 ? lines[0].TrimStart('#', ' ') : "Unknown Version";
+                    var markdown = lines.Length > 1 ? lines[1] : "No release notes available.";
+
+                    AnsiConsole.WriteLine();
+                    ChangelogFormatter.DisplayBriefChangelog(version, markdown);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to read changelog: {Message}", ex.Message);
+                }
+            }
+
             var engine = new UpdateEngine(loggerFactory.CreateLogger<UpdateEngine>());
             Environment.ExitCode = await engine.ExecuteUpdateAsync(pid, tempDir, appDir);
         }, pidOption, tempOption, appDirOption);

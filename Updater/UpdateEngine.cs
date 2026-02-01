@@ -175,6 +175,36 @@ public class UpdateEngine
                     _logger.LogInformation("Update completed successfully!");
                     AnsiConsole.MarkupLine("[bold green]✓[/] [bold green]Update completed successfully![/]");
 
+                    // Display full changelog after completion
+                    var changelogPath = Path.Combine(tempDir, "CHANGELOG.md");
+                    if (File.Exists(changelogPath))
+                    {
+                        try
+                        {
+                            var changelogContent = await File.ReadAllTextAsync(changelogPath);
+                            var lines = changelogContent.Split('\n', 2);
+                            var version = lines.Length > 0 ? lines[0].TrimStart('#', ' ') : "Unknown Version";
+                            var markdown = lines.Length > 1 ? lines[1] : "No release notes available.";
+
+                            ChangelogFormatter.DisplayFullChangelog(version, markdown);
+
+                            // Clean up changelog file
+                            try
+                            {
+                                File.Delete(changelogPath);
+                                _logger.LogDebug("Cleaned up changelog file");
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Could not delete changelog file: {Message}", ex.Message);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to display changelog: {Message}", ex.Message);
+                        }
+                    }
+
                     return 0;
                 }
                 catch (Exception ex)

@@ -263,6 +263,13 @@ public class AutoUpdateService
                 await VerifyAllChecksumsAsync(checksumsAsset.BrowserDownloadUrl, tempDir);
             }
 
+            // Step 4.5: Save changelog for updater to display
+            var changelogPath = Path.Combine(tempDir, "CHANGELOG.md");
+            var versionString = release.TagName.TrimStart('v');
+            var changelogContent = $"# {versionString}\n\n{release.Body}";
+            await File.WriteAllTextAsync(changelogPath, changelogContent);
+            _logger.LogInformation("Saved changelog to: {ChangelogPath}", changelogPath);
+
             // Step 5: Extract embedded updater stub
             var updaterPath = Path.Combine(tempDir, "Updater.exe");
             await ExtractUpdaterStubAsync(updaterPath);
@@ -638,6 +645,9 @@ internal record GitHubRelease
 
     [JsonPropertyName("assets")]
     public GitHubAsset[] Assets { get; init; } = Array.Empty<GitHubAsset>();
+
+    [JsonPropertyName("body")]
+    public string Body { get; init; } = string.Empty;
 }
 
 /// <summary>
