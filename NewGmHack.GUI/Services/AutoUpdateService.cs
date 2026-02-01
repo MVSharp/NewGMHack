@@ -387,16 +387,40 @@ public class AutoUpdateService
     }
 
     /// <summary>
-    /// Download file from URL
+    /// Download file from URL with progress tracking
     /// </summary>
     private async Task DownloadFileAsync(string url, string destinationPath)
     {
         var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
         response.EnsureSuccessStatusCode();
 
+        var totalBytes = response.Content.Headers.ContentLength ?? 0;
         await using var fileStream = File.Create(destinationPath);
         await using var contentStream = await response.Content.ReadAsStreamAsync();
-        await contentStream.CopyToAsync(fileStream);
+
+        var buffer = new byte[81920]; // 80KB buffer
+        long bytesRead = 0;
+        int lastReportedPercent = -1;
+        int read;
+
+        while ((read = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+        {
+            await fileStream.WriteAsync(buffer, 0, read);
+            bytesRead += read;
+
+            if (totalBytes > 0)
+            {
+                var percent = (int)(bytesRead * 100 / totalBytes);
+                if (percent != lastReportedPercent && percent % 10 == 0) // Log every 10%
+                {
+                    _logger.LogInformation("Download progress: {Percent}% ({Bytes} / {TotalBytes})",
+                        percent, bytesRead, totalBytes);
+                    lastReportedPercent = percent;
+                }
+            }
+        }
+
+        _logger.LogInformation("Download complete: {FilePath} ({Size} bytes)", destinationPath, bytesRead);
     }
 
     /// <summary>
