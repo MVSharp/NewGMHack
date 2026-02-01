@@ -6,7 +6,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using AutoUpdaterDotNET;
 using Microsoft.Extensions.Logging;
 
 namespace NewGmHack.GUI.Services;
@@ -89,7 +88,7 @@ public class AutoUpdateService
             if (changeDetection.GuiChanged || changeDetection.StubChanged)
             {
                 _logger.LogInformation("GUI or Stub changed - initiating force update");
-                ApplyForceUpdateAsync(releaseInfo);
+                await ApplyForceUpdateAsync(releaseInfo);
                 return true; // Signal caller to exit - don't continue with old DLL
             }
             
@@ -222,13 +221,15 @@ public class AutoUpdateService
     }
 
     /// <summary>
-    /// Apply force update (GUI or Stub changed)
+    /// Apply force update (GUI or Stub changed) using custom updater stub
     /// </summary>
-    private void ApplyForceUpdateAsync(GitHubRelease release)
+    private async Task ApplyForceUpdateAsync(GitHubRelease release)
     {
         try
         {
-            // Create full backup
+            _logger.LogInformation("Starting custom force update flow");
+
+            // Step 1: Create backup
             CreateBackup(new[]
             {
                 "NewGMHack.GUI.exe",
@@ -236,23 +237,55 @@ public class AutoUpdateService
                 _wwwrootPath
             });
 
-            // Configure AutoUpdater.NET
-            var updateXmlUrl = $"{release.HtmlUrl}/download/update.xml";
-            AutoUpdater.Mandatory = true;
-            AutoUpdater.UpdateMode = Mode.ForcedDownload;
-            AutoUpdater.Synchronous = false;
-            AutoUpdater.ShowSkipButton = false;
-            AutoUpdater.ShowRemindLaterButton = false;
+            // Step 2: Create temp directory for update files
+            var tempDir = Path.Combine(Path.GetTempPath(), $"NewGMHack_Update_{Guid.NewGuid()}");
+            Directory.CreateDirectory(tempDir);
+            _logger.LogInformation("Created temp directory: {TempDir}", tempDir);
 
-            // Subscribe to update events
-            AutoUpdater.ApplicationExitEvent += OnApplicationExitForUpdate;
+            // Step 3: Download all assets to temp directory
+            var downloadTasks = new List<Task>
+            {
+                DownloadAssetAsync(release, "NewGMHack.GUI.exe", tempDir),
+                DownloadAssetAsync(release, "NewGMHack.Stub.dll", tempDir),
+                DownloadAssetAsync(release, "wwwroot.zip", tempDir)
+            };
 
-            // Trigger AutoUpdater.NET
-            _logger.LogInformation("Starting AutoUpdater.NET with XML: {XmlUrl}", updateXmlUrl);
-            AutoUpdater.Start(updateXmlUrl);
+            await Task.WhenAll(downloadTasks);
+            _logger.LogInformation("All assets downloaded to temp directory");
 
-            // Note: AutoUpdater.NET will handle download and restart
-            // This method will not return (app will exit)
+            // Step 4: Verify checksums
+            var checksumsAsset = release.Assets.FirstOrDefault(a =>
+                a.Name.Equals("checksums.txt", StringComparison.OrdinalIgnoreCase));
+
+            if (checksumsAsset != null)
+            {
+                _logger.LogInformation("Verifying checksums...");
+                await VerifyAllChecksumsAsync(checksumsAsset.BrowserDownloadUrl, tempDir);
+            }
+
+            // Step 5: Extract embedded updater stub
+            var updaterPath = Path.Combine(tempDir, "Updater.exe");
+            await ExtractUpdaterStubAsync(updaterPath);
+            _logger.LogInformation("Updater stub extracted to: {UpdaterPath}", updaterPath);
+
+            // Step 6: Launch updater and exit
+            var currentPid = Process.GetCurrentProcess().Id;
+            var appDir = AppDomain.CurrentDomain.BaseDirectory;
+
+            _logger.LogInformation("Launching updater stub - PID: {Pid}, AppDir: {AppDir}", currentPid, appDir);
+
+            var updaterStartInfo = new ProcessStartInfo
+            {
+                FileName = updaterPath,
+                Arguments = $"--pid {currentPid} --temp \"{tempDir}\" --app-dir \"{appDir}\"",
+                UseShellExecute = true
+            };
+
+            Process.Start(updaterStartInfo);
+
+            // Step 7: Exit immediately (releases file lock)
+            _logger.LogInformation("Exiting to allow updater to replace files");
+            Environment.Exit(0);
         }
         catch (Exception ex)
         {
@@ -260,15 +293,6 @@ public class AutoUpdateService
             RestoreBackup();
             throw;
         }
-    }
-
-    /// <summary>
-    /// Called when AutoUpdater.NET triggers application exit for update
-    /// </summary>
-    private void OnApplicationExitForUpdate()
-    {
-        _logger.LogInformation("Application exiting for update");
-        // Cleanup will be handled by AutoUpdater.NET
     }
 
     /// <summary>
@@ -404,6 +428,101 @@ public class AutoUpdateService
         }
 
         _logger.LogInformation("Checksum verified for {FileName}", fileName);
+    }
+
+    /// <summary>
+    /// Download single asset to temp directory
+    /// </summary>
+    private async Task DownloadAssetAsync(GitHubRelease release, string assetName, string destDir)
+    {
+        var asset = release.Assets.FirstOrDefault(a =>
+            a.Name.Equals(assetName, StringComparison.OrdinalIgnoreCase));
+
+        if (asset == null)
+        {
+            _logger.LogWarning("Asset not found in release: {AssetName}", assetName);
+            return;
+        }
+
+        var destPath = Path.Combine(destDir, assetName);
+        _logger.LogInformation("Downloading {AssetName}...", assetName);
+
+        try
+        {
+            await DownloadFileAsync(asset.BrowserDownloadUrl, destPath);
+            _logger.LogInformation("Downloaded {AssetName} to {Path}", assetName, destPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to download {AssetName}", assetName);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Verify all checksums for downloaded files
+    /// </summary>
+    private async Task VerifyAllChecksumsAsync(string checksumsUrl, string tempDir)
+    {
+        var response = await _httpClient.GetAsync(checksumsUrl);
+        response.EnsureSuccessStatusCode();
+
+        var checksumsContent = await response.Content.ReadAsStringAsync();
+
+        foreach (var line in checksumsContent.Split('\n'))
+        {
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 2)
+            {
+                var expectedHash = parts[0].ToLowerInvariant();
+                var fileName = parts[1];
+                var filePath = Path.Combine(tempDir, fileName);
+
+                if (File.Exists(filePath))
+                {
+                    await VerifyFileChecksumAsync(filePath, expectedHash);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Verify single file checksum
+    /// </summary>
+    private async Task VerifyFileChecksumAsync(string filePath, string expectedHash)
+    {
+        using var sha256 = SHA256.Create();
+        await using var fileStream = File.OpenRead(filePath);
+        var hashBytes = await sha256.ComputeHashAsync(fileStream);
+        var actualHash = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+
+        if (actualHash != expectedHash)
+        {
+            throw new InvalidOperationException(
+                $"Checksum mismatch for {Path.GetFileName(filePath)}: expected {expectedHash}, got {actualHash}");
+        }
+
+        _logger.LogInformation("Checksum verified: {FileName}", Path.GetFileName(filePath));
+    }
+
+    /// <summary>
+    /// Extract embedded updater stub to temp directory
+    /// </summary>
+    private async Task ExtractUpdaterStubAsync(string destPath)
+    {
+        var assembly = Assembly.GetExecutingAssembly();
+        var resourceName = "NewGmHack.GUI.Resources.Updater.exe";
+
+        await using var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream == null)
+        {
+            throw new InvalidOperationException("Updater stub not found as embedded resource. Check build process.");
+        }
+
+        await using var fileStream = File.Create(destPath);
+        await stream.CopyToAsync(fileStream);
+
+        _logger.LogInformation("Extracted updater stub ({Size} bytes)", new FileInfo(destPath).Length);
     }
 
     /// <summary>

@@ -32,6 +32,23 @@ namespace NewGmHack.GUI
                                                               $"logs/{timestamp.ToLocalTime():yyyy-MM-dd}_{sequenceNumber:000}.log";
                                                           options.RollingInterval = RollingInterval.Day;
                                                           options.RollingSizeKB = 10240; // 10MB per file
+
+ options.UsePlainTextFormatter(formatter =>
+ {
+     formatter.SetPrefixFormatter($"{0}|{1}|",
+                                  (in MessageTemplate template,
+                                   in LogInfo info) =>
+                                      template.Format(info.Timestamp,
+                                          info.LogLevel));
+     formatter.SetSuffixFormatter($" ({0})",
+                                  (in MessageTemplate template,
+                                   in LogInfo info) =>
+                                      template.Format(info.Category));
+     formatter.SetExceptionFormatter((writer, ex) =>
+                                         Utf8StringInterpolation.Utf8String
+                                            .Format(writer, $"{ex.Message}"));
+ });
+
                                                       });
                                                   })
                                                   .ConfigureServices(services =>
@@ -124,9 +141,9 @@ namespace NewGmHack.GUI
                 if (forceUpdateTriggered)
                 {
                     // Force update triggered - don't show main window or allow injection
-                    // AutoUpdater.NET will handle download and restart
+                    // UpdateService will launch updater stub and exit
                     _host.Services.GetRequiredService<ILogger<App>>()
-                        .LogInformation("Force update triggered - waiting for AutoUpdater.NET to complete");
+                        .LogInformation("Force update triggered - launching updater stub");
                     return;
                 }
 

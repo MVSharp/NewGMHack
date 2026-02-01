@@ -82,15 +82,27 @@ jobs:
           else { New-Item -ItemType Directory -Path $guiWwwRoot | Out-Null }
           Copy-Item -Path "frontend/dist/*" -Destination $guiWwwRoot -Recurse -Force
 
-      - name: Build GUI
+      - name: Build GUI (with embedded Updater)
         if: needs.detect-changes.outputs.gui-changed == 'true' || needs.detect-changes.outputs.any-changed == 'true'
         run: |
+          dotnet publish Updater/Updater.csproj -c Release -r win-x86 --self-contained -o temp_updater
           dotnet build "NewGmHack.GUI/NewGmHack.GUI.csproj" -c Release -p:Platform=x86
 
       - name: Build Stub
         # Always build Stub (we need its version for every release)
         run: |
           dotnet build "NewGMHack.Stub/NewGMHack.Stub.csproj" -c Release -p:Platform=x86
+
+      - name: Build Updater Stub
+        run: |
+          dotnet publish Updater/Updater.csproj -c Release -r win-x86 --self-contained -o temp_updater
+
+      - name: Verify Updater Stub
+        run: |
+          if (!(Test-Path "temp_updater/Updater.exe")) {
+            throw "Updater.exe not found"
+          }
+          Write-Host "Updater stub built successfully"
 
       - name: Get Version from Stub
         id: version
@@ -143,26 +155,6 @@ jobs:
             Add-Content -Path "release/checksums.txt" -Value "$($hash.ToLower())  $($_.Name)"
           }
 
-      - name: Generate update.xml for AutoUpdater.NET
-        run: |
-          $version = "${{ steps.version.outputs.version }}"
-          $releaseTag = "${{ github.ref_name }}"
-          $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/${releaseTag}"
-
-          $xmlContent = @"
-          <?xml version='1.0' encoding='UTF-8'?>
-          <item>
-            <version>$version</version>
-            <url>$downloadUrl/NewGmHack.GUI.exe</url>
-            <changelog>https://github.com/${{ github.repository }}/releases/tag/${releaseTag}</changelog>
-            <mandatory>true</mandatory>
-            <args>/S</args>
-          </item>
-          "@
-
-          # Save XML content
-          $xmlContent | Out-File -FilePath "release/update.xml" -Encoding UTF8
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -213,7 +205,6 @@ jobs:
             release/NewGmHack.GUI.exe
             release/NewGMHack.Stub.dll
             release/wwwroot.zip
-            release/update.xml
             release/checksums.txt
           draft: false
           prerelease: false

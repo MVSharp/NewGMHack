@@ -1,3 +1,11 @@
+# DEPRECATED - This document has been superseded
+
+**Status:** This planning document is outdated. The auto-update system has been implemented and documented in `docs/update-architecture.md`.
+
+**Please refer to:** `docs/update-architecture.md` for the current, implemented architecture.
+
+---
+
 # NewGMHack Auto-Update System Architecture Plan
 
 ## Overview
